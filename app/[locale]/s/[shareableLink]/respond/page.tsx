@@ -5,7 +5,7 @@ import Image from "next/image";
 
 import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react";
 import toast from "react-hot-toast";
-import { useParams, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   Mic,
   MicOff,
@@ -256,11 +256,8 @@ async function initializeSurvey(
   return response.json();
 }
 
-function getUpdatedQuery(
-  searchParams: { toString(): string },
-  updates: Record<string, string | null>,
-) {
-  const next = new URLSearchParams(searchParams.toString());
+function getUpdatedQuery(search: string, updates: Record<string, string | null>) {
+  const next = new URLSearchParams(search);
 
   for (const [key, value] of Object.entries(updates)) {
     if (!value) {
@@ -292,12 +289,22 @@ async function copyText(text: string) {
 }
 
 function SurveyContent() {
-  const params = useParams<{ shareableLink: string }>();
   const searchParams = useSearchParams();
-  const shareableLink = params.shareableLink;
+  const queryString = searchParams.toString();
+  const resumeParam = searchParams.get("resume");
+  const startedParam = searchParams.get("started");
+  const completedParam = searchParams.get("completed");
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
+  const shareableLink = useMemo(() => {
+    const parts = pathname.split("/").filter(Boolean);
+    const sIdx = parts.indexOf("s");
+    if (sIdx !== -1 && parts[sIdx + 2] === "respond") {
+      return parts[sIdx + 1] ?? null;
+    }
+    return null;
+  }, [pathname]);
   const t = useTranslations("Survey.Response");
 
   const {
@@ -305,8 +312,13 @@ function SurveyContent() {
     isLoading: isInitializing,
     error: initError,
   } = useQuery({
-    queryKey: ["survey-respond", shareableLink],
-    queryFn: () => initializeSurvey(shareableLink, searchParams.get("resume")),
+    queryKey: ["survey-respond", shareableLink, resumeParam ?? ""],
+    queryFn: () => {
+      if (!shareableLink) {
+        throw new Error("Missing shareable link");
+      }
+      return initializeSurvey(shareableLink, resumeParam);
+    },
     enabled: !!shareableLink,
     staleTime: Infinity,
     retry: false,
@@ -316,7 +328,7 @@ function SurveyContent() {
   const conversationId = initData?.conversationId ?? null;
   const resumedMessages = initData?.messages ?? [];
   const initiallyCompleted = initData?.completed ?? false;
-  const apiEndpoint = `/api/surveys/respond/${shareableLink}`;
+  const apiEndpoint = shareableLink ? `/api/surveys/respond/${shareableLink}` : "";
   const hasRespondentSession = Boolean(survey?.id && conversationId);
 
   // State declarations - must be before hooks that reference them
@@ -331,10 +343,12 @@ function SurveyContent() {
   // Derived states to avoid effect-based setState (cascading renders)
   // isCompleted moved below useChat
 
-  const hasStarted = startedOverride ?? (searchParams.get("started") === "true" || (resumedMessages && resumedMessages.length > 1));
+  const hasStarted =
+    startedOverride ??
+    (startedParam === "true" || (resumedMessages && resumedMessages.length > 1));
 
   useEffect(() => {
-    if (!initData || !searchParams.get("resume")) {
+    if (!initData || !resumeParam) {
       return;
     }
 
@@ -343,12 +357,12 @@ function SurveyContent() {
         pathname,
         query: {
           shareableLink,
-          ...getUpdatedQuery(searchParams, { resume: null }),
+          ...getUpdatedQuery(queryString, { resume: null }),
         },
       },
       { locale },
     );
-  }, [initData, locale, pathname, router, searchParams, shareableLink]);
+  }, [initData, locale, pathname, queryString, resumeParam, router, shareableLink]);
 
   // Redirect to survey language if different from current locale on first load
   useEffect(() => {
@@ -430,7 +444,7 @@ function SurveyContent() {
 
   const isCompleted = useMemo(() => {
     if (completedOverride) return true;
-    if (initiallyCompleted || searchParams.get("completed") === "true") return true;
+    if (initiallyCompleted || completedParam === "true") return true;
 
     // Detect completion from messages (robust detection)
     const lastAssistantMessage = messages.findLast(m => m.role === "assistant");
@@ -451,13 +465,13 @@ function SurveyContent() {
       messageText.includes("survey is now complete");
 
     return hasToolCompletion || hasTextCompletion;
-  }, [messages, initiallyCompleted, searchParams, completedOverride]);
+  }, [messages, initiallyCompleted, completedParam, completedOverride]);
 
   const setMessages = originalSetMessages;
   const isChatLoading = status === "streaming" || status === "submitted";
 
   // Voice WebSocket Integration
-  const wsUrl = survey?.isVoice && conversationId
+  const wsUrl = survey?.isVoice && conversationId && shareableLink
     ? `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${encodeURIComponent(shareableLink)}&conversationId=${encodeURIComponent(conversationId)}&language=${encodeURIComponent(selectedLanguage)}`
     : "";
 
@@ -616,7 +630,7 @@ function SurveyContent() {
         pathname,
         query: {
           shareableLink,
-          ...getUpdatedQuery(searchParams, { started: "true" }),
+          ...getUpdatedQuery(searchParams.toString(), { started: "true" }),
         },
       },
       {

@@ -1,10 +1,14 @@
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { redirect } from "next/navigation";
-import { StudentSidebar } from "@/components/student/student-sidebar";
+import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
+import { DashboardHeader } from "@/components/dashboard/header";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
-import { getLearningMeData, getMyPatternSummaries } from "@/lib/server/app-queries";
+import { getLearningMeData, getNotificationsForCurrentUser } from "@/lib/server/app-queries";
+import { AuthProvider } from "@/components/providers/auth-provider";
+import { getMessages } from "next-intl/server";
+import { NextIntlClientProvider } from "next-intl";
 
 export default function StudentLayout(props: {
     children: React.ReactNode;
@@ -29,40 +33,39 @@ async function StudentLayoutContent({
     params: Promise<{ locale: string }>;
 }) {
     const { locale } = await params;
-    const cookieHeader = (await headers()).get("cookie");
-
-    // Student/User check
-    const session = await getVerifiedSession(cookieHeader).catch(() => null);
+    const authHeaders = await headers();
+    const session = await getVerifiedSession(authHeaders).catch(() => null);
 
     if (!session) {
         redirect(`/${locale}/sign-in`);
     }
 
-    const [learningMe, patterns] = await Promise.all([
+    const messages = await getMessages();
+    const [learningMe, notifications] = await Promise.all([
         getLearningMeData(),
-        getMyPatternSummaries(),
+        getNotificationsForCurrentUser(),
     ]);
 
     return (
-        <div className="flex min-h-screen bg-[#F8F9FB]">
-            <StudentSidebar initialLearningMe={learningMe} initialPatterns={patterns} />
-            <div className="flex-1 flex flex-col">
-                <header className="h-16 border-b border-gray-200 bg-white flex items-center px-8 sticky top-0 z-10 shadow-sm">
-                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                        Student Portal
-                    </h2>
-                </header>
+        <NextIntlClientProvider messages={messages} locale={locale}>
+            <AuthProvider initialSession={session}>
+                <div className="flex min-h-screen bg-[#f7f7f7]">
+                    <DashboardSidebar initialLearningMe={learningMe} />
+                    <div className="flex-1 flex flex-col lg:pl-72 transition-all duration-300">
+                        <DashboardHeader initialNotifications={notifications} />
 
-                <main className="p-8 max-w-7xl mx-auto w-full">
-                    <Suspense fallback={
-                        <div className="flex items-center justify-center min-h-[50vh]">
-                            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                        </div>
-                    }>
-                        {children}
-                    </Suspense>
-                </main>
-            </div>
-        </div>
+                        <main className="p-4 lg:p-8 max-w-7xl mx-auto w-full flex-1">
+                            <Suspense fallback={
+                                <div className="flex items-center justify-center min-h-[50vh]">
+                                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                                </div>
+                            }>
+                                {children}
+                            </Suspense>
+                        </main>
+                    </div>
+                </div>
+            </AuthProvider>
+        </NextIntlClientProvider>
     );
 }

@@ -410,6 +410,13 @@ async function parseResponse<T>(
   return schema.parse(payload);
 }
 
+export async function fetchLearningMe() {
+  return await parseResponse(
+    await fetch("/api/learning/me", { credentials: "include" }),
+    learningMeSchema
+  );
+}
+
 export async function fetchTeacherClassrooms() {
   return await parseResponse(
     await fetch("/api/learning/classrooms", { credentials: "include" }),

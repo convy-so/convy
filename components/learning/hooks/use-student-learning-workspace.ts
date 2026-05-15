@@ -103,7 +103,7 @@ export function useStudentLearningWorkspace({
       const match = memberships.find(m => m.classroom.id === classroomId);
       if (match) return match.classroomStudentId;
     }
-    return memberships[0]?.classroomStudentId ?? null;
+    return memberships?.[0]?.classroomStudentId ?? null;
   }, [classroomId, memberships]);
 
   const [manualSelectedMembershipId, setManualSelectedMembershipId] = useState<
@@ -123,8 +123,8 @@ export function useStudentLearningWorkspace({
   }, [initialMembershipId, manualSelectedMembershipId, memberships]);
 
   const selectedMembership =
-    memberships.find((item) => item.classroomStudentId === selectedMembershipId) ??
-    memberships[0] ??
+    memberships?.find((item) => item.classroomStudentId === selectedMembershipId) ??
+    memberships?.[0] ??
     null;
 
   const availableTopics = selectedMembership?.topics ?? [];
@@ -427,7 +427,7 @@ export function useStudentLearningWorkspace({
   const conceptCount = sessionState?.knowledgeFocus?.length ?? 0;
   const patterns = patternsQuery.data?.data ?? [];
   const strongestPattern = patterns[0] ?? null;
-  const membershipCount = memberships.length;
+  const membershipCount = memberships?.length ?? 0;
 
   return {
     memberships,
