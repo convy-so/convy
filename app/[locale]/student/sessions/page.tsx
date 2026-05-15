@@ -1,33 +1,60 @@
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { classroomStudents, learningSessions } from "@/db/schema/learning";
-import { desc, eq } from "drizzle-orm";
-import { BookOpen, Clock, CheckCircle, PlayCircle, Calendar } from "lucide-react";
+import { desc, eq, inArray } from "drizzle-orm";
+import { BookOpen, Clock, CheckCircle, PlayCircle, Calendar, ChevronLeft } from "lucide-react";
 import { Link } from "@/i18n/routing";
 
-export default async function StudentSessionsPage() {
+export default async function StudentSessionsPage(props: {
+    searchParams: Promise<{ classroomId?: string }>;
+}) {
+    const { classroomId } = await props.searchParams;
     const session = await getVerifiedSession();
     const userId = session.user.id;
 
     const studentProfiles = await getDb().query.classroomStudents.findMany({
         where: eq(classroomStudents.userId, userId),
+        with: {
+            classroom: true,
+        },
     });
 
-    const studentIds = studentProfiles.map(s => s.id);
+    const visibleProfiles = classroomId
+        ? studentProfiles.filter((profile) => profile.classroomId === classroomId)
+        : studentProfiles;
+    const selectedClassroom = classroomId
+        ? studentProfiles.find((profile) => profile.classroomId === classroomId)?.classroom ?? null
+        : null;
+    const studentIds = visibleProfiles.map((profile) => profile.id);
 
     const sessions = studentIds.length > 0 ? await getDb().query.learningSessions.findMany({
-        where: eq(learningSessions.classroomStudentId, studentIds[0]),
+        where: inArray(learningSessions.classroomStudentId, studentIds),
         orderBy: [desc(learningSessions.updatedAt)],
         with: {
-            topic: true
+            topic: true,
+            classroomStudent: {
+                with: {
+                    classroom: true,
+                },
+            },
         }
     }) : [];
 
     return (
         <div className="space-y-8">
             <div>
+                {selectedClassroom && (
+                    <Link href="/student/classes" className="mb-3 inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[#43c000] hover:text-[#3c7f0a] transition-colors">
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                        All courses
+                    </Link>
+                )}
                 <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Learning Sessions</h1>
-                <p className="text-slate-500 text-lg mt-1">Review your past conversations or resume active ones.</p>
+                <p className="text-slate-500 text-lg mt-1">
+                    {selectedClassroom
+                        ? `Review or resume sessions for ${selectedClassroom.title}.`
+                        : "Review your past conversations or resume active ones."}
+                </p>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -45,6 +72,9 @@ export default async function StudentSessionsPage() {
                                         <h3 className="text-lg font-bold text-slate-900">
                                             {lsession.topic?.title || "General Tutoring Session"}
                                         </h3>
+                                        <p className="mt-1 text-sm font-medium text-slate-600">
+                                            {lsession.classroomStudent?.classroom.title ?? "Classroom"}
+                                        </p>
                                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-1 text-sm text-slate-500">
                                             <span className="flex items-center gap-1">
                                                 <Calendar className="w-4 h-4" />
@@ -60,7 +90,7 @@ export default async function StudentSessionsPage() {
                                 <div className="flex items-center gap-3">
                                     {lsession.sessionStatus === 'active' && (
                                         <Link 
-                                            href={`/s/${lsession.id}`} 
+                                            href={`/student/dashboard?classroomId=${lsession.classroomStudent?.classroomId}${lsession.topicId ? `&topicId=${lsession.topicId}` : ""}`} 
                                             className="inline-flex w-full sm:w-auto justify-center items-center gap-2 px-5 py-2.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-colors"
                                         >
                                             <PlayCircle className="w-4 h-4" />

@@ -1,9 +1,10 @@
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { classroomStudents, studentProgressReports, studentModels, studentModelSnapshots } from "@/db/schema/learning";
-import { desc, eq, and } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { TrendingUp, Award, Target, AlertCircle, ChevronLeft, Sparkles, Lightbulb, Map } from "lucide-react";
 import { Link } from "@/i18n/routing";
+import type { KnowledgeStateNode } from "@/lib/learning/types";
 import { cn } from "@/lib/utils";
 
 function masteryLabelForStudent(level: string) {
@@ -29,8 +30,11 @@ export default async function StudentProgressPage(props: {
 
     // Determine which student profile to use (either matching classroomId or the first one)
     const selectedProfile = classroomId
-        ? studentProfiles.find(p => p.classroomId === classroomId) || studentProfiles[0]
-        : studentProfiles[0];
+        ? studentProfiles.find((profile) => profile.classroomId === classroomId) ?? null
+        : studentProfiles.length === 1
+            ? studentProfiles[0]
+            : null;
+    const shouldChooseClass = !selectedProfile && studentProfiles.length > 1;
 
     const studentId = selectedProfile?.id;
 
@@ -86,6 +90,20 @@ export default async function StudentProgressPage(props: {
                 )}
             </div>
 
+            {shouldChooseClass ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                    {studentProfiles.map((profile) => (
+                        <Link
+                            key={profile.id}
+                            href={`/student/progress?classroomId=${profile.classroomId}`}
+                            className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-colors hover:border-gray-300"
+                        >
+                            <h2 className="text-lg font-semibold text-gray-900">{profile.classroom.title}</h2>
+                            <p className="mt-1 text-sm text-gray-600">{profile.classroom.gradeLabel}</p>
+                        </Link>
+                    ))}
+                </div>
+            ) : (
             <div className="flex flex-col gap-8">
                 {/* Skill map — shown first; quiz results below on all screen sizes */}
                 <div className="space-y-6">
@@ -104,7 +122,7 @@ export default async function StudentProgressPage(props: {
 
                         {latestModel && latestModel.knowledgeStateModel && latestModel.knowledgeStateModel.length > 0 ? (
                             <div className="space-y-6">
-                                {latestModel.knowledgeStateModel.map((node: any) => {
+                                {latestModel.knowledgeStateModel.map((node: KnowledgeStateNode) => {
                                     const pct = node.masteryLevel === 'generative' ? 100 : node.masteryLevel === 'applied' ? 66 : 33;
                                     const label = masteryLabelForStudent(String(node.masteryLevel));
                                     return (
@@ -239,6 +257,7 @@ export default async function StudentProgressPage(props: {
                     )}
                 </div>
             </div>
+            )}
         </div>
     );
 }

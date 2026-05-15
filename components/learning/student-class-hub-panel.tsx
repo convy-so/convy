@@ -36,6 +36,7 @@ export function StudentClassHubPanel({
 }) {
   const cid = membership.classroom.id;
   const pendingSurveys = membership.surveys.filter((s) => s.responseStatus !== "completed");
+  const topicQuery = selectedTopicId ? `&topicId=${selectedTopicId}` : "";
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -67,7 +68,7 @@ export function StudentClassHubPanel({
             </li>
             <li>
               <Link
-                href="/student/sessions"
+                href={`/student/sessions?classroomId=${cid}${topicQuery}`}
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-gray-700 transition-colors hover:bg-white hover:text-gray-900"
               >
                 <MessageSquare className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
@@ -76,7 +77,7 @@ export function StudentClassHubPanel({
             </li>
             <li>
               <Link
-                href="/student/profile"
+                href={`/student/profile?classroomId=${cid}`}
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-gray-700 transition-colors hover:bg-white hover:text-gray-900"
               >
                 <UserRound className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />

@@ -2,22 +2,34 @@ import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { classroomStudents, studentInterestProfiles } from "@/db/schema/learning";
 import { eq } from "drizzle-orm";
-import { UserCircle, Compass, Target, Brain } from "lucide-react";
+import { UserCircle, Compass, Target, Brain, ChevronLeft } from "lucide-react";
+import { Link } from "@/i18n/routing";
 
 import type { StudentInterestProfile } from "@/lib/learning/types";
 
-export default async function StudentProfilePage() {
+export default async function StudentProfilePage(props: {
+    searchParams: Promise<{ classroomId?: string }>;
+}) {
+    const { classroomId } = await props.searchParams;
     const session = await getVerifiedSession();
     const userId = session.user.id;
 
     const studentProfiles = await getDb().query.classroomStudents.findMany({
         where: eq(classroomStudents.userId, userId),
+        with: {
+            classroom: true,
+        },
     });
 
-    const studentIds = studentProfiles.map(s => s.id);
+    const selectedProfile = classroomId
+        ? studentProfiles.find((profile) => profile.classroomId === classroomId) ?? null
+        : studentProfiles.length === 1
+            ? studentProfiles[0]
+            : null;
+    const shouldChooseClass = !selectedProfile && studentProfiles.length > 1;
 
-    const interests = studentIds.length > 0 ? await getDb().query.studentInterestProfiles.findFirst({
-        where: eq(studentInterestProfiles.classroomStudentId, studentIds[0]),
+    const interests = selectedProfile ? await getDb().query.studentInterestProfiles.findFirst({
+        where: eq(studentInterestProfiles.classroomStudentId, selectedProfile.id),
     }) : null;
 
     const defaultProfile: StudentInterestProfile = {
@@ -36,10 +48,30 @@ export default async function StudentProfilePage() {
     return (
         <div className="space-y-8 max-w-4xl">
             <div>
+                {selectedProfile && (
+                    <Link href="/student/classes" className="mb-3 inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[#43c000] hover:text-[#3c7f0a] transition-colors">
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                        All courses
+                    </Link>
+                )}
                 <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Learning Profile</h1>
                 <p className="text-slate-500 text-lg mt-1">Manage your interests, goals, and learning preferences to help your AI tutor personalize your sessions.</p>
             </div>
 
+            {shouldChooseClass ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                    {studentProfiles.map((profile) => (
+                        <Link
+                            key={profile.id}
+                            href={`/student/profile?classroomId=${profile.classroomId}`}
+                            className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-colors hover:border-gray-300"
+                        >
+                            <h2 className="text-lg font-semibold text-gray-900">{profile.classroom.title}</h2>
+                            <p className="mt-1 text-sm text-gray-600">{profile.classroom.gradeLabel}</p>
+                        </Link>
+                    ))}
+                </div>
+            ) : (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-8 py-6 border-b border-slate-100 flex items-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center">
@@ -104,6 +136,7 @@ export default async function StudentProfilePage() {
                     </section>
                 </div>
             </div>
+            )}
         </div>
     );
 }

@@ -50,6 +50,7 @@ export function DashboardSidebar({
   const router = useRouter();
   const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const selectedClassroomId = searchParams.get("classroomId");
 
   const learningMeQuery = useQuery({
     queryKey: queryKeys.learning.me,
@@ -62,6 +63,15 @@ export function DashboardSidebar({
   const isAdminOrExpert = user?.role === "admin" || user?.role === "expert";
 
   const memberships = learningMeQuery.data?.role === "student" ? learningMeQuery.data.student : [];
+  const studentProgressHref = selectedClassroomId
+    ? `/student/progress?classroomId=${selectedClassroomId}`
+    : "/student/progress";
+  const studentSessionsHref = selectedClassroomId
+    ? `/student/sessions?classroomId=${selectedClassroomId}`
+    : "/student/sessions";
+  const studentProfileHref = selectedClassroomId
+    ? `/student/profile?classroomId=${selectedClassroomId}`
+    : "/student/profile";
 
   const navigation = useMemo(() => {
     if (isAdminOrExpert) {
@@ -75,8 +85,8 @@ export function DashboardSidebar({
       return [
         { name: t("Dashboard"), href: "/student/dashboard", icon: LayoutDashboard },
         { name: "My Classes", href: "/student/classes", icon: GraduationCap },
-        { name: "My Progress", href: "/student/progress", icon: TrendingUp },
-        { name: "Learning Sessions", href: "/student/sessions", icon: BookOpen },
+        { name: "My Progress", href: studentProgressHref, icon: TrendingUp },
+        { name: "Learning Sessions", href: studentSessionsHref, icon: BookOpen },
       ];
     }
 
@@ -87,13 +97,13 @@ export function DashboardSidebar({
       { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
       { name: "Learning Analytics", href: "/dashboard/analytics", icon: BarChart3 },
     ];
-  }, [isStudent, isAdminOrExpert, t]);
+  }, [isStudent, isAdminOrExpert, studentProgressHref, studentSessionsHref, t]);
 
   const bottomNavigation = useMemo(() => {
     if (isStudent) {
       return [
         { name: "Notifications", href: "/student/notifications", icon: Bell },
-        { name: t("Profile"), href: "/student/profile", icon: UserIcon },
+        { name: t("Profile"), href: studentProfileHref, icon: UserIcon },
         { name: t("Settings"), href: "/student/settings", icon: Settings },
       ];
     }
@@ -104,7 +114,7 @@ export function DashboardSidebar({
       { name: t("Profile"), href: "/dashboard/profile", icon: UserIcon },
       { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
     ];
-  }, [isStudent, t]);
+  }, [isStudent, studentProfileHref, t]);
 
   const handleSignOut = async () => {
     await authClient.signOut({
