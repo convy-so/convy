@@ -1,6 +1,9 @@
 import { Link } from "@/i18n/routing";
 import Image from "next/image";
 import { LucideIcon } from "lucide-react";
+import type { ComponentProps } from "react";
+
+type LinkHref = ComponentProps<typeof Link>["href"];
 
 interface StatusCardProps {
   icon?: LucideIcon;
@@ -10,13 +13,13 @@ interface StatusCardProps {
   description: string | React.ReactNode;
   actionButton?: {
     text: string;
-    href?: string;
+    href?: LinkHref;
     onClick?: () => void;
     disabled?: boolean;
   };
   secondaryAction?: {
     text: string;
-    href?: string;
+    href?: LinkHref;
     onClick?: () => void;
   };
   showLogo?: boolean;

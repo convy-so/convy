@@ -110,7 +110,7 @@ export function CreateTopicModal({
                 throw new Error(getFriendlyActionError(result.error));
             }
 
-            toast.success("Topic curriculum defined");
+            toast.success("Session created");
             await queryClient.invalidateQueries({
                 queryKey: queryKeys.learning.topics(classroomId),
             });
@@ -148,9 +148,9 @@ export function CreateTopicModal({
                             <Sparkles className="h-5 w-5" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold text-[#080808]">Create a new topic</h3>
+                            <h3 className="text-lg font-semibold text-[#080808]">Create a new session</h3>
                             <p className="mt-1 text-sm text-[#696969]">
-                                Define a compact curriculum brief for your classroom tutors with the same standard form treatment as login.
+                                Define the learning scope, outcomes, and grounding that students will move through in this session.
                             </p>
                         </div>
                     </div>
@@ -168,7 +168,7 @@ export function CreateTopicModal({
                         )}
 
                         <InputField
-                            label="Topic title"
+                            label="Session title"
                             id="topic-title"
                             placeholder="e.g. Newton's Laws of Motion"
                             icon={BookOpen}
@@ -197,12 +197,12 @@ export function CreateTopicModal({
                             />
 
                             <TextareaField
-                                label="Overview"
+                                label="Session overview"
                                 id="topic-overview"
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 rows={4}
-                                placeholder="Brief context for this curriculum topic..."
+                                placeholder="Briefly describe what this session will cover..."
                                 className="resize-none"
                             />
                         </div>
@@ -225,7 +225,7 @@ export function CreateTopicModal({
                         </div>
 
                         <TextareaField
-                            label="Learning outcomes"
+                            label="Session outcomes"
                             id="topic-outcomes"
                             value={outcomes}
                             onChange={(e) => setOutcomes(e.target.value)}
@@ -304,7 +304,7 @@ export function CreateTopicModal({
                         ) : (
                             <>
                                 <Plus className="h-4 w-4" />
-                                Create topic
+                                Create session
                             </>
                         )}
                     </button>

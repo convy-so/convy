@@ -42,7 +42,7 @@ export function ProfileContent() {
                 <div className="flex-1 text-center md:text-left space-y-1">
                     <h2 className="text-2xl font-semibold text-gray-900">{user.name}</h2>
                     <p className="text-sm font-medium text-gray-500">
-                        {t("Member")}
+                        {t("DefaultRole")}
                     </p>
                 </div>
 

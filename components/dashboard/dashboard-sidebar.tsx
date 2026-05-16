@@ -37,8 +37,13 @@ type ViewerAccessNav = {
   authRole: "student" | "teacher" | "expert" | "admin";
 };
 
-function isNavHrefActive(pathname: string, href: string) {
+function isNavHrefActive(
+  pathname: string,
+  href: string,
+  options?: { exact?: boolean },
+) {
   if (pathname === href) return true;
+  if (options?.exact) return false;
   if (href !== "/" && pathname.startsWith(`${href}/`)) return true;
   return false;
 }
@@ -82,14 +87,14 @@ export function DashboardSidebar({
   const navigation = useMemo(() => {
     if (isAdminOrExpert) {
       return [
-        { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
+        { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard, exact: true },
         { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
       ];
     }
 
     if (isStudent) {
       return [
-        { name: t("Dashboard"), href: "/student/dashboard", icon: LayoutDashboard },
+        { name: t("Dashboard"), href: "/student/dashboard", icon: LayoutDashboard, exact: true },
         { name: "My Classes", href: "/student/classes", icon: GraduationCap },
         { name: "My Progress", href: studentProgressHref, icon: TrendingUp },
         { name: "Learning Sessions", href: studentSessionsHref, icon: BookOpen },
@@ -97,11 +102,10 @@ export function DashboardSidebar({
     }
 
     return [
-      { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
-      { name: "Learning Hub", href: "/dashboard/learning", icon: GraduationCap },
-      { name: "Assessment Surveys", href: "/dashboard/surveys", icon: MessageSquare },
+      { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard, exact: true },
+      { name: "Classrooms", href: "/dashboard/learning", icon: GraduationCap },
+      { name: "Surveys", href: "/dashboard/surveys", icon: MessageSquare },
       { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
-      { name: "Learning Analytics", href: "/dashboard/analytics", icon: BarChart3 },
     ];
   }, [isStudent, isAdminOrExpert, studentProgressHref, studentSessionsHref, t]);
 
@@ -204,7 +208,9 @@ export function DashboardSidebar({
         <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
           <nav className="px-3 space-y-1">
             {navigation.map((item) => {
-              const isActive = isNavHrefActive(pathname, item.href);
+              const isActive = isNavHrefActive(pathname, item.href, {
+                exact: item.exact,
+              });
               const isCreateSurvey = item.href === "/dashboard/create";
 
               return (
@@ -247,7 +253,7 @@ export function DashboardSidebar({
               <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pl-1 pr-1 pt-0.5 [scrollbar-width:thin]">
                 {memberships.map((membership) => {
                   const classroomNavActive =
-                    isNavHrefActive(pathname, "/student/dashboard") &&
+                    isNavHrefActive(pathname, "/student/dashboard", { exact: true }) &&
                     searchParams.get("classroomId") === membership.classroom.id;
                   return (
                     <Link

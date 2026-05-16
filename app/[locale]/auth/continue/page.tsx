@@ -6,10 +6,24 @@ import { getCurrentSession } from "@/lib/auth/dal";
 import { sanitizeReturnTo } from "@/lib/auth/redirect";
 import { resolveViewerAccess } from "@/lib/auth/viewer-access";
 import { localizeAppPath } from "@/lib/auth/redirect";
-import { normalizeAppLocale } from "@/lib/i18n/config";
+import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
 
 function redirectViaCompletion(target: string): never {
   redirect(`/api/auth/complete?target=${encodeURIComponent(target)}`);
+}
+
+function buildVerifyEmailPath(
+  locale: AppLocale,
+  email: string,
+  invitationId: string | null,
+) {
+  const params = new URLSearchParams();
+  params.set("email", email);
+  params.set("callbackURL", `/${locale}/auth/continue`);
+  if (invitationId) {
+    params.set("invitationId", invitationId);
+  }
+  return `${localizeAppPath(locale, "/verify-email")}?${params.toString()}`;
 }
 
 export default async function AuthContinuePage({
@@ -30,7 +44,7 @@ export default async function AuthContinuePage({
   }
 
   if (!session.user.emailVerified) {
-    redirect(`${localizeAppPath(appLocale, "/verify-email")}?email=${encodeURIComponent(session.user.email)}`);
+    redirect(buildVerifyEmailPath(appLocale, session.user.email, intent?.invitationId ?? null));
   }
 
   const viewerAccess = await resolveViewerAccess(session);

@@ -263,11 +263,11 @@ export function InviteStudentModal({
             </div>
             <div>
               <h3 className="text-lg font-semibold text-[#080808]">
-                Invite students
+                Invite students to this classroom
               </h3>
               <p className="mt-1 text-sm text-[#696969]">
-                Invite students to join your classroom. Only non-staff accounts
-                can be added as students.
+                Add learners before they enter a session. Only non-staff accounts
+                can be invited as students.
               </p>
             </div>
           </div>

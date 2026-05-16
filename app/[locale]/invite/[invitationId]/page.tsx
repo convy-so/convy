@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "@/i18n/routing";
 
 import { getCurrentSession } from "@/lib/auth/dal";
+import { getSignInHref, getSignUpHref, getVerifyEmailHref } from "@/lib/auth/hrefs";
 import { resolveInvitationAccess } from "@/lib/auth/invitation-access";
 
 import { InviteReviewActions } from "./invite-review-actions";
@@ -27,7 +28,7 @@ export default async function InvitationPage({
 }: {
   params: Promise<{ locale: string; invitationId: string }>;
 }) {
-  const { invitationId } = await params;
+  const { locale, invitationId } = await params;
   const session = await getCurrentSession();
   const state = await resolveInvitationAccess({
     invitationId,
@@ -54,13 +55,13 @@ export default async function InvitationPage({
           <p>Sign in if you already have a student account, or create a student account to review the invitation.</p>
           <div className="flex flex-col gap-3 pt-2 sm:flex-row">
             <Link
-              href={`/sign-in?invitationId=${state.invitationId}`}
+              href={getSignInHref(state.invitationId)}
               className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
             >
               Sign in
             </Link>
             <Link
-              href={`/sign-up?invitationId=${state.invitationId}`}
+              href={getSignUpHref(state.invitationId)}
               className="inline-flex items-center justify-center rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
             >
               Create student account
@@ -87,7 +88,10 @@ export default async function InvitationPage({
             <strong>{state.currentEmail}</strong>.
           </p>
           <p>Switch to the invited account before accepting this classroom invitation.</p>
-          <Link href="/sign-in" className="font-semibold text-slate-950 underline underline-offset-4">
+          <Link
+            href={getSignInHref(state.invitationId)}
+            className="font-semibold text-slate-950 underline underline-offset-4"
+          >
             Go to sign in
           </Link>
         </Card>
@@ -109,7 +113,11 @@ export default async function InvitationPage({
             Finish verifying <strong>{state.currentEmail}</strong> before reviewing this classroom invitation.
           </p>
           <Link
-            href={`/verify-email?email=${encodeURIComponent(state.currentEmail)}`}
+            href={getVerifyEmailHref({
+              locale,
+              email: state.currentEmail,
+              invitationId: state.invitationId,
+            })}
             className="font-semibold text-slate-950 underline underline-offset-4"
           >
             Open verification page

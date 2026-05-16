@@ -14,14 +14,7 @@ import { LoadingOverlay } from "@/components/auth/loading-overlay";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 import { prepareAuthIntent } from "@/lib/auth/intent-client";
-
-function buildVerifyEmailHref(locale: string, email: string) {
-  const params = new URLSearchParams({
-    email,
-    callbackURL: `/${locale}/auth/continue`,
-  });
-  return `/verify-email?${params.toString()}`;
-}
+import { getAuthContinueHref, getSignUpHref, getVerifyEmailHref } from "@/lib/auth/hrefs";
 
 export default function SignInPage() {
   const params = useParams<{ locale?: string | string[] }>();
@@ -65,7 +58,7 @@ export default function SignInPage() {
           onSuccess: () => {
             toast.success(t('Success'));
             setIsRedirecting(true);
-            router.push("/auth/continue");
+            router.push(getAuthContinueHref());
           },
           onError: (ctx) => {
             const msg = ctx.error.message || "";
@@ -80,7 +73,7 @@ export default function SignInPage() {
                 sessionStorage.setItem('verification_email', formData.email);
               }
               toast.error(msg || "Please verify your email first.");
-              router.push(buildVerifyEmailHref(locale, formData.email));
+              router.push(getVerifyEmailHref({ locale, email: formData.email, invitationId }));
             } else {
               toast.error(msg);
             }
@@ -187,7 +180,7 @@ export default function SignInPage() {
         <p className="text-[#696969] text-sm">
           {t('NoAccount')}{" "}
           <Link
-            href="/sign-up"
+            href={getSignUpHref(invitationId)}
             className="text-[#292929] font-medium hover:text-[#292929]/80 transition-colors"
           >
            {t('SignUpLink')}

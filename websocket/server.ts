@@ -38,6 +38,7 @@ import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { getRedisSubscriber } from "@/lib/redis";
 import { getSurveyPermissionContext } from "@/lib/survey-access";
+import { resolveTeacherOwnedClassroomAccess } from "@/lib/access/classroom-access";
 
 /**
  * WebSocket Server for Voice-Enabled Surveys
@@ -498,6 +499,16 @@ async function authorizeRealtimeSubscription(
     const surveyId = channel.slice("survey:".length);
     const permission = await getSurveyPermissionContext(userId, surveyId);
     return Boolean(permission?.canView);
+  }
+
+  if (channel.startsWith("classroom:")) {
+    const classroomId = channel.slice("classroom:".length);
+    const access = await resolveTeacherOwnedClassroomAccess({
+      teacherUserId: userId,
+      classroomId,
+    });
+
+    return !("error" in access);
   }
 
   return false;
