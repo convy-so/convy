@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { classroomInvitations, classrooms, classroomStudents, users } from "@/db/schema";
 import { logAuthAuditEvent } from "@/lib/auth/audit";
 import { EmailService } from "@/lib/email-service";
+import { publishClassroomRealtimeEvent } from "@/lib/realtime";
 import { ValidationError } from "@/lib/action-wrapper";
 
 export type StudentInviteResult = {
@@ -277,6 +278,13 @@ export async function inviteManagedStudentToClassroom(params: {
     email: normalizedEmail,
   });
 
+  void publishClassroomRealtimeEvent(params.classroomId, {
+    type: "classroom_roster_updated",
+    reason: "invitation_sent",
+    invitationId,
+    email: normalizedEmail,
+  });
+
   return {
     id: invitationId,
     classroomId: params.classroomId,
@@ -481,6 +489,17 @@ export async function respondToInvitation(params: {
     invitationId: params.invitationId,
     decision: params.decision,
   });
+
+  void publishClassroomRealtimeEvent(invitation.classroomId, {
+    type: "classroom_roster_updated",
+    reason:
+      params.decision === "accepted"
+        ? "invitation_accepted"
+        : "invitation_rejected",
+    invitationId: params.invitationId,
+    studentUserId: params.userId,
+    email: invitation.invitedEmail,
+  });
 }
 
 /**
@@ -634,6 +653,13 @@ export async function resendStudentInvitation(params: {
     throw new Error("Failed to queue the invitation email. Please try again.");
   }
 
+  void publishClassroomRealtimeEvent(params.classroomId, {
+    type: "classroom_roster_updated",
+    reason: "invitation_resent",
+    invitationId: params.invitationId,
+    email: invitation.invitedEmail,
+  });
+
   return {
     invitationId: params.invitationId,
     email: invitation.invitedEmail,
@@ -672,6 +698,13 @@ export async function cancelStudentInvitation(params: {
   }
 
   console.log("[student-service] cancelStudentInvitation: DONE", { invitationId: params.invitationId });
+
+  void publishClassroomRealtimeEvent(params.classroomId, {
+    type: "classroom_roster_updated",
+    reason: "invitation_cancelled",
+    invitationId: params.invitationId,
+  });
+
   return { invitationId: params.invitationId };
 }
 

@@ -29,6 +29,7 @@ const classroomStudentSchema = z.object({
   onboardingStatus: z.string(),
   profileLastUpdated: z.string().nullable(),
 });
+export type ClassroomStudent = z.infer<typeof classroomStudentSchema>;
 
 const pendingInvitationSchema = z.object({
   id: z.string(),
@@ -46,11 +47,12 @@ const topicSchema = z
     description: z.string().nullable().optional(),
     subject: z.string().nullable().optional(),
     contentLocale: z.enum(appLocales).optional(),
-    subjectKey: z.string().optional(),
-    subjectLabel: z.string().optional(),
+    subjectKey: z.string().nullable().optional(),
+    subjectLabel: z.string().nullable().optional(),
     status: z.string(),
   })
   .passthrough();
+export type Topic = z.infer<typeof topicSchema>;
 
 const topicMaterialSchema = z.object({
   id: z.string(),
@@ -233,20 +235,6 @@ export const classroomStudentOverviewSchema = z.object({
         gradeLabel: z.string(),
       }),
     }),
-    topics: z.array(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        subject: z.string().nullable().optional(),
-        subjectKey: z.string().optional(),
-        subjectLabel: z.string().optional(),
-        status: z.string(),
-        reportCount: z.number(),
-        contentLocale: z.enum(appLocales).optional(),
-        latestMasteryPercent: z.number().nullable(),
-        latestReportAt: z.string().nullable(),
-      }),
-    ),
     recentReports: z.array(
       z.object({
         id: z.string(),
@@ -259,18 +247,47 @@ export const classroomStudentOverviewSchema = z.object({
         report: teacherProgressReportSchema,
       }),
     ),
-    recentInteractions: z.array(
+    tutoringSessions: z.array(
       z.object({
         id: z.string(),
         topicId: z.string().nullable(),
         topicTitle: z.string().nullable(),
-        sessionId: z.string().nullable(),
+        sessionStatus: z.string(),
+        sessionLocale: z.string(),
+        summary: z.string().nullable(),
+        createdAt: z.union([z.string(), z.date()]),
+        updatedAt: z.union([z.string(), z.date()]),
+        completedAt: z.union([z.string(), z.date()]).nullable(),
+      }),
+    ),
+    conversationTurns: z.array(
+      z.object({
+        id: z.string(),
+        topicId: z.string().nullable(),
+        topicTitle: z.string().nullable(),
+        sessionId: z.string(),
         interactionType: z.string(),
         role: z.string(),
         content: z.string(),
         createdAt: z.union([z.string(), z.date()]),
       }),
     ),
+    navigation: z.object({
+      previousStudent: z
+        .object({
+          id: z.string(),
+          fullName: z.string(),
+        })
+        .nullable(),
+      nextStudent: z
+        .object({
+          id: z.string(),
+          fullName: z.string(),
+        })
+        .nullable(),
+      position: z.number(),
+      totalStudents: z.number(),
+    }),
   }),
 });
 
@@ -376,6 +393,7 @@ const learningInterventionSchema = z.object({
     email: z.string().email(),
   }),
 });
+export type LearningIntervention = z.infer<typeof learningInterventionSchema>;
 
 function getApiErrorMessage(payload: unknown) {
   if (typeof payload !== "object" || payload === null) {

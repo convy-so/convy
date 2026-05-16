@@ -16,14 +16,7 @@ import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast"; 
 import { RoleSelector } from "@/components/auth/role-selector";
 import { prepareAuthIntent } from "@/lib/auth/intent-client";
-
-function buildVerifyEmailHref(locale: string, email: string) {
-  const params = new URLSearchParams({
-    email,
-    callbackURL: `/${locale}/auth/continue`,
-  });
-  return `/verify-email?${params.toString()}`;
-}
+import { getAuthContinueHref, getSignInHref, getVerifyEmailHref } from "@/lib/auth/hrefs";
 
 export default function SignUpPage() {
   const params = useParams<{ locale?: string | string[] }>();
@@ -96,11 +89,11 @@ export default function SignUpPage() {
         }
         toast.success(t('Success'));
         setIsRedirecting(true);
-        router.push(buildVerifyEmailHref(locale, formData.email));
+        router.push(getVerifyEmailHref({ locale, email: formData.email, invitationId }));
       } else if (result.data?.token) {
         toast.success(t('SuccessVerified'));
         setIsRedirecting(true);
-        router.push("/auth/continue");
+        router.push(getAuthContinueHref());
       }
     } catch (error) {
       console.error("[SignUp] Failed:", error);
@@ -241,9 +234,9 @@ export default function SignUpPage() {
 
       <div className="text-center mt-4">
         <p className="text-[#696969] text-sm">
-          {t('HasAccount')}{" "}
+      {t('HasAccount')}{" "}
           <Link
-            href="/sign-in"
+            href={getSignInHref(invitationId)}
             className="text-[#292929] font-medium hover:text-[#292929]/80 transition-colors"
           >
             {t('SignInLink')}

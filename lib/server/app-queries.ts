@@ -9,6 +9,7 @@ import {
   classroomStudents,
   folders,
   learningInteractions,
+  learningSessions,
   learningTopics,
   notifications,
   sampleConversations,
@@ -322,11 +323,7 @@ export async function getClassroomStudentOverviewData(
     throw new Error("Student not found");
   }
 
-  const [topics, reports, interactions] = await Promise.all([
-    getDb().query.learningTopics.findMany({
-      where: eq(learningTopics.classroomId, membership.classroomId),
-      orderBy: (table, { asc }) => [asc(table.title)],
-    }),
+  const [reports, tutoringSessions] = await Promise.all([
     getDb().query.studentProgressReports.findMany({
       where: eq(studentProgressReports.classroomStudentId, membership.id),
       with: {
@@ -335,24 +332,54 @@ export async function getClassroomStudentOverviewData(
       orderBy: (table, { desc: orderDesc }) => [orderDesc(table.updatedAt)],
       limit: 12,
     }),
-    getDb().query.learningInteractions.findMany({
-      where: eq(learningInteractions.classroomStudentId, membership.id),
+    getDb().query.learningSessions.findMany({
+      where: and(
+        eq(learningSessions.classroomStudentId, membership.id),
+        eq(learningSessions.sessionType, "tutoring"),
+      ),
       with: {
         topic: true,
       },
-      orderBy: (table, { desc: orderDesc }) => [orderDesc(table.createdAt)],
-      limit: 16,
+      orderBy: (table, { desc: orderDesc }) => [orderDesc(table.updatedAt)],
+      limit: 20,
     }),
   ]);
+  const tutoringSessionIds = tutoringSessions.map((sessionRow) => sessionRow.id);
+  const conversationTurns =
+    tutoringSessionIds.length > 0
+      ? await getDb().query.learningInteractions.findMany({
+          where: and(
+            eq(learningInteractions.classroomStudentId, membership.id),
+            inArray(learningInteractions.sessionId, tutoringSessionIds),
+            inArray(learningInteractions.interactionType, [
+              "student_message",
+              "tutor_message",
+            ]),
+          ),
+          with: {
+            topic: true,
+          },
+          orderBy: (table, { asc }) => [asc(table.createdAt)],
+        })
+      : [];
+  const classroomRoster = await getDb().query.classroomStudents.findMany({
+    where: eq(classroomStudents.classroomId, membership.classroomId),
+    orderBy: (table, { asc }) => [asc(table.fullName)],
+    columns: {
+      id: true,
+      fullName: true,
+    },
+  });
 
-  const reportMap = new Map<string, (typeof reports)[number]>();
-  for (const report of [...reports].reverse()) {
-    reportMap.set(report.topicId, report);
-  }
-  const reportCountMap = reports.reduce<Record<string, number>>((acc, report) => {
-    acc[report.topicId] = (acc[report.topicId] ?? 0) + 1;
-    return acc;
-  }, {});
+  const currentStudentIndex = classroomRoster.findIndex(
+    (student) => student.id === membership.id,
+  );
+  const previousStudent =
+    currentStudentIndex > 0 ? classroomRoster[currentStudentIndex - 1] : null;
+  const nextStudent =
+    currentStudentIndex >= 0 && currentStudentIndex < classroomRoster.length - 1
+      ? classroomRoster[currentStudentIndex + 1]
+      : null;
 
   return {
     success: true as const,
@@ -371,21 +398,6 @@ export async function getClassroomStudentOverviewData(
           gradeLabel: membership.classroom.gradeLabel,
         },
       },
-      topics: topics.map((topic) => {
-        const latestReport = reportMap.get(topic.id);
-        return {
-          id: topic.id,
-          title: topic.title,
-          subject: topic.subject,
-          contentLocale: toOptionalAppLocale(topic.contentLocale),
-          subjectKey: topic.subjectKey,
-          subjectLabel: topic.subjectLabel,
-          status: topic.status,
-          reportCount: reportCountMap[topic.id] ?? 0,
-          latestMasteryPercent: latestReport?.masteryPercent ?? null,
-          latestReportAt: latestReport?.updatedAt?.toISOString() ?? null,
-        };
-      }),
       recentReports: reports.map((report) => ({
         id: report.id,
         topicId: report.topicId,
@@ -396,16 +408,49 @@ export async function getClassroomStudentOverviewData(
         updatedAt: report.updatedAt,
         report: report.report,
       })),
-      recentInteractions: interactions.map((interaction) => ({
-        id: interaction.id,
-        topicId: interaction.topicId,
-        topicTitle: interaction.topic?.title ?? null,
-        sessionId: interaction.sessionId,
-        interactionType: interaction.interactionType,
-        role: interaction.role,
-        content: interaction.content,
-        createdAt: interaction.createdAt,
+      tutoringSessions: tutoringSessions.map((sessionRow) => ({
+        id: sessionRow.id,
+        topicId: sessionRow.topicId,
+        topicTitle: sessionRow.topic?.title ?? null,
+        sessionStatus: sessionRow.sessionStatus,
+        sessionLocale: sessionRow.sessionLocale,
+        summary: sessionRow.summary ?? null,
+        createdAt: sessionRow.createdAt,
+        updatedAt: sessionRow.updatedAt,
+        completedAt: sessionRow.completedAt,
       })),
+      conversationTurns: conversationTurns.flatMap((interaction) =>
+        interaction.sessionId
+          ? [
+              {
+                id: interaction.id,
+                topicId: interaction.topicId,
+                topicTitle: interaction.topic?.title ?? null,
+                sessionId: interaction.sessionId,
+                interactionType: interaction.interactionType,
+                role: interaction.role,
+                content: interaction.content,
+                createdAt: interaction.createdAt,
+              },
+            ]
+          : [],
+      ),
+      navigation: {
+        previousStudent: previousStudent
+          ? {
+              id: previousStudent.id,
+              fullName: previousStudent.fullName,
+            }
+          : null,
+        nextStudent: nextStudent
+          ? {
+              id: nextStudent.id,
+              fullName: nextStudent.fullName,
+            }
+          : null,
+        position: currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1,
+        totalStudents: classroomRoster.length,
+      },
     },
   };
 }
@@ -476,6 +521,71 @@ export async function getClassroomStudentPatternData(
             },
           ]
         : [],
+    },
+  };
+}
+
+export async function getClassroomStudentReportDetailData(params: {
+  classroomStudentId: string;
+  reportId: string;
+}) {
+  const session = await getVerifiedSession();
+  const accessResult = await resolveTeacherStudentAccess({
+    teacherUserId: session.user.id,
+    classroomStudentId: params.classroomStudentId,
+  });
+
+  if (accessResult.error) {
+    throw new Error(accessResult.error === "NOT_FOUND" ? "Student not found" : "Unauthorized");
+  }
+
+  const report = await getDb().query.studentProgressReports.findFirst({
+    where: and(
+      eq(studentProgressReports.id, params.reportId),
+      eq(studentProgressReports.classroomStudentId, params.classroomStudentId),
+    ),
+    with: {
+      topic: true,
+      classroomStudent: {
+        with: {
+          classroom: true,
+        },
+      },
+    },
+  });
+
+  if (!report) {
+    throw new Error("Report not found");
+  }
+
+  return {
+    success: true as const,
+    data: {
+      id: report.id,
+      masteryPercent: report.masteryPercent,
+      sourceLocale: report.sourceLocale,
+      createdAt: report.createdAt,
+      updatedAt: report.updatedAt,
+      sessionId: report.generatedFromSessionId,
+      topic: {
+        id: report.topicId,
+        title: report.topic?.title ?? "Topic",
+        subject: report.topic?.subject ?? null,
+        subjectLabel: report.topic?.subjectLabel ?? null,
+        status: report.topic?.status ?? "draft",
+      },
+      student: {
+        id: report.classroomStudent.id,
+        fullName: report.classroomStudent.fullName,
+        email: report.classroomStudent.email,
+        classroom: {
+          id: report.classroomStudent.classroom.id,
+          title: report.classroomStudent.classroom.title,
+          gradeBand: report.classroomStudent.classroom.gradeBand,
+          gradeLabel: report.classroomStudent.classroom.gradeLabel,
+        },
+      },
+      report: report.report,
     },
   };
 }

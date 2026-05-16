@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, History, Loader2, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, History, Loader2, Plus, Send } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import {
   answerTeacherStudentQuestionAction,
   saveTeacherStudentChatSessionAction,
 } from "@/app/actions/classroom";
-import { GlassPanel } from "@/components/learning/glass-panel";
-import { SectionHeading } from "@/components/learning/section-heading";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import { cn } from "@/lib/utils";
 
@@ -58,17 +56,8 @@ export function TeacherStudentChat({
   const [input, setInput] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const suggestions = useMemo(
-    () => [
-      `What learning patterns have you observed in ${studentName}?`,
-      `What misconceptions seem to recur for ${studentName}?`,
-      `Where does ${studentName} appear to need the most support right now?`,
-      `What evidence suggests progress or regression recently?`,
-    ],
-    [studentName],
-  );
 
   const sessionsQuery = useQuery({
     queryKey: ["teacherStudentChatSessions", classroomStudentId],
@@ -191,34 +180,55 @@ export function TeacherStudentChat({
   }
 
   return (
-    <GlassPanel className="p-6">
-      <SectionHeading
-        eyebrow="Teacher Copilot"
-        title="Chat With Student Data"
-        description="Ask grounded questions about this student's learning evidence. The assistant should say when the evidence is too weak."
-      />
+    <section className="rounded-2xl border border-slate-200 bg-white">
+      <div className="border-b border-slate-100 px-6 py-5">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+          Teacher copilot
+        </h2>
+        <p className="mt-1 text-sm leading-6 text-slate-500">
+          Ask grounded questions about this student&apos;s learning evidence.
+          The assistant should say when the evidence is too weak.
+        </p>
+      </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-[0.78fr_1.22fr]">
-        <div className="space-y-4">
-          <div className="rounded-[18px] border border-white/70 bg-white/75 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <History className="h-4 w-4 text-slate-500" />
-              Recent chats
-            </div>
-            <div className="mt-4 space-y-2">
+      <div
+        className={`grid gap-5 p-6 ${
+          isHistoryOpen ? "lg:grid-cols-[280px_minmax(0,1fr)]" : "grid-cols-1"
+        }`}
+      >
+        {isHistoryOpen ? (
+          <aside className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <History className="h-4 w-4 text-slate-500" />
+                Recent chats
+              </div>
               <button
                 type="button"
-                onClick={() => {
-                  setCurrentSessionId(null);
-                  setMessages([]);
-                  setInput("");
-                }}
-                className="w-full rounded-[14px] border border-dashed border-slate-200 bg-white/80 px-3 py-3 text-left text-sm text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                onClick={() => setIsHistoryOpen(false)}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-950"
+                aria-label="Hide recent chats"
               >
-                Start a new chat
+                <ChevronLeft className="h-4 w-4" />
               </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentSessionId(null);
+                setMessages([]);
+                setInput("");
+              }}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+            >
+              <Plus className="h-4 w-4" />
+              New chat
+            </button>
+
+            <div className="mt-4 space-y-2">
               {sessionsQuery.isLoading ? (
-                <div className="flex items-center gap-2 px-1 py-3 text-sm text-slate-500">
+                <div className="flex items-center gap-2 px-1 py-2 text-sm text-slate-500">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading chats...
                 </div>
@@ -229,13 +239,13 @@ export function TeacherStudentChat({
                     type="button"
                     onClick={() => loadSession(session.id)}
                     className={cn(
-                      "w-full rounded-[14px] border px-3 py-3 text-left text-sm transition",
+                      "w-full rounded-lg border bg-white px-3 py-3 text-left text-sm transition",
                       currentSessionId === session.id
                         ? "border-sky-300 bg-sky-50/80 text-slate-950"
-                        : "border-white/70 bg-white/75 text-slate-600 hover:border-slate-200 hover:text-slate-900",
+                        : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900",
                     )}
                   >
-                    <div className="font-semibold">{session.title}</div>
+                    <div className="truncate font-semibold">{session.title}</div>
                     <div className="mt-1 text-xs text-slate-500">
                       {new Intl.DateTimeFormat(undefined, {
                         month: "short",
@@ -247,40 +257,42 @@ export function TeacherStudentChat({
                   </button>
                 ))
               ) : (
-                <div className="rounded-[14px] border border-dashed border-slate-200 bg-white/70 px-3 py-4 text-sm text-slate-500">
+                <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
                   No saved chats yet.
                 </div>
               )}
             </div>
+          </aside>
+        ) : null}
+
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-950">
+                Conversation
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                Ask about progress, misconceptions, patterns, and evidence.
+              </div>
+            </div>
+            {!isHistoryOpen ? (
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(true)}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-950"
+                aria-label="Show recent chats"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
 
-          <div className="rounded-[18px] border border-white/70 bg-white/75 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <Brain className="h-4 w-4 text-emerald-700" />
-              Helpful prompts
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {suggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => void submitQuestion(suggestion)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-[22px] border border-white/70 bg-white/78 p-4">
           <div
             ref={scrollRef}
             className="max-h-[520px] space-y-4 overflow-y-auto pr-1"
           >
             {messages.length === 0 ? (
-              <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm leading-6 text-slate-500">
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-500">
                 Ask things like &quot;What evidence suggests this student is improving in fractions?&quot; or &quot;What misconceptions keep showing up in recent sessions?&quot;
               </div>
             ) : (
@@ -292,10 +304,10 @@ export function TeacherStudentChat({
                   <div
                     key={message.id}
                     className={cn(
-                      "rounded-[18px] px-4 py-4",
+                      "rounded-xl px-4 py-4",
                       message.role === "user"
                         ? "ml-auto max-w-[86%] border border-sky-200 bg-sky-50/90"
-                        : "max-w-[92%] border border-white/70 bg-slate-50/90",
+                        : "max-w-[92%] border border-slate-200 bg-slate-50/90",
                     )}
                   >
                     <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -310,7 +322,7 @@ export function TeacherStudentChat({
                       </div>
                     ) : null}
                     {sources.length ? (
-                      <div className="mt-3 rounded-[14px] border border-slate-200 bg-white/90 px-3 py-3">
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
                         <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                           Sources
                         </div>
@@ -347,12 +359,12 @@ export function TeacherStudentChat({
               onChange={(event) => setInput(event.target.value)}
               rows={3}
               placeholder={`Ask about ${studentName}'s progress, misconceptions, patterns, or evidence...`}
-              className="min-h-[84px] flex-1 resize-none rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-sky-300"
+              className="min-h-[84px] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-sky-300"
             />
             <button
               type="submit"
               disabled={!input.trim() || isSubmitting}
-              className="inline-flex h-fit items-center gap-2 rounded-[18px] bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-fit items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -364,6 +376,6 @@ export function TeacherStudentChat({
           </form>
         </div>
       </div>
-    </GlassPanel>
+    </section>
   );
 }

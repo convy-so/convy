@@ -104,9 +104,9 @@ export function FeedbackForm({
   description,
 }: FeedbackFormProps) {
   const pathname = usePathname();
-  const [submitterRole, setSubmitterRole] = useState<FeedbackRole>(defaultRole);
+  const [submitterRole] = useState<FeedbackRole>(defaultRole);
   const [kind, setKind] = useState<FeedbackKind>("suggestion");
-  const [sourceArea, setSourceArea] = useState<FeedbackSourceArea>("platform");
+  const [sourceArea, setSourceArea] = useState<FeedbackSourceArea>("classroom");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState(contactEmail);
@@ -140,7 +140,7 @@ export function FeedbackForm({
 
       toast.success("Your feedback has been submitted.");
       setKind("suggestion");
-      setSourceArea("platform");
+      setSourceArea("classroom");
       setSubject("");
       setMessage("");
     } catch (error) {
@@ -176,7 +176,9 @@ export function FeedbackForm({
           <CustomSelect
             label="Area"
             value={sourceArea}
-            options={(Object.keys(sourceAreaLabels) as FeedbackSourceArea[]).map((key) => ({
+            options={(Object.keys(sourceAreaLabels) as FeedbackSourceArea[])
+              .filter(key => key !== 'platform')
+              .map((key) => ({
               label: sourceAreaLabels[key],
               value: key,
             }))}
@@ -184,28 +186,16 @@ export function FeedbackForm({
           />
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          <CustomSelect
-            label="Submitting as"
-            value={submitterRole}
-            options={allowedRoles.map((role) => ({
-              label: roleLabels[role],
-              value: role,
-            }))}
-            onChange={(val) => setSubmitterRole(val)}
+        <label className="space-y-2 text-sm font-medium text-slate-700 flex flex-col">
+          <span>Contact email</span>
+          <input
+            className="w-full rounded-2xl border border-slate-100 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-200 focus:bg-white"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="name@example.com"
           />
-
-          <label className="space-y-2 text-sm font-medium text-slate-700">
-            <span>Contact email</span>
-            <input
-              className="w-full rounded-2xl border border-slate-100 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-200 focus:bg-white"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="name@example.com"
-            />
-          </label>
-        </div>
+        </label>
 
         <label className="space-y-2 text-sm font-medium text-slate-700 flex flex-col">
           <span>Subject</span>

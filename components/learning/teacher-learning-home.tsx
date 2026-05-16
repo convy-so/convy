@@ -1,38 +1,46 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowUpRight,
   BookOpen,
+  Check,
+  ChevronDown,
   ExternalLink,
   FileText,
   GraduationCap,
-  Loader2,
   Layout,
+  Loader2,
+  Plus,
+  RefreshCw,
   Sparkles,
+  Trash2,
   UploadCloud,
   Users,
-  Plus,
-  PlusIcon,
-  ChevronDown,
-  Check,
-  RefreshCw,
-  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Link } from "@/i18n/routing";
 import { CreateClassroomModal } from "@/components/learning/create-classroom-modal";
 import { CreateTopicModal } from "@/components/learning/create-topic-modal";
-import { useTeacherLearningWorkspace } from "@/components/learning/hooks/use-teacher-learning-workspace";
 import { InviteStudentModal } from "@/components/learning/invite-student-modal";
 import { LogInterventionModal } from "@/components/learning/log-intervention-modal";
 import { StatsCard } from "@/components/dashboard/stats-card";
+import { useTeacherLearningWorkspace } from "@/components/learning/hooks/use-teacher-learning-workspace";
 import type { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
 import { appLocaleLabels } from "@/lib/i18n/config";
 
-function countReadyTopics(statuses: string[]) {
+function countActiveSessions(statuses: string[]) {
   return statuses.filter((status) => status === "active").length;
+}
+
+function formatDate(value: string | Date | null | undefined) {
+  if (!value) return "Not yet";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function formatInterventionTypeLabel(value: string) {
@@ -58,17 +66,20 @@ const TOPIC_STATUSES = ["draft", "active", "paused", "archived"] as const;
 export function TeacherLearningHome(
   initialData: Awaited<ReturnType<typeof getTeacherLearningWorkspaceInitialData>>,
 ) {
+  const CLASSROOMS_PAGE_SIZE = 8;
+  const [activeClassroomView, setActiveClassroomView] = useState<
+    "sessions" | "students" | "details"
+  >("sessions");
   const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
-  const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
-  const classDropdownRef = useRef<HTMLDivElement>(null);
+  const [classroomPage, setClassroomPage] = useState(1);
 
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialDescription, setMaterialDescription] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
-  
+
   const {
     classrooms,
     selectedDirectoryClassroom,
@@ -81,688 +92,1164 @@ export function TeacherLearningHome(
     selectedTopic,
     materialsQuery,
     readinessQuery,
-    assignedSurveysQuery,
-    interventionsQuery,
     uploadMaterialMutation,
     updateTopicStatusMutation,
-    createClassSurveyMutation,
-    updateInterventionMutation,
     resendInvitationMutation,
     cancelInvitationMutation,
     reports,
     questions,
+    interventionsQuery,
     interventions,
     selectedStudentReport,
-    selectedStudentAssignedSurveyStates,
     patternSummary,
     setSelectedClassroomId,
     setSelectedTopicId,
     setSelectedClassroomStudentId,
   } = useTeacherLearningWorkspace(initialData);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (classDropdownRef.current && !classDropdownRef.current.contains(event.target as Node)) {
-        setIsClassDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   const materials = materialsQuery.data?.data ?? [];
+  const activeSessionCount = countActiveSessions(topics.map((topic) => topic.status));
+  const draftSessionCount = topics.filter((topic) => topic.status === "draft").length;
+  const pausedSessionCount = topics.filter((topic) => topic.status === "paused").length;
+  const archivedSessionCount = topics.filter((topic) => topic.status === "archived").length;
+  const acceptedStudentCount = students.filter((student) => student.inviteStatus === "accepted").length;
+  const onboardingReadyCount = students.filter(
+    (student) => student.onboardingStatus === "completed",
+  ).length;
+  const averageMastery = reports.length
+    ? Math.round(
+        reports.reduce((sum, report) => sum + report.masteryPercent, 0) / reports.length,
+      )
+    : null;
+  const classroomPageCount = Math.max(1, Math.ceil(classrooms.length / CLASSROOMS_PAGE_SIZE));
+  const effectiveClassroomPage = Math.min(classroomPage, classroomPageCount);
+  const visibleClassrooms = useMemo(() => {
+    const start = (effectiveClassroomPage - 1) * CLASSROOMS_PAGE_SIZE;
+    return classrooms.slice(start, start + CLASSROOMS_PAGE_SIZE);
+  }, [classrooms, effectiveClassroomPage]);
 
   return (
-    <div className="min-h-screen bg-slate-50/20 pb-20 pt-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-        
-        {/* Header Section */}
-        <div className="space-y-10">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
-            <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-100 text-slate-400 text-[10px] font-medium uppercase">
-                <Sparkles className="w-3 h-3" />
-                Teacher Workspace
-              </div>
-              <h1 className="text-3xl font-medium text-slate-900 md:text-5xl leading-tight">
-                Learning Hub
-              </h1>
-              <p className="text-slate-500 text-base max-w-xl font-medium leading-relaxed">
-                Manage your classrooms, students, and AI-powered learning resources in one place.
-              </p>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-              {/* Classroom Selection Dropdown */}
-              <div className="relative" ref={classDropdownRef}>
-                <div className="text-[10px] font-medium uppercase text-slate-400 px-1 mb-2">Selected Classroom</div>
-                <button
-                  onClick={() => setIsClassDropdownOpen(!isClassDropdownOpen)}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-xs font-medium text-slate-700 hover:border-slate-200 transition-colors min-w-[200px]"
-                >
-                  <span className="truncate">{selectedDirectoryClassroom?.title ?? "Select Classroom"}</span>
-                  <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isClassDropdownOpen ? "rotate-180" : ""}`} />
-                </button>
-                
-                {isClassDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-full z-50 bg-white border border-slate-100 rounded-xl overflow-hidden py-1 shadow-sm min-w-[240px]">
-                    {classrooms.length ? classrooms.map((classroom) => (
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f3f6fb_100%)] pb-20 pt-10">
+      <div className="mx-auto max-w-7xl space-y-10 px-4 sm:px-6 lg:px-8">
+        {!selectedDirectoryClassroom ? (
+          <>
+            <section className="space-y-5">
+              {classrooms.length ? (
+                <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_50px_-40px_rgba(15,23,42,0.24)]">
+                  <div className="border-b border-slate-100 px-6 py-5">
+                    <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+                      Classrooms
+                    </h1>
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {visibleClassrooms.map((classroom) => (
                       <button
                         key={classroom.id}
+                        type="button"
                         onClick={() => {
+                          setActiveClassroomView("sessions");
                           setSelectedClassroomId(classroom.id);
                           setSelectedTopicId(null);
                           setSelectedClassroomStudentId(null);
-                          setIsClassDropdownOpen(false);
                         }}
-                        className="flex items-center justify-between w-full px-4 py-3 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors text-left"
+                        className="group flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition hover:bg-slate-50"
                       >
-                        <div>
-                          <div className={selectedDirectoryClassroom?.id === classroom.id ? "text-sky-600" : "text-slate-700"}>{classroom.title}</div>
-                          <div className="text-[9px] text-slate-400 uppercase mt-0.5">{classroom.gradeLabel}</div>
+                        <div className="min-w-0">
+                          <div className="text-base font-semibold text-slate-950 transition group-hover:text-sky-700">
+                            {classroom.title}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                            <span>{classroom.gradeLabel}</span>
+                            <span>•</span>
+                            <span>{classroom.subject ?? "General"}</span>
+                            <span>•</span>
+                            <span>{appLocaleLabels[classroom.defaultContentLocale]}</span>
+                          </div>
                         </div>
-                        {selectedDirectoryClassroom?.id === classroom.id && <Check className="h-3 w-3 text-sky-500 flex-shrink-0" />}
+
+                        <ArrowUpRight className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-slate-500" />
                       </button>
-                    )) : (
-                      <div className="px-4 py-3 text-xs text-slate-400 italic">No classrooms yet</div>
-                    )}
+                    ))}
                   </div>
-                )}
-              </div>
 
-              <button
-                onClick={() => setIsCreateClassModalOpen(true)}
-                className="flex items-center justify-center gap-2.5 px-6 py-4 bg-slate-900 text-white rounded-2xl font-medium hover:bg-slate-800 transition-all shadow-none self-end"
-              >
-                <PlusIcon className="w-5 h-5" />
-                Create Classroom
-              </button>
-            </div>
-          </div>
+                  <div className="flex flex-col gap-4 border-t border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                      <span>
+                        Page {effectiveClassroomPage} of {classroomPageCount}
+                      </span>
+                      {classrooms.length > CLASSROOMS_PAGE_SIZE ? (
+                        <span>• {classrooms.length} total classrooms</span>
+                      ) : null}
+                    </div>
 
-          {/* Stats Bar */}
-          <div className="grid gap-6 grid-cols-2 lg:grid-cols-4">
-            <StatsCard
-              title="Classrooms"
-              value={classrooms.length}
-              icon={<GraduationCap className="w-6 h-6" />}
-              iconColor="bg-blue-50 text-blue-600"
-              description="Total spaces"
-            />
-            <StatsCard
-              title="Topics"
-              value={topics.length}
-              icon={<BookOpen className="w-6 h-6" />}
-              iconColor="bg-amber-50 text-amber-600"
-              description="Active resources"
-            />
-            <StatsCard
-              title="Students"
-              value={students.length}
-              icon={<Users className="w-6 h-6" />}
-              iconColor="bg-violet-50 text-violet-600"
-              description={selectedDirectoryClassroom ? `In ${selectedDirectoryClassroom.title}` : "Select a class"}
-            />
-            <StatsCard
-              title="Tutor Status"
-              value={countReadyTopics(topics.map((t) => t.status))}
-              icon={<Sparkles className="w-6 h-6" />}
-              iconColor="bg-emerald-50 text-emerald-600"
-              description="AI readiness"
-            />
-          </div>
-        </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      {classroomPageCount > 1 ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setClassroomPage((page) => Math.max(1, page - 1))
+                            }
+                            disabled={effectiveClassroomPage === 1}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setClassroomPage((page) =>
+                                Math.min(classroomPageCount, page + 1),
+                              )
+                            }
+                            disabled={effectiveClassroomPage === classroomPageCount}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      ) : null}
 
-        {/* Main Content Area */}
-        <div className="space-y-12">
-          {!selectedDirectoryClassroom ? (
-            <div className="p-20 text-center flex flex-col items-center justify-center min-h-[500px] border-dashed border border-slate-100 bg-white rounded-2xl">
-              <div className="w-20 h-20 rounded-2xl bg-slate-50 flex items-center justify-center mb-6 border border-slate-100">
-                <Layout className="w-8 h-8 text-slate-200" />
-              </div>
-              <h3 className="text-2xl font-medium text-slate-900 mb-3">Workspace Ready</h3>
-              <p className="text-slate-500 max-w-sm mx-auto text-base leading-relaxed font-medium">
-                Select a classroom from the dropdown above to manage your students, topics, and AI tutors.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              
-              {/* Active Classroom Ribbon */}
-              <div className="bg-white rounded-2xl border border-slate-100 p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Active Focus</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsCreateClassModalOpen(true)}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Create classroom
+                      </button>
+                    </div>
                   </div>
-                  <h2 className="text-3xl font-medium text-slate-900 leading-tight">{selectedDirectoryClassroom.title}</h2>
-                  <p className="text-slate-500 font-medium text-sm">
-                    {selectedDirectoryClassroom.gradeLabel} <span className="mx-2 opacity-30">|</span> {selectedDirectoryClassroom.subject ?? "General"} <span className="mx-2 opacity-30">|</span> {appLocaleLabels[selectedDirectoryClassroom.defaultContentLocale]}
-                  </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-4">
+              ) : (
+                <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/80 px-8 py-20 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-100 bg-white shadow-sm">
+                    <Layout className="h-8 w-8 text-slate-300" />
+                  </div>
+                  <h3 className="mt-6 text-xl font-semibold text-slate-950">
+                    No classrooms yet
+                  </h3>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                    Create your first classroom to begin inviting students and defining
+                    learning sessions.
+                  </p>
                   <button
                     type="button"
-                    onClick={() => createClassSurveyMutation.mutate(selectedDirectoryClassroom.id)}
-                    disabled={createClassSurveyMutation.isPending}
-                    className="px-5 py-3 rounded-xl bg-slate-50 text-slate-600 text-sm font-medium hover:bg-slate-100 transition-all flex items-center gap-2 border border-slate-100"
+                    onClick={() => setIsCreateClassModalOpen(true)}
+                    className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
-                    {createClassSurveyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    Create Survey
+                    <Plus className="h-4 w-4" />
+                    Create classroom
                   </button>
-                  <Link href="/dashboard/learning/reports" className="px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 transition-all flex items-center gap-2">
-                    View Reports <ArrowUpRight className="w-4 h-4" />
-                  </Link>
+                </div>
+              )}
+            </section>
+          </>
+        ) : !selectedTopic ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setSelectedClassroomId(null)}
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-950"
+            >
+              <div className="rounded-lg border border-slate-200 bg-white p-1.5">
+                <ChevronDown className="h-4 w-4 rotate-90" />
+              </div>
+              Back to classrooms
+            </button>
+
+            <section className="border-b border-slate-200 pb-6">
+              <div className="space-y-2">
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+                    {selectedDirectoryClassroom.title}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                    <span>{selectedDirectoryClassroom.gradeLabel}</span>
+                    <span>•</span>
+                    <span>{selectedDirectoryClassroom.subject ?? "General"}</span>
+                    <span>•</span>
+                    <span>{appLocaleLabels[selectedDirectoryClassroom.defaultContentLocale]}</span>
+                  </div>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                    Choose a session to inspect reports and analytics, or manage the
+                    classroom roster here before opening a specific session.
+                  </p>
                 </div>
               </div>
+            </section>
 
-              {/* Grid for Students & Topics */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                {/* Students Section */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-8 space-y-8">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2.5 bg-violet-50 text-violet-500 rounded-xl">
-                        <Users className="w-5 h-5" />
-                      </div>
-                      <h3 className="font-medium text-slate-900">Student Directory</h3>
-                    </div>
-                    {canManageStudents && (
-                      <button type="button" onClick={() => setIsInviteModalOpen(true)} className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-slate-600 transition-colors border border-slate-100">
-                        <Plus className="w-5 h-5" />
-                      </button>
-                    )}
+            <div className="border-b border-slate-200">
+              <nav className="-mb-px flex flex-wrap items-center gap-6">
+                <button
+                  type="button"
+                  onClick={() => setActiveClassroomView("sessions")}
+                  className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+                    activeClassroomView === "sessions"
+                      ? "border-slate-950 text-slate-950"
+                      : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                  }`}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  Sessions
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    {topics.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveClassroomView("students")}
+                  className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+                    activeClassroomView === "students"
+                      ? "border-slate-950 text-slate-950"
+                      : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                  }`}
+                >
+                  <Users className="h-4 w-4" />
+                  Students
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    {students.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveClassroomView("details")}
+                  className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+                    activeClassroomView === "details"
+                      ? "border-slate-950 text-slate-950"
+                      : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                  }`}
+                >
+                  <Layout className="h-4 w-4" />
+                  Details
+                </button>
+              </nav>
+            </div>
+
+            {activeClassroomView === "sessions" ? (
+              <section className="space-y-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+                      Sessions
+                    </h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      Open a session to inspect its reports, readiness, supporting
+                      materials, and student performance.
+                    </p>
                   </div>
-                  
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                    {students.length ? students.map((student) => (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <span>{topics.length} total</span>
+                    <span>•</span>
+                    <span>{activeSessionCount} active</span>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  {topics.length ? (
+                    topics.map((topic, index) => (
                       <button
-                        key={student.id}
+                        key={topic.id}
                         type="button"
-                        onClick={() => setSelectedClassroomStudentId(student.id)}
-                        className={`w-full group rounded-xl border p-5 text-left transition-all ${selectedStudent?.id === student.id ? "border-violet-500 bg-violet-50 text-violet-700" : "border-slate-50 bg-slate-50/50 hover:bg-white hover:border-slate-200 text-slate-600"}`}
+                        onClick={() => setSelectedTopicId(topic.id)}
+                        className={`group w-full px-5 py-4 text-left transition hover:bg-slate-50/70 ${
+                          index !== topics.length - 1 ? "border-b border-slate-100" : ""
+                        }`}
                       >
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="min-w-0">
-                            <div className="font-medium text-slate-900 group-hover:text-violet-600 transition-colors leading-tight">{student.fullName}</div>
-                            <div className="text-xs text-slate-400 font-medium mt-1 truncate">{student.email}</div>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                                {formatTopicStatusLabel(topic.status)}
+                              </span>
+                              <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
+                                {topic.subjectLabel ?? topic.subject ?? "General"}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="truncate text-base font-semibold text-slate-950 transition group-hover:text-slate-700">
+                                {topic.title}
+                              </div>
+                              <p className="mt-1.5 line-clamp-2 text-sm leading-6 text-slate-500">
+                                {topic.description ??
+                                  "Open this session to review its readiness, supporting materials, and student evidence."}
+                              </p>
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              {appLocaleLabels[topic.contentLocale ?? "en"]}
+                            </div>
                           </div>
-                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium uppercase tracking-widest ${student.inviteStatus === "joined" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                            {student.inviteStatus}
-                          </span>
+
+                          <ArrowUpRight className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-slate-500" />
                         </div>
                       </button>
-                    )) : (
-                      <div className="py-20 text-center bg-slate-50/30 rounded-xl border border-dashed border-slate-100">
-                        <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center mx-auto mb-4">
-                          <Users className="w-6 h-6 text-slate-200" />
-                        </div>
-                        <p className="text-slate-400 font-medium text-sm">No students enrolled</p>
-                      </div>
-                    )}
-
-                    {pendingInvitations.length > 0 && (
-                      <div className="pt-6 border-t border-slate-100">
-                        <div className="flex items-center gap-2 mb-4 text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                          Pending Invitations
-                        </div>
-                        <div className="space-y-3">
-                          {pendingInvitations.map((inv) => (
-                            <div
-                              key={inv.id}
-                              className="w-full rounded-xl border border-slate-50 bg-slate-50/30 p-4 flex items-center justify-between gap-4 group"
-                            >
-                              <div className="min-w-0">
-                                <div className="text-sm font-medium text-slate-700 truncate">{inv.email}</div>
-                                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-                                  Invited {inv.createdAt ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(inv.createdAt)) : "Unknown Date"}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  type="button"
-                                  onClick={() => resendInvitationMutation.mutate(inv)}
-                                  disabled={resendInvitationMutation.isPending}
-                                  className="p-1.5 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-sky-600 hover:border-sky-100 transition-all disabled:opacity-50"
-                                  title="Resend Invitation"
-                                >
-                                  <RefreshCw className={`w-3.5 h-3.5 ${resendInvitationMutation.isPending ? 'animate-spin' : ''}`} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => cancelInvitationMutation.mutate(inv)}
-                                  disabled={cancelInvitationMutation.isPending}
-                                  className="p-1.5 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-rose-600 hover:border-rose-100 transition-all disabled:opacity-50"
-                                  title="Cancel Invitation"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Topics Section */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-8 space-y-8">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2.5 bg-amber-50 text-amber-500 rounded-xl">
-                        <BookOpen className="w-5 h-5" />
-                      </div>
-                      <h3 className="font-medium text-slate-900">Learning Curriculum</h3>
-                    </div>
-                    <button type="button" onClick={() => setIsTopicModalOpen(true)} className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-slate-600 transition-colors border border-slate-100">
-                      <Plus className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                    {topics.length ? topics.map((topic) => {
-                      const isActiveTopic = selectedTopic?.id === topic.id;
-                      return (
-                        <button
-                          key={topic.id}
-                          type="button"
-                          onClick={() => setSelectedTopicId(topic.id)}
-                          className={`w-full group rounded-xl border p-5 text-left transition-all ${isActiveTopic ? "border-amber-500 bg-amber-50 text-amber-700" : "border-slate-50 bg-slate-50/50 hover:bg-white hover:border-slate-200 text-slate-600"}`}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium text-slate-900 group-hover:text-amber-600 transition-colors truncate leading-tight">{topic.title}</div>
-                              <div className="flex items-center gap-2 mt-1.5">
-                                <div className={`w-1.5 h-1.5 rounded-full ${topic.status === "active" ? "bg-emerald-400" : topic.status === "paused" ? "bg-amber-400" : "bg-slate-300"}`} />
-                                <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest truncate">
-                                  {topic.subjectLabel ?? topic.subject ?? "General"} <span className="mx-1 opacity-30">•</span> {topic.status}
-                                </div>
-                              </div>
-                            </div>
-                            <ArrowUpRight className={`w-4 h-4 transition-all ${isActiveTopic ? "text-amber-500 translate-x-0.5 -translate-y-0.5" : "text-slate-200 group-hover:text-amber-400"}`} />
-                          </div>
-                        </button>
-                      );
-                    }) : (
-                      <div className="py-20 text-center bg-slate-50/30 rounded-xl border border-dashed border-slate-100">
-                        <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center mx-auto mb-4">
-                          <BookOpen className="w-6 h-6 text-slate-200" />
-                        </div>
-                        <p className="text-slate-400 font-medium text-sm">No topics created</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Analytics & Detailed View */}
-              <div className="space-y-12">
-                <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-10">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-50 text-blue-500 rounded-xl">
-                      <FileText className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-xl font-medium text-slate-900">Pulse Check Overview</h3>
-                  </div>
-                  
-                  {assignedSurveysQuery.isLoading ? (
-                    <div className="flex items-center justify-center py-12 gap-3 text-slate-400 font-medium">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Gathering Data...
-                    </div>
-                  ) : selectedStudentAssignedSurveyStates.length ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {selectedStudentAssignedSurveyStates.map((survey) => (
-                        <div key={survey.id} className="group rounded-2xl bg-slate-50/50 p-8 border border-transparent hover:border-slate-100 hover:bg-white transition-all">
-                          <div className="flex items-start justify-between gap-6">
-                            <div className="space-y-2">
-                              <h4 className="font-medium text-slate-900 text-lg leading-tight">{survey.title}</h4>
-                              <div className="flex items-center gap-2.5 text-sm text-slate-500 font-medium">
-                                <span className="text-blue-500 font-bold">{survey.completionRate}% Done</span>
-                                <span className="opacity-30">|</span>
-                                <span>{survey.completedCount}/{survey.assignedCount} Respondents</span>
-                              </div>
-                            </div>
-                            <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[10px] font-medium uppercase tracking-widest border border-blue-100">
-                              {survey.inProgressCount} Live
-                            </span>
-                          </div>
-                          
-                          {survey.selectedStudentState && (
-                            <div className="mt-8 pt-8 border-t border-slate-100 flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center font-medium text-sm text-slate-400">
-                                  {selectedStudent?.fullName.charAt(0)}
-                                </div>
-                                <div>
-                                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Student Status</div>
-                                  <div className="text-sm font-medium text-slate-600 capitalize">
-                                    {survey.selectedStudentState.responseStatus.replace("_", " ")}
-                                  </div>
-                                </div>
-                              </div>
-                              {survey.selectedStudentState.completedAt && (
-                                <div className="text-xs font-medium text-slate-400">
-                                  {new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(survey.selectedStudentState.completedAt))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    ))
                   ) : (
-                    <div className="py-20 text-center bg-slate-50/30 rounded-2xl border border-dashed border-slate-100">
-                      <p className="text-slate-400 font-medium text-lg">No active surveys yet.</p>
-                      <p className="text-slate-300 text-sm mt-2 font-medium">Deploy a survey to start collecting student feedback.</p>
+                    <div className="px-6 py-14 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-100 bg-white">
+                        <BookOpen className="h-6 w-6 text-slate-200" />
+                      </div>
+                      <h3 className="mt-5 text-lg font-semibold text-slate-950">
+                        No sessions yet
+                      </h3>
+                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                        Create the first session for this classroom. That session will
+                        define the learning scope students enter.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsTopicModalOpen(true)}
+                        className="mt-6 inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Create first session
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : activeClassroomView === "students" ? (
+              <section className="space-y-8">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+                      Students
+                    </h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      Manage the roster here before opening a specific session.
+                    </p>
+                  </div>
+                  {canManageStudents ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsInviteModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Invite
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  {students.length ? (
+                    students.map((student, index) => (
+                      <div
+                        key={student.id}
+                        className={`px-5 py-4 ${
+                          index !== students.length - 1 ? "border-b border-slate-100" : ""
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-950">
+                              {student.fullName}
+                            </div>
+                            <div className="mt-1 truncate text-sm text-slate-500">
+                              {student.email}
+                            </div>
+                            <div className="mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                              {student.inviteStatus}
+                            </div>
+                          </div>
+
+                          <Link
+                            href={`/dashboard/learning/students/${student.id}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+                          >
+                            Open
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </Link>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-6 py-14 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-100 bg-white">
+                        <Users className="h-6 w-6 text-slate-200" />
+                      </div>
+                      <h3 className="mt-5 text-lg font-semibold text-slate-950">
+                        No students enrolled
+                      </h3>
+                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                        Invite students to this classroom so they appear here before
+                        you open a session.
+                      </p>
                     </div>
                   )}
                 </div>
 
-                {/* Topic Deep Dive */}
-                {selectedTopic ? (
-                  <div className="space-y-10 animate-in zoom-in-95 duration-500">
-                    <div className="flex flex-col gap-6 px-1">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                        <div className="space-y-4">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[10px] font-medium uppercase tracking-widest">
-                            Topic Deep Dive
-                          </div>
-                          <h2 className="text-3xl font-medium text-slate-900 md:text-5xl leading-tight">{selectedTopic.title}</h2>
-                          <div className="flex flex-wrap items-center gap-4">
-                            <span className="px-3 py-1.5 rounded-lg bg-white text-slate-500 font-medium text-xs border border-slate-100 shadow-none">
-                               {selectedTopic.subjectLabel ?? selectedTopic.subject ?? "General"}
-                            </span>
-                            <span className="px-3 py-1.5 rounded-lg bg-slate-50 text-slate-500 font-medium text-xs border border-slate-100 shadow-none">
-                              {appLocaleLabels[selectedTopic.contentLocale ?? "en"]}
-                            </span>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {TOPIC_STATUSES.map((status) => {
-                                const isSelected = selectedTopic.status === status;
-                                return (
-                                  <button
-                                    key={status}
-                                    type="button"
-                                    onClick={() => updateTopicStatusMutation.mutate({ topicId: selectedTopic.id, status })}
-                                    disabled={isSelected || updateTopicStatusMutation.isPending}
-                                    className={`px-4 py-2.5 rounded-xl font-medium text-xs transition-all border ${
-                                      isSelected
-                                        ? "bg-slate-900 text-white border-slate-950"
-                                        : "bg-white text-slate-500 border-slate-100 hover:border-slate-200 hover:bg-slate-50"
-                                    } disabled:opacity-60`}
-                                  >
-                                    {formatTopicStatusLabel(status)}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {selectedTopic.description && (
-                        <div className="max-w-4xl">
-                          <p className="text-slate-500 text-base font-medium leading-relaxed italic border-l-2 border-slate-100 pl-6 py-1">
-                            &ldquo;{selectedTopic.description}&rdquo;
-                          </p>
-                        </div>
-                      )}
+                {pendingInvitations.length ? (
+                  <section className="space-y-4">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+                        Pending invitations
+                      </h2>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                        Track invites that have been sent but not yet accepted.
+                      </p>
                     </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
-                      {/* Knowledge Base */}
-                      <div className="xl:col-span-5 space-y-10">
-                        <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-10">
-                          <h3 className="text-xl font-medium text-slate-900 flex items-center gap-4">
-                            <div className="p-2.5 bg-blue-50 text-blue-500 rounded-xl">
-                              <UploadCloud className="w-5 h-5" />
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      {pendingInvitations.map((invitation, index) => (
+                        <div
+                          key={invitation.id}
+                          className={`flex items-center justify-between gap-4 px-5 py-4 ${
+                            index !== pendingInvitations.length - 1
+                              ? "border-b border-slate-100"
+                              : ""
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900">
+                              {invitation.email}
                             </div>
-                            Knowledge Assets
-                          </h3>
-                          <form className="space-y-6" onSubmit={(e) => {
-                            e.preventDefault();
-                            if (!materialFile) { toast.error("Choose a file first."); return; }
-                            uploadMaterialMutation.mutate(
-                              {
-                                topicId: selectedTopic.id,
-                                file: materialFile,
-                                title: materialTitle || undefined,
-                                description: materialDescription || undefined,
-                              },
-                              {
-                                onSuccess: () => {
-                                  setMaterialTitle("");
-                                  setMaterialDescription("");
-                                  setMaterialFile(null);
-                                },
-                              },
-                            );
-                          }}>
-                            <div className="space-y-5">
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">Asset Title</label>
-                                <input value={materialTitle} onChange={(e) => setMaterialTitle(e.target.value)} placeholder="e.g. Chapter 1: Newton's Laws" className="w-full rounded-xl bg-white border border-slate-100 px-5 py-4 text-sm font-medium text-slate-900 outline-none focus:border-slate-300 focus:bg-slate-50/30 transition-all placeholder:text-slate-300" />
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">AI Context</label>
-                                <textarea value={materialDescription} onChange={(e) => setMaterialDescription(e.target.value)} rows={2} placeholder="Briefly describe how this asset should be used..." className="w-full resize-none rounded-xl bg-white border border-slate-100 px-5 py-4 text-sm font-medium text-slate-900 outline-none focus:border-slate-300 focus:bg-slate-50/30 transition-all placeholder:text-slate-300" />
-                              </div>
-                              <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-100 bg-slate-50/50 px-6 py-12 text-center transition-all hover:border-slate-200 hover:bg-white">
-                                <div className="w-14 h-14 rounded-2xl bg-white border border-slate-100 flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
-                                  <UploadCloud className="w-7 h-7 text-slate-200" />
-                                </div>
-                                <div className="text-sm font-medium text-slate-600">{materialFile ? materialFile.name : "Select File to Index"}</div>
-                                <div className="text-[10px] text-slate-400 font-medium mt-2 uppercase tracking-widest">PDF, TXT, DOC • 20MB Max</div>
-                                <input type="file" accept=".pdf,.txt,.md,.doc,.docx" className="hidden" onChange={(e) => setMaterialFile(e.target.files?.[0] ?? null)} />
-                              </label>
+                            <div className="mt-1 text-xs text-slate-400">
+                              Invited {formatDate(invitation.createdAt)}
                             </div>
-                            <button type="submit" disabled={uploadMaterialMutation.isPending || !materialFile} className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-slate-900 text-white rounded-2xl text-base font-medium hover:bg-slate-800 transition-all disabled:opacity-50">
-                              {uploadMaterialMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                              Index Knowledge Asset
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => resendInvitationMutation.mutate(invitation)}
+                              disabled={resendInvitationMutation.isPending}
+                              className="rounded-xl border border-slate-200 bg-white p-2 text-slate-400 transition hover:border-sky-100 hover:text-sky-600 disabled:opacity-50"
+                              title="Resend invitation"
+                            >
+                              <RefreshCw
+                                className={`h-4 w-4 ${
+                                  resendInvitationMutation.isPending ? "animate-spin" : ""
+                                }`}
+                              />
                             </button>
-                          </form>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="p-8 bg-white border border-slate-100 rounded-2xl space-y-4">
-                            <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Grounding Status</div>
-                            <div className="text-xl font-medium text-slate-900">{readinessQuery.data?.data.ready ? "Full Coverage" : "Needs Assets"}</div>
-                            <p className="text-xs text-slate-500 font-medium leading-relaxed">{readinessQuery.data?.data.summary ?? "Upload material to start indexing."}</p>
-                          </div>
-                          <div className="p-8 bg-white border border-slate-100 rounded-2xl space-y-4">
-                            <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Total Indexed</div>
-                            <div className="text-xl font-medium text-slate-900">{materials.length} Assets</div>
-                            <p className="text-xs text-slate-500 font-medium leading-relaxed">{reports[0] ? `${reports[0].masteryPercent}% Mastery` : "No interactions recorded yet."}</p>
+                            <button
+                              type="button"
+                              onClick={() => cancelInvitationMutation.mutate(invitation)}
+                              disabled={cancelInvitationMutation.isPending}
+                              className="rounded-xl border border-slate-200 bg-white p-2 text-slate-400 transition hover:border-rose-100 hover:text-rose-600 disabled:opacity-50"
+                              title="Cancel invitation"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+              </section>
+            ) : (
+              <section className="space-y-8">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+                    Classroom details
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Core classroom information, roster readiness, and session setup.
+                  </p>
+                </div>
 
-                        <div className="bg-white rounded-2xl border border-slate-100 p-8 space-y-6">
-                          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                            <div>
-                              <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Teacher Assets</div>
-                              <h4 className="mt-2 text-xl font-medium text-slate-900">Open the exact material set grounding this topic</h4>
-                            </div>
-                            <Link href={`/dashboard/learning/topics/${selectedTopic.id}`} className="inline-flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100">
-                              Full Topic Detail <ArrowUpRight className="h-3.5 w-3.5" />
-                            </Link>
-                          </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-sm text-slate-500">Students</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">
+                      {students.length}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      {acceptedStudentCount} accepted
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-sm text-slate-500">Sessions</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">
+                      {topics.length}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      {activeSessionCount} active
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-sm text-slate-500">Pending invites</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">
+                      {pendingInvitations.length}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      Awaiting acceptance
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-sm text-slate-500">Onboarding ready</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">
+                      {onboardingReadyCount}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      Students fully set up
+                    </div>
+                  </div>
+                </div>
 
-                          <div className="space-y-3">
-                            {materials.length ? (
-                              materials.map((material) => (
-                                <div key={material.id} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
-                                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                    <div className="min-w-0">
-                                      <div className="truncate text-sm font-medium text-slate-900">{material.title}</div>
-                                      <div className="mt-1 text-[11px] font-medium uppercase tracking-widest text-slate-400">
-                                        {material.materialKind} <span className="mx-1 opacity-40">•</span> {material.mimeType}
-                                      </div>
-                                      <div className="mt-2 text-xs font-medium text-slate-500">
-                                        Extraction: {material.extractionStatus} <span className="mx-2 opacity-30">|</span> Indexing: {material.indexingStatus}
-                                      </div>
-                                    </div>
-                                    <a
-                                      href={`/api/media/learning/${material.id}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-xs font-medium text-slate-600 transition-all hover:border-slate-200 hover:text-slate-900"
-                                    >
-                                      Open Asset <ExternalLink className="h-3.5 w-3.5" />
-                                    </a>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="rounded-2xl border border-dashed border-slate-100 bg-slate-50/50 px-4 py-5 text-sm text-slate-400">
-                                No materials uploaded for this topic yet.
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                <div className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <div className="text-sm font-semibold text-slate-950">
+                        Classroom metadata
                       </div>
-
-                      {/* Student Insights */}
-                      <div className="xl:col-span-7 space-y-10">
-                        <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-10">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="p-2.5 bg-violet-50 text-violet-500 rounded-xl">
-                                <Sparkles className="w-6 h-6" />
-                              </div>
-                              <h3 className="text-xl font-medium text-slate-900">Cognitive Insights</h3>
-                            </div>
-                            {selectedStudent && (
-                              <button type="button" onClick={() => setIsInterventionModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-50 text-violet-600 text-[10px] font-medium uppercase tracking-widest hover:bg-violet-100 transition-all border border-violet-100">
-                                <Plus className="w-4 h-4" /> Log Intervention
-                              </button>
-                            )}
-                          </div>
-
-                          {selectedStudent ? (
-                            <div className="space-y-10">
-                              <div className="flex items-center justify-between p-8 rounded-2xl bg-slate-50/50 border border-slate-100">
-                                <div className="space-y-1.5">
-                                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Selected Student</div>
-                                  <div className="text-xl font-medium text-slate-900">{selectedStudent.fullName}</div>
-                                </div>
-                                {selectedStudentReport && (
-                                  <div className="text-right">
-                                    <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Global Mastery</div>
-                                    <div className="text-2xl font-medium text-violet-500">{selectedStudentReport.masteryPercent}%</div>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-4">
-                                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">Behavioral Patterns</div>
-                                  <div className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100 min-h-[120px]">
-                                    <p className="text-sm font-medium text-slate-500 leading-relaxed italic">
-                                      &ldquo;{patternSummary ?? "Generating student behavioral profile..."}&rdquo;
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="space-y-4">
-                                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">Student Queries</div>
-                                  <div className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100 min-h-[120px]">
-                                    <p className="text-sm font-medium text-slate-500 leading-relaxed italic">
-                                      &ldquo;{questions.find((q) => q.student.id === selectedStudent.id)?.content ?? "No student questions recorded in this topic."}&rdquo;
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="space-y-6">
-                                <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">Active Support Plan</div>
-                                <div className="space-y-4">
-                                  {interventionsQuery.isLoading ? (
-                                    <div className="py-12 text-center text-slate-400 font-medium italic">Loading interventions...</div>
-                                  ) : interventions.length ? (
-                                    interventions.map((intervention) => (
-                                      <div key={intervention.id} className="rounded-2xl bg-white p-8 border border-slate-100 group hover:border-violet-200 hover:bg-violet-50/20 transition-all">
-                                        <div className="flex items-start justify-between gap-6">
-                                          <div className="space-y-1.5">
-                                            <div className="font-medium text-slate-900 text-lg leading-tight">{intervention.title}</div>
-                                            <div className="flex items-center gap-3 text-xs font-medium text-slate-400 uppercase tracking-widest">
-                                              {formatInterventionTypeLabel(intervention.interventionType)}
-                                              <span className="opacity-30">•</span>
-                                              <span className={intervention.priority === "high" ? "text-red-400" : ""}>{intervention.priority} Priority</span>
-                                              {intervention.dueAt && (
-                                                <>
-                                                  <span className="opacity-30">•</span>
-                                                  <span>Due {new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(intervention.dueAt))}</span>
-                                                </>
-                                              )}
-                                            </div>
-                                          </div>
-                                          <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-600 text-[10px] font-medium uppercase tracking-widest border border-amber-100">
-                                            {formatInterventionStatusLabel(intervention.status)}
-                                          </span>
-                                        </div>
-                                        {intervention.notes && <p className="mt-6 text-sm font-medium text-slate-500 leading-relaxed">{intervention.notes}</p>}
-                                        <div className="mt-8 flex flex-wrap gap-3">
-                                          {intervention.status !== "in_progress" && (
-                                            <button type="button" onClick={() => updateInterventionMutation.mutate({ interventionId: intervention.id, status: "in_progress", notes: intervention.notes ?? undefined, dueAt: intervention.dueAt ?? undefined })} className="px-5 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-medium uppercase tracking-widest hover:bg-slate-800 transition-all">Start Task</button>
-                                          )}
-                                          {intervention.status !== "completed" && (
-                                            <button type="button" onClick={() => updateInterventionMutation.mutate({ interventionId: intervention.id, status: "completed", notes: intervention.notes ?? undefined, dueAt: intervention.dueAt ?? undefined })} className="px-5 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-medium uppercase tracking-widest hover:bg-emerald-600 transition-all">Mark Done</button>
-                                          )}
-                                          {intervention.status !== "dismissed" && (
-                                            <button type="button" onClick={() => updateInterventionMutation.mutate({ interventionId: intervention.id, status: "dismissed", notes: intervention.notes ?? undefined, dueAt: intervention.dueAt ?? undefined })} className="px-5 py-2 rounded-xl bg-slate-50 text-slate-400 text-[10px] font-medium uppercase tracking-widest hover:bg-slate-100 hover:text-slate-600 transition-all border border-slate-100">Dismiss</button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <div className="py-12 text-center bg-slate-50/30 rounded-2xl border border-dashed border-slate-100">
-                                      <p className="text-slate-400 font-medium italic">No support actions recorded for this student.</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="h-[400px] flex flex-col items-center justify-center text-center bg-slate-50/30 rounded-2xl border border-dashed border-slate-100 px-8">
-                              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center mb-8">
-                                <Users className="w-8 h-8 text-slate-100" />
-                              </div>
-                              <h4 className="text-lg font-medium text-slate-900 mb-2">Cognitive Insights</h4>
-                              <p className="text-slate-400 font-medium leading-relaxed max-w-xs text-sm">
-                                Select a student from the directory to review their cognitive profile and topic-specific learning patterns.
-                              </p>
-                            </div>
-                          )}
-                        </div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Title</span>
+                        <span className="font-medium text-slate-900">
+                          {selectedDirectoryClassroom.title}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Grade</span>
+                        <span className="font-medium text-slate-900">
+                          {selectedDirectoryClassroom.gradeLabel}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Subject</span>
+                        <span className="font-medium text-slate-900">
+                          {selectedDirectoryClassroom.subject ?? "General"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Default language</span>
+                        <span className="font-medium text-slate-900">
+                          {appLocaleLabels[selectedDirectoryClassroom.defaultContentLocale]}
+                        </span>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="p-20 text-center flex flex-col items-center justify-center min-h-[400px] border-dashed border border-slate-100 bg-white rounded-2xl">
-                    <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-6">
-                      <BookOpen className="w-7 h-7 text-slate-200" />
+
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <div className="text-sm font-semibold text-slate-950">
+                        Session status mix
+                      </div>
                     </div>
-                    <h3 className="text-2xl font-medium text-slate-900 mb-3">Topic Intelligence</h3>
-                    <p className="text-slate-500 max-w-sm mx-auto text-base leading-relaxed font-medium">
-                      Select a topic from the curriculum to manage grounding materials and student progress.
+                    <div className="divide-y divide-slate-100">
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Draft</span>
+                        <span className="font-medium text-slate-900">{draftSessionCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Active</span>
+                        <span className="font-medium text-slate-900">{activeSessionCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Paused</span>
+                        <span className="font-medium text-slate-900">{pausedSessionCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+                        <span className="text-slate-500">Archived</span>
+                        <span className="font-medium text-slate-900">{archivedSessionCount}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setSelectedTopicId(null)}
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-950"
+            >
+              <div className="rounded-lg border border-slate-200 bg-white p-1.5">
+                <ChevronDown className="h-4 w-4 rotate-90" />
+              </div>
+              Back to {selectedDirectoryClassroom.title}
+            </button>
+
+            <section className="rounded-[32px] border border-white/70 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(56,189,248,0.12),_transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.95),rgba(255,255,255,0.84))] px-6 py-8 shadow-[0_28px_90px_-60px_rgba(15,23,42,0.28)] backdrop-blur md:px-8 md:py-10">
+              <div className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-4">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-700">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Session detail
+                  </div>
+                  <div className="space-y-3">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">
+                      {selectedTopic.title}
+                    </h1>
+                    <p className="text-sm leading-7 text-slate-600 md:text-base">
+                      {selectedDirectoryClassroom.title} •{" "}
+                      {selectedTopic.subjectLabel ?? selectedTopic.subject ?? "General"} •{" "}
+                      {appLocaleLabels[selectedTopic.contentLocale ?? "en"]}
+                    </p>
+                    <p className="max-w-3xl text-sm leading-7 text-slate-500">
+                      {selectedTopic.description ??
+                        "Open the evidence below to see how students performed in this session, what was covered, and where follow-up is needed."}
                     </p>
                   </div>
-                )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-3">
+                    {TOPIC_STATUSES.map((status) => {
+                      const isSelected = selectedTopic.status === status;
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() =>
+                            updateTopicStatusMutation.mutate({
+                              topicId: selectedTopic.id,
+                              status,
+                            })
+                          }
+                          disabled={isSelected || updateTopicStatusMutation.isPending}
+                          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                            isSelected
+                              ? "border-slate-950 bg-slate-950 text-white"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950"
+                          } disabled:opacity-60`}
+                        >
+                          {isSelected ? <Check className="h-3.5 w-3.5" /> : null}
+                          {formatTopicStatusLabel(status)}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      href={`/dashboard/learning/topics/${selectedTopic.id}`}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Full session detail
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                    <Link
+                      href="/dashboard/learning/reports"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    >
+                      Report center
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div className="grid gap-6 grid-cols-2 lg:grid-cols-4">
+              <StatsCard
+                title="Students"
+                value={students.length}
+                icon={<Users className="w-6 h-6" />}
+                iconColor="bg-violet-50 text-violet-600"
+                description="Students attached to this classroom"
+              />
+              <StatsCard
+                title="Reports"
+                value={reports.length}
+                icon={<FileText className="w-6 h-6" />}
+                iconColor="bg-sky-50 text-sky-600"
+                description="Generated for this session"
+              />
+              <StatsCard
+                title="Average mastery"
+                value={averageMastery != null ? `${averageMastery}%` : "N/A"}
+                icon={<Sparkles className="w-6 h-6" />}
+                iconColor="bg-emerald-50 text-emerald-600"
+                description="Across visible student reports"
+              />
+              <StatsCard
+                title="Knowledge assets"
+                value={materials.length}
+                icon={<UploadCloud className="w-6 h-6" />}
+                iconColor="bg-amber-50 text-amber-600"
+                description="Grounding files uploaded for this session"
+              />
+            </div>
+
+            <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="space-y-8">
+                <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.24)]">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Session analytics
+                    </div>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                      Performance by student
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Each report below is tied to this session and shows how a specific
+                      student performed, where they struggled, and what follow-up is
+                      most useful.
+                    </p>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    {reports.length ? (
+                      reports.map((report) => {
+                        const firstGap = report.report.identifiedGaps?.[0] ?? null;
+                        const firstRiskFlag = report.report.riskFlags?.[0] ?? null;
+
+                        return (
+                          <div
+                            key={report.id}
+                            className="rounded-[24px] border border-slate-200 bg-slate-50/60 p-5"
+                          >
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/dashboard/learning/students/${report.student.id}`}
+                                  className="text-lg font-semibold text-slate-950 transition hover:text-sky-700"
+                                >
+                                  {report.student.fullName}
+                                </Link>
+                                <div className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                                  Updated {formatDate(report.updatedAt)}
+                                </div>
+                              </div>
+
+                              <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700">
+                                {report.masteryPercent}% mastery
+                              </div>
+                            </div>
+
+                            <p className="mt-4 text-sm leading-6 text-slate-600">
+                              {report.report.studentSummary}
+                            </p>
+
+                            {(firstGap || firstRiskFlag) && (
+                              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                    Primary gap
+                                  </div>
+                                  <div className="mt-2 text-sm font-medium text-slate-900">
+                                    {firstGap ?? "No major unresolved gap flagged."}
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                    Risk signal
+                                  </div>
+                                  <div className="mt-2 text-sm font-medium text-slate-900">
+                                    {firstRiskFlag ?? "No active risk flag recorded."}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-14 text-center">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-100 bg-white">
+                          <FileText className="h-6 w-6 text-slate-200" />
+                        </div>
+                        <h3 className="mt-5 text-lg font-semibold text-slate-950">
+                          No session reports yet
+                        </h3>
+                        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                          Reports will appear here once students work through this
+                          session with the tutor.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.24)]">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Question stream
+                    </div>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                      What students asked in this session
+                    </h2>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    {questions.length ? (
+                      questions.map((question) => (
+                        <div
+                          key={question.id}
+                          className="rounded-[22px] border border-slate-200 bg-slate-50/60 px-4 py-4"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-semibold text-slate-950">
+                              {question.student.fullName}
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              {formatDate(question.createdAt)}
+                            </div>
+                          </div>
+                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            {question.interactionType}
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-slate-600">
+                            {question.content}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-12 text-sm text-slate-500">
+                        No questions have been recorded for this session yet.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+
+              <div className="space-y-8">
+                <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.24)]">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Session brief
+                    </div>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                      What this session covers
+                    </h2>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 px-5 py-5">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Coverage summary
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-600">
+                        {selectedTopic.description ??
+                          "No summary was added for this session yet."}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 px-5 py-5">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Readiness
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-600">
+                        {readinessQuery.data?.data.summary ??
+                          "Upload supporting assets to let the tutor evaluate readiness for this session."}
+                      </p>
+                      {readinessQuery.data?.data.clarifyingQuestions?.length ? (
+                        <div className="mt-4 space-y-2">
+                          {readinessQuery.data.data.clarifyingQuestions.map((question) => (
+                            <div
+                              key={question}
+                              className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                            >
+                              {question}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.24)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Knowledge assets
+                      </div>
+                      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                        Grounding files for this session
+                      </h2>
+                    </div>
+                    <Link
+                      href={`/dashboard/learning/topics/${selectedTopic.id}`}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+                    >
+                      Open detail
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+
+                  <form
+                    className="mt-6 space-y-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (!materialFile) {
+                        toast.error("Choose a file first.");
+                        return;
+                      }
+
+                      uploadMaterialMutation.mutate(
+                        {
+                          topicId: selectedTopic.id,
+                          file: materialFile,
+                          title: materialTitle || undefined,
+                          description: materialDescription || undefined,
+                        },
+                        {
+                          onSuccess: () => {
+                            setMaterialTitle("");
+                            setMaterialDescription("");
+                            setMaterialFile(null);
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    <div className="grid gap-4">
+                      <input
+                        value={materialTitle}
+                        onChange={(event) => setMaterialTitle(event.target.value)}
+                        placeholder="Asset title"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white"
+                      />
+                      <textarea
+                        value={materialDescription}
+                        onChange={(event) => setMaterialDescription(event.target.value)}
+                        rows={3}
+                        placeholder="How should the tutor use this asset in the session?"
+                        className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white"
+                      />
+                      <label className="flex cursor-pointer flex-col items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center transition hover:border-slate-300 hover:bg-white">
+                        <UploadCloud className="h-7 w-7 text-slate-300" />
+                        <div className="mt-4 text-sm font-semibold text-slate-700">
+                          {materialFile ? materialFile.name : "Select a file to ground this session"}
+                        </div>
+                        <div className="mt-2 text-xs text-slate-400">
+                          PDF, TXT, MD, DOC, DOCX
+                        </div>
+                        <input
+                          type="file"
+                          accept=".pdf,.txt,.md,.doc,.docx"
+                          className="hidden"
+                          onChange={(event) => setMaterialFile(event.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={uploadMaterialMutation.isPending || !materialFile}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {uploadMaterialMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <UploadCloud className="h-4 w-4" />
+                      )}
+                      Upload asset
+                    </button>
+                  </form>
+
+                  <div className="mt-6 space-y-3">
+                    {materials.length ? (
+                      materials.map((material) => (
+                        <div
+                          key={material.id}
+                          className="rounded-[22px] border border-slate-200 bg-slate-50/60 px-4 py-4"
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-slate-950">
+                                {material.title}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-400">
+                                {material.materialKind} • {material.mimeType}
+                              </div>
+                              <div className="mt-2 text-xs text-slate-500">
+                                Extraction: {material.extractionStatus} • Indexing:{" "}
+                                {material.indexingStatus}
+                              </div>
+                            </div>
+
+                            <a
+                              href={`/api/media/learning/${material.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+                            >
+                              Open
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
+                        No assets have been uploaded for this session yet.
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.24)]">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Session roster
+                    </div>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                      Students and support context
+                    </h2>
+                  </div>
+
+                  <div className="mt-6 space-y-3">
+                    {students.length ? (
+                      students.map((student) => {
+                        const report = reports.find(
+                          (item) => item.student.id === student.id,
+                        );
+                        const isSelected = selectedStudent?.id === student.id;
+
+                        return (
+                          <div
+                            key={student.id}
+                            className={`rounded-[22px] border px-4 py-4 transition ${
+                              isSelected
+                                ? "border-violet-200 bg-violet-50/70"
+                                : "border-slate-200 bg-slate-50/60"
+                            }`}
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedClassroomStudentId(student.id)}
+                                className="min-w-0 text-left"
+                              >
+                                <div className="truncate text-sm font-semibold text-slate-950">
+                                  {student.fullName}
+                                </div>
+                                <div className="mt-1 truncate text-sm text-slate-500">
+                                  {student.email}
+                                </div>
+                                <div className="mt-2 text-xs font-medium text-slate-400">
+                                  {report
+                                    ? `${report.masteryPercent}% mastery in this session`
+                                    : "No session report yet"}
+                                </div>
+                              </button>
+
+                              <Link
+                                href={`/dashboard/learning/students/${student.id}`}
+                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+                              >
+                                Profile
+                                <ArrowUpRight className="h-3.5 w-3.5" />
+                              </Link>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
+                        No students are attached to this classroom yet.
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedStudent ? (
+                    <div className="mt-8 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Selected student
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {selectedStudent.fullName}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-500">
+                            {selectedStudent.email}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsInterventionModalOpen(true)}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-700"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Log intervention
+                        </button>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Session mastery
+                          </div>
+                          <div className="mt-2 text-xl font-semibold text-slate-950">
+                            {selectedStudentReport
+                              ? `${selectedStudentReport.masteryPercent}%`
+                              : "No report yet"}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Pattern summary
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            {patternSummary ??
+                              "A summarized behavior pattern will appear once enough evidence has been collected."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-5">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          Active support notes
+                        </div>
+
+                        {interventionsQuery.isLoading ? (
+                          <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading interventions...
+                          </div>
+                        ) : interventions.length ? (
+                          <div className="mt-3 space-y-3">
+                            {interventions.map((intervention) => (
+                              <div
+                                key={intervention.id}
+                                className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-semibold text-slate-950">
+                                      {intervention.title}
+                                    </div>
+                                    <div className="mt-1 text-xs text-slate-400">
+                                      {formatInterventionTypeLabel(intervention.interventionType)}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+                                    {formatInterventionStatusLabel(intervention.status)}
+                                  </div>
+                                </div>
+                                {intervention.notes ? (
+                                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                                    {intervention.notes}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-white/80 px-4 py-5 text-sm text-slate-500">
+                            No interventions recorded for this student in the current
+                            context.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
               </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Modals */}
       <CreateClassroomModal
         isOpen={isCreateClassModalOpen}
         onClose={() => setIsCreateClassModalOpen(false)}
         onSuccess={(id) => setSelectedClassroomId(id)}
       />
 
-      {selectedAccessibleClassroomId && (
+      {selectedAccessibleClassroomId ? (
         <>
           <InviteStudentModal
             isOpen={isInviteModalOpen}
@@ -774,7 +1261,7 @@ export function TeacherLearningHome(
             onClose={() => setIsTopicModalOpen(false)}
             classroomId={selectedAccessibleClassroomId}
           />
-          {selectedStudent && (
+          {selectedStudent ? (
             <LogInterventionModal
               isOpen={isInterventionModalOpen}
               onClose={() => setIsInterventionModalOpen(false)}
@@ -783,9 +1270,9 @@ export function TeacherLearningHome(
               studentName={selectedStudent.fullName}
               topicId={selectedTopic?.id}
             />
-          )}
+          ) : null}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

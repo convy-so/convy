@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 
 import { useRouter } from "@/i18n/routing";
+import { useRealtimeChannel } from "@/components/hooks/use-realtime-channel";
 import {
   updateLearningInterventionAction,
   updateTopicStatusAction,
@@ -27,7 +28,7 @@ import {
   fetchTopicReports,
   uploadTopicMaterial,
 } from "@/lib/api/learning";
-import type { PendingInvitation } from "@/lib/api/learning";
+import type { ClassroomStudent, LearningIntervention, PendingInvitation, Topic } from "@/lib/api/learning";
 import { queryKeys } from "@/lib/query-keys";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import type { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
@@ -52,11 +53,33 @@ export function useTeacherLearningWorkspace(
 
   const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
   const selectedDirectoryClassroom =
-    classrooms.find((classroom) => classroom.id === selectedClassroomId) ??
-    classrooms[0] ??
-    null;
+    classrooms.find((classroom) => classroom.id === selectedClassroomId) ?? null;
   const selectedAccessibleClassroomId = selectedDirectoryClassroom?.id ?? null;
   const canManageStudents = Boolean(selectedDirectoryClassroom);
+
+  useRealtimeChannel({
+    channel: selectedAccessibleClassroomId
+      ? `classroom:${selectedAccessibleClassroomId}`
+      : null,
+    enabled: Boolean(selectedAccessibleClassroomId),
+    onMessage: (message) => {
+      if (
+        !selectedAccessibleClassroomId ||
+        message.type !== "classroom_roster_updated"
+      ) {
+        return;
+      }
+
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.students(selectedAccessibleClassroomId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.classrooms,
+        }),
+      ]);
+    },
+  });
 
   const studentsQuery = useQuery({
     queryKey: selectedAccessibleClassroomId
@@ -98,20 +121,23 @@ export function useTeacherLearningWorkspace(
   });
 
   const students = useMemo(
-    () => studentsQuery.data?.data.students ?? [],
+    () => studentsQuery.data?.data.students ?? ([] as ClassroomStudent[]),
     [studentsQuery.data],
   );
   const pendingInvitations = useMemo(
-    () => studentsQuery.data?.data.pendingInvitations ?? [],
+    () => studentsQuery.data?.data.pendingInvitations ?? ([] as PendingInvitation[]),
     [studentsQuery.data],
   );
-  const topics = useMemo(() => topicsQuery.data?.data ?? [], [topicsQuery.data]);
+  const topics = useMemo(
+    () => topicsQuery.data?.data ?? ([] as Topic[]),
+    [topicsQuery.data],
+  );
   const selectedStudent =
     students.find((student) => student.id === selectedClassroomStudentId) ??
     students[0] ??
     null;
   const selectedTopic =
-    topics.find((topic) => topic.id === selectedTopicId) ?? topics[0] ?? null;
+    topics.find((topic) => topic.id === selectedTopicId) ?? null;
 
   const materialsQuery = useQuery({
     queryKey: selectedTopic ? queryKeys.learning.materials(selectedTopic.id) : ["learningMaterials", "idle"],
@@ -379,7 +405,7 @@ export function useTeacherLearningWorkspace(
   const reports = reportsPayload?.reports ?? [];
   const questions = questionsQuery.data?.data ?? [];
   const assignedSurveys = assignedSurveysQuery.data?.data ?? [];
-  const interventions = interventionsQuery.data?.data ?? [];
+  const interventions = interventionsQuery.data?.data ?? ([] as LearningIntervention[]);
   const selectedStudentReport =
     reports.find((report) => report.student.id === selectedStudent?.id) ?? null;
   const selectedStudentAssignedSurveyStates = assignedSurveys.map((survey) => ({
