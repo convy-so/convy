@@ -152,10 +152,11 @@ export function useStudentLearningWorkspace({
     staleTime: 30_000,
   });
 
-  const patternsQuery = useQuery({
+  const patternsQuery = useQuery<Awaited<ReturnType<typeof fetchMyPatterns>>>({
     queryKey: queryKeys.learning.myPatterns,
     queryFn: fetchMyPatterns,
-    initialData: initialPatterns,
+    initialData:
+      initialPatterns as Awaited<ReturnType<typeof fetchMyPatterns>> | undefined,
     staleTime: 30_000,
   });
 

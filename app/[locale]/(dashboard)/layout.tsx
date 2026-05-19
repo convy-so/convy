@@ -12,7 +12,7 @@ import { getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
 import { resolveViewerAccess } from "@/lib/auth/viewer-access";
-import { getLearningMeData, getNotificationsForCurrentUser } from "@/lib/server/app-queries";
+import { getNotificationsForSession } from "@/lib/server/app-queries";
 
 export default function DashboardLayout({
   children,
@@ -64,16 +64,16 @@ async function DashboardLayoutContent({
   }
 
   const messages = await getMessages();
-  const [learningMe, notifications] = await Promise.all([
-    getLearningMeData(),
-    getNotificationsForCurrentUser(),
-  ]);
+  const notifications = await getNotificationsForSession(session);
 
   return (
     <NextIntlClientProvider messages={messages} locale={locale}>
       <AuthProvider initialSession={session}>
       <div className="min-h-screen bg-[#FAFAFA]">
-        <DashboardSidebar initialLearningMe={learningMe} viewerAccess={viewerAccess} />
+        <DashboardSidebar
+          initialLearningMe={{ role: "non-student", student: null, invitations: [] }}
+          viewerAccess={viewerAccess}
+        />
         <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
           <DashboardHeader initialNotifications={notifications} viewerAccess={viewerAccess} />
           <main className="flex-1 p-4 lg:p-6">

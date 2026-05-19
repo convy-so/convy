@@ -163,6 +163,18 @@ export async function createSignedLearningMaterialUrl(
   return data.signedUrl;
 }
 
+export async function downloadLearningMaterial(path: string): Promise<Buffer> {
+  const { data, error } = await supabase.storage
+    .from(LEARNING_MATERIALS_BUCKET)
+    .download(path);
+
+  if (error || !data) {
+    throw new Error(`Failed to download learning material: ${error?.message ?? "Missing file"}`);
+  }
+
+  return Buffer.from(await data.arrayBuffer());
+}
+
 /**
  * Delete an image from Supabase Storage
  * @param path - The storage path of the image (e.g., "surveyId/imageId.png")

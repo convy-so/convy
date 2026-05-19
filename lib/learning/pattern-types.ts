@@ -226,7 +226,6 @@ export type EngagementTrend = z.infer<typeof engagementTrendSchema>;
 export const studentLearningPatternProfileSchema = z.object({
   scopeType: learningPatternScopeSchema,
   subjectKey: z.string().nullable().default(null),
-  subjectLabel: z.string().nullable().default(null),
   patternConfidence: z.number().min(0).max(1).default(0),
   confidenceLabel: patternConfidenceLabelSchema.default("early"),
   onboardingObservations: z.string().default(""),
@@ -256,7 +255,6 @@ export type StudentLearningPatternProfile = z.infer<
 export const learningPatternObservationSchema = z.object({
   scopeType: learningPatternScopeSchema,
   subjectKey: z.string().nullable().default(null),
-  subjectLabel: z.string().nullable().default(null),
   memoryClass: z.enum(["observation", "playbook"]).default("observation"),
   dimension: z.string().min(1),
   text: z.string().min(1),

@@ -2,6 +2,10 @@ import crypto from "crypto";
 
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
+import {
+  getCachedTranslation,
+  setCachedTranslation,
+} from "@/lib/i18n/ai-cache";
 
 import {
   appLocaleLabels,
@@ -28,6 +32,12 @@ export async function upsertLocalizedField(params: LocalizedFieldRequest & {
   translatedText: string;
   provider?: string;
 }) {
+  await setCachedTranslation(
+    params.sourceText,
+    params.targetLocale,
+    params.translatedText,
+  );
+
   return {
     id: `${params.resourceType}:${params.resourceId}:${params.field}:${params.targetLocale}`,
     sourceHash: hashTranslationSource(params.sourceText),
@@ -45,7 +55,7 @@ export async function getStoredLocalizedField(
     return params.sourceText;
   }
 
-  return null;
+  return getCachedTranslation(params.sourceText, params.targetLocale);
 }
 
 export async function queueLocalizedField(params: LocalizedFieldRequest) {
@@ -78,6 +88,14 @@ export async function translateDynamicField(
     return params.sourceText;
   }
 
+  const cached = await getCachedTranslation(
+    params.sourceText,
+    params.targetLocale,
+  );
+  if (cached) {
+    return cached;
+  }
+
   const { text } = await generateText({
     model: google("gemini-2.5-flash-lite"),
     temperature: 0,
@@ -95,7 +113,13 @@ Source text:
 ${params.sourceText}`,
   });
 
-  return text.trim();
+  const translated = text.trim();
+  await setCachedTranslation(
+    params.sourceText,
+    params.targetLocale,
+    translated,
+  );
+  return translated;
 }
 
 export async function getLocalizedFieldOrQueue(

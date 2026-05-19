@@ -14,6 +14,7 @@
     "websocket:build": "tsc -p websocket/tsconfig.json",
     "websocket:start": "node dist/websocket/server.js",
     "dev:all": "pnpm exec concurrently \"pnpm dev\" \"pnpm workers:dev\" \"pnpm websocket:dev\"",
+    "db:diagnose": "tsx --env-file=.env scripts/db-diagnostics.ts",
     "email:dev": "email dev --dir components/emails"
   },
   "dependencies": {

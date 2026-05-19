@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { desc } from "drizzle-orm";
 import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
@@ -35,8 +36,6 @@ export async function GET(
       data: topics.map((topic) => ({
         ...topic,
         contentLocale: normalizeAppLocale(topic.contentLocale),
-        subjectKey: topic.subjectKey,
-        subjectLabel: topic.subjectLabel,
       })),
     });
   } catch (error) {

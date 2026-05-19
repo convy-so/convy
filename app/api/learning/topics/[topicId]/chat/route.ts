@@ -60,7 +60,6 @@ export async function GET(
           title: access.topic.title,
           subject: access.topic.subject,
           subjectKey: access.topic.subjectKey,
-          subjectLabel: access.topic.subjectLabel,
         },
         sessionState: state,
         messages: messages.map((message) => ({

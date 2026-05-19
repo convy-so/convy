@@ -116,6 +116,13 @@ export type SubjectPackageDefinition = z.infer<
   typeof subjectPackageDefinitionSchema
 >;
 
+export const teacherSessionSubjectKeys = [
+  "mathematics",
+  "physics",
+] as const;
+
+export type TeacherSessionSubjectKey = (typeof teacherSessionSubjectKeys)[number];
+
 const SUBJECT_PACKAGES: Record<SubjectPackageKey, SubjectPackageDefinition> = {
   mathematics: subjectPackageDefinitionSchema.parse({
     key: "mathematics",
@@ -412,6 +419,10 @@ export function getSubjectPackage(subjectKey?: string | null) {
   const normalized = (subjectKey ?? "").trim().toLowerCase();
   const key = SUBJECT_KEY_TO_PACKAGE[normalized] ?? "general_science";
   return SUBJECT_PACKAGES[key];
+}
+
+export function getSubjectDisplayLabel(subjectKey?: string | null) {
+  return getSubjectPackage(subjectKey).label;
 }
 
 export function listSubjectPackages() {

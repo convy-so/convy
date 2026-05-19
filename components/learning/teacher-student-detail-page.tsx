@@ -14,6 +14,7 @@ import {
 
 import { Link } from "@/i18n/routing";
 import { TeacherStudentChat } from "@/components/learning/teacher-student-chat";
+import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 import type {
   getClassroomStudentOverviewData,
   getClassroomStudentPatternData,
@@ -374,9 +375,9 @@ export function TeacherStudentDetailPage({
                           <div className="text-base font-semibold text-slate-950">
                             {pattern.scopeType === "global"
                               ? "Global pattern"
-                              : pattern.subjectLabel ??
-                                pattern.subjectKey ??
-                                "Subject pattern"}
+                              : pattern.subjectKey
+                                ? getSubjectDisplayLabel(pattern.subjectKey)
+                                : "Subject pattern"}
                           </div>
                           <div className="text-sm text-slate-500">
                             Confidence: {pattern.confidenceLabel}

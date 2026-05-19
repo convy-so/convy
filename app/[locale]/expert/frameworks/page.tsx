@@ -3,6 +3,7 @@ import { desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expertFrameworks, learningTopics } from "@/db/schema/learning";
 import { ExpertFrameworkStudio } from "@/components/expert/expert-framework-studio";
+import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 
 export default async function ExpertFrameworksPage() {
   const [frameworks, topics] = await Promise.all([
@@ -44,7 +45,7 @@ export default async function ExpertFrameworksPage() {
         topics={topics.map((topic) => ({
           id: topic.id,
           title: topic.title,
-          subjectLabel: topic.subjectLabel,
+          subject: topic.subject ?? getSubjectDisplayLabel(topic.subjectKey),
           contentLocale: topic.contentLocale,
           classroomTitle: topic.classroom?.title ?? "Unknown classroom",
         }))}

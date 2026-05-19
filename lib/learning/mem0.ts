@@ -237,7 +237,6 @@ export async function addLearningPatternObservations(params: {
       sourceCreatedAt: params.sourceCreatedAt ?? null,
       scopeType: observation.scopeType,
       subjectKey: observation.subjectKey ?? null,
-      subjectLabel: observation.subjectLabel ?? null,
       memoryClass: observation.memoryClass,
       dimension: observation.dimension,
       patternConfidence: observation.patternConfidence,
@@ -264,7 +263,6 @@ export async function addLearningPatternObservations(params: {
     references.push({
       scopeType: observation.scopeType,
       subjectKey: observation.subjectKey ?? null,
-      subjectLabel: observation.subjectLabel ?? null,
       memoryClass: observation.memoryClass,
       dimension: observation.dimension,
       patternConfidence: observation.patternConfidence,

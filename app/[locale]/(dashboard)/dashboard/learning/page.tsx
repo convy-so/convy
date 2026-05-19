@@ -1,31 +1,16 @@
 import { LearningHub } from "@/components/learning/learning-hub";
-import {
-  getStudentLearningWorkspaceInitialData,
-  getTeacherLearningWorkspaceInitialData,
-} from "@/lib/server/app-queries";
+import { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
+import { getVerifiedSession } from "@/lib/auth/dal";
 
-export default async function LearningPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ classroomId?: string; language?: string }>;
-}) {
-  const { classroomId, language } = await searchParams;
-  const studentWorkspaceInitialData = await getStudentLearningWorkspaceInitialData({
-    classroomId,
-    language,
-  });
-
+export default async function LearningPage() {
+  const session = await getVerifiedSession();
+  const authContext = { session };
   const teacherWorkspaceInitialData =
-    studentWorkspaceInitialData.learningMe.role === "student"
-      ? undefined
-      : await getTeacherLearningWorkspaceInitialData();
+    await getTeacherLearningWorkspaceInitialData(authContext);
 
   return (
     <LearningHub
-      initialLearningMe={studentWorkspaceInitialData.learningMe}
-      initialStudentPatterns={studentWorkspaceInitialData.initialPatterns}
-      initialOnboardingState={studentWorkspaceInitialData.initialOnboardingState}
-      initialTutoringSession={studentWorkspaceInitialData.initialTutoringSession}
+      initialLearningMe={{ role: "non-student", student: null, invitations: [] }}
       teacherWorkspaceInitialData={teacherWorkspaceInitialData}
     />
   );

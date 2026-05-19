@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 import type {
   AnalyticsGenerationMetadata,
   AnalyticsGenerationState,
@@ -8,10 +10,54 @@ import type {
   ResearchBrief,
 } from "@/lib/education/types";
 import type { AppLocale } from "@/lib/i18n/config";
-import { translateTextBatch } from "@/lib/translation-service";
+import { getCachedTranslation } from "@/lib/i18n/ai-cache";
+import { enqueueContentTranslation } from "@/lib/queue";
 
 function isEvidenceRecord(value: EvidenceRecord | undefined): value is EvidenceRecord {
   return Boolean(value);
+}
+
+function hashAnalyticsText(value: string) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+async function translateFromCacheOrQueue(params: {
+  texts: string[];
+  targetLanguage: AppLocale;
+  resourceType: string;
+  resourceId: string;
+  sourceLocale?: AppLocale;
+  context: string;
+}) {
+  if (params.targetLanguage === "en") {
+    return params.texts;
+  }
+
+  const cachedByText = new Map<string, string>();
+
+  await Promise.all(
+    Array.from(new Set(params.texts.map((text) => text.trim()).filter(Boolean))).map(
+      async (text) => {
+        const cached = await getCachedTranslation(text, params.targetLanguage);
+        if (cached) {
+          cachedByText.set(text, cached);
+          return;
+        }
+
+        await enqueueContentTranslation({
+          resourceType: params.resourceType,
+          resourceId: params.resourceId,
+          field: hashAnalyticsText(text),
+          sourceLocale: params.sourceLocale ?? "en",
+          targetLocale: params.targetLanguage,
+          sourceText: text,
+          context: params.context,
+        }).catch(() => undefined);
+      },
+    ),
+  );
+
+  return params.texts.map((text) => cachedByText.get(text.trim()) ?? text);
 }
 
 export interface AnalyticsDashboardNodeView {
@@ -372,7 +418,7 @@ export function buildConversationListItem(input: {
 export async function translateSurveyAnalyticsData(
   data: SurveyAnalyticsData,
   targetLanguage: AppLocale,
-  metadata?: {
+  _metadata?: {
     userId?: string;
     surveyId?: string;
   },
@@ -395,9 +441,12 @@ export async function translateSurveyAnalyticsData(
     ...data.keyQuotes.map((quote) => quote.excerpt),
   ];
 
-  const translated = await translateTextBatch(texts, targetLanguage, {
-    ...metadata,
-    task: "survey analytics dashboard content",
+  const translated = await translateFromCacheOrQueue({
+    texts,
+    targetLanguage,
+    resourceType: "survey_analytics_dashboard",
+    resourceId: data.surveyId,
+    context: "Survey analytics dashboard content",
   });
 
   let index = 0;
@@ -463,9 +512,12 @@ export async function translateConversationListItems(
     ...conversation.risks,
     ...conversation.notableQuotes.map((quote) => quote.excerpt),
   ]);
-  const translated = await translateTextBatch(texts, targetLanguage, {
-    ...metadata,
-    task: "survey analytics conversation summaries",
+  const translated = await translateFromCacheOrQueue({
+    texts,
+    targetLanguage,
+    resourceType: "survey_analytics_conversations",
+    resourceId: metadata?.surveyId ?? "unknown-survey",
+    context: "Survey analytics conversation summaries",
   });
   let index = 0;
   const next = () => translated[index++] ?? "";

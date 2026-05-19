@@ -12,6 +12,7 @@ export type ApiErrorCode =
   | "VALIDATION_ERROR"
   | "CONFLICT"
   | "RATE_LIMITED"
+  | "SERVICE_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
 export type ApiErrorBody = {
@@ -46,6 +47,8 @@ export function apiError(
               ? 409
               : code === "RATE_LIMITED"
                 ? 429
+                : code === "SERVICE_UNAVAILABLE"
+                  ? 503
                 : 500);
 
   const payload: ApiErrorBody = {

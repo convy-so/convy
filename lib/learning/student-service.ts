@@ -306,7 +306,7 @@ export async function listPendingInvitationsForUser(userId: string) {
       with: { classroom: true },
     });
   } catch (error) {
-    console.error("[student-service] listPendingInvitationsForUser: failed to list pending invitations", {
+    console.warn("[student-service] listPendingInvitationsForUser: failed to list pending invitations", {
       userId,
       email: normalizedEmail,
       error: error instanceof Error ? error.message : String(error),

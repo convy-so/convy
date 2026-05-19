@@ -44,7 +44,9 @@ function translateCode(code: string, fallback?: string): string {
       return "We couldn't find what you were looking for.";
     case "RATE_LIMIT_EXCEEDED":
     case "RATE_LIMITED":
-      return "You're doing that too fast. Please wait a moment.";
+      return fallback || "You're doing that too fast. Please wait a moment.";
+    case "SERVICE_UNAVAILABLE":
+      return fallback || "A required service is temporarily unavailable. Please try again.";
     case "CONFLICT":
       return "This record already exists or there is a conflict.";
     case "INTERNAL_ERROR":

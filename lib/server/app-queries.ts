@@ -1,9 +1,6 @@
 import { cache } from "react";
-import { generateText, Output } from "ai";
-import { and, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import { z } from "zod";
+import { and, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
-import { analysisModel } from "@/lib/ai";
 import { getDb } from "@/db";
 import {
   classroomStudents,
@@ -26,6 +23,7 @@ import {
   topicMaterials,
 } from "@/db/schema";
 import { getCurrentSession, getPlatformRole, getVerifiedSession } from "@/lib/auth/dal";
+import { isTransientDatabaseError } from "@/lib/db/errors";
 import { env } from "@/lib/env";
 import { listStudentMemberships, getTeacherTopicAccess } from "@/lib/learning/access";
 import * as ClassroomService from "@/lib/learning/classroom-service";
@@ -45,6 +43,12 @@ import {
   listLearningMessages,
   listStudentModelSummaries,
 } from "@/lib/learning/storage";
+import { isMaterialAnalysisFailed } from "@/lib/learning/materials-route-service";
+import {
+  buildReadinessUnavailableFallback,
+  getOrGenerateTopicReadiness,
+  isReadinessQuotaError,
+} from "@/lib/learning/readiness";
 import {
   ensureTutoringSession,
   resolveStudentTutoringContext,
@@ -74,6 +78,8 @@ import { getSurveyAnalyticsViewModel } from "@/lib/surveys/use-cases/get-survey-
 import { learningSessionStateSchema } from "@/lib/learning/types";
 
 type NotificationRecord = typeof notifications.$inferSelect;
+type VerifiedSession = Awaited<ReturnType<typeof getVerifiedSession>>;
+type QueryAuthContext = { session: VerifiedSession };
 
 type FolderSurveyListItem = {
   id: string;
@@ -90,20 +96,15 @@ type FolderDetailSurveyItem = typeof surveys.$inferSelect & {
   completedCount: number;
 };
 
-const readinessSchema = z.object({
-  ready: z.boolean(),
-  summary: z.string(),
-  clarifyingQuestions: z.array(z.string()).default([]),
-  gaps: z.array(z.string()).default([]),
-  strengths: z.array(z.string()).default([]),
-});
-
 function toOptionalAppLocale(value: string | null | undefined): AppLocale | undefined {
   return value ? normalizeAppLocale(value) : undefined;
 }
 
-export const getLearningMeData = cache(async (): Promise<LearningMeData> => {
-  const session = await getVerifiedSession();
+async function resolveQuerySession(authContext?: QueryAuthContext) {
+  return authContext?.session ?? getVerifiedSession();
+}
+
+export async function getLearningMeDataForSession(session: VerifiedSession): Promise<LearningMeData> {
   const [memberships, invitations] = await Promise.all([
     listStudentMemberships(session.user.id),
     listPendingInvitationsForUser(session.user.id),
@@ -199,7 +200,6 @@ export const getLearningMeData = cache(async (): Promise<LearningMeData> => {
           title: topic.title,
           subject: topic.subject,
           subjectKey: topic.subjectKey,
-          subjectLabel: topic.subjectLabel,
           status: topic.status,
         })),
         surveys: classroomSurveys.flatMap((survey) => {
@@ -247,10 +247,13 @@ export const getLearningMeData = cache(async (): Promise<LearningMeData> => {
       expiresAt: invitation.expiresAt?.toISOString() ?? null,
     })),
   };
+}
+
+export const getLearningMeData = cache(async (): Promise<LearningMeData> => {
+  return getLearningMeDataForSession(await getVerifiedSession());
 });
 
-export const getMyPatternSummaries = cache(async () => {
-  const session = await getVerifiedSession();
+async function getMyPatternSummariesForSession(session: VerifiedSession) {
   const memberships = await getDb().query.classroomStudents.findMany({
     where: and(
       eq(classroomStudents.userId, session.user.id),
@@ -274,7 +277,6 @@ export const getMyPatternSummaries = cache(async () => {
     data: models.map((model) => ({
       scopeType: "student",
       subjectKey: null,
-      subjectLabel: model.classroomStudent.classroom.title,
       patternConfidence:
         model.latestSnapshot?.snapshot.cognitiveStyleCalibration.confidence ?? 0,
       confidenceLabel:
@@ -296,6 +298,10 @@ export const getMyPatternSummaries = cache(async () => {
         model.latestSnapshot?.snapshot.longitudinalDevelopment ?? null,
     })),
   };
+}
+
+export const getMyPatternSummaries = cache(async () => {
+  return getMyPatternSummariesForSession(await getVerifiedSession());
 });
 
 export async function getClassroomStudentOverviewData(
@@ -457,8 +463,9 @@ export async function getClassroomStudentOverviewData(
 
 export async function getClassroomStudentPatternData(
   classroomStudentId: string,
+  authContext?: QueryAuthContext,
 ): Promise<TeacherPatternResponse> {
-  const session = await getVerifiedSession();
+  const session = await resolveQuerySession(authContext);
   const accessResult = await resolveTeacherStudentAccess({
     teacherUserId: session.user.id,
     classroomStudentId,
@@ -502,7 +509,6 @@ export async function getClassroomStudentPatternData(
             {
               scopeType: "student",
               subjectKey: null,
-              subjectLabel: membership.classroom.title,
               patternConfidence:
                 latestSnapshot.cognitiveStyleCalibration.confidence ?? 0,
               confidenceLabel:
@@ -571,7 +577,7 @@ export async function getClassroomStudentReportDetailData(params: {
         id: report.topicId,
         title: report.topic?.title ?? "Topic",
         subject: report.topic?.subject ?? null,
-        subjectLabel: report.topic?.subjectLabel ?? null,
+        subjectKey: report.topic?.subjectKey ?? null,
         status: report.topic?.status ?? "draft",
       },
       student: {
@@ -634,7 +640,6 @@ export async function getTopicOverviewData(topicId: string): Promise<TopicOvervi
         subject: topic.subject,
         contentLocale: toOptionalAppLocale(topic.contentLocale),
         subjectKey: topic.subjectKey,
-        subjectLabel: topic.subjectLabel,
         status: topic.status,
         classroom: {
           id: topic.classroom.id,
@@ -650,8 +655,42 @@ export async function getTopicOverviewData(topicId: string): Promise<TopicOvervi
   };
 }
 
-export async function getClassroomStudentsData(classroomId: string) {
+export async function getTopicSetupData(topicId: string) {
   const session = await getVerifiedSession();
+  const topic = await getTeacherTopicAccess(session.user.id, topicId);
+
+  if (!topic) {
+    throw new Error("Unauthorized");
+  }
+
+  return {
+    success: true as const,
+    data: {
+      topic: {
+        id: topic.id,
+        classroomId: topic.classroomId,
+        title: topic.title,
+        description: topic.description ?? "",
+        subject: topic.subject,
+        subjectKey: topic.subjectKey,
+        contentLocale: toOptionalAppLocale(topic.contentLocale) ?? "en",
+        status: topic.status,
+        learningOutcomes: topic.learningOutcomes,
+        sourceBoundary: topic.sourceBoundary,
+      },
+      classroom: {
+        id: topic.classroom.id,
+        title: topic.classroom.title,
+      },
+    },
+  };
+}
+
+export async function getClassroomStudentsData(
+  classroomId: string,
+  authContext?: QueryAuthContext,
+) {
+  const session = await resolveQuerySession(authContext);
   const accessResult = await resolveTeacherClassroomAccess({
     teacherUserId: session.user.id,
     classroomId,
@@ -692,14 +731,17 @@ export async function getClassroomStudentsData(classroomId: string) {
   };
 }
 
-export async function getTeacherClassroomsData() {
-  const session = await getVerifiedSession();
+export async function getTeacherClassroomsData(authContext?: QueryAuthContext) {
+  const session = await resolveQuerySession(authContext);
   const data = await ClassroomService.getTeacherClassrooms(session.user.id);
   return { success: true as const, data };
 }
 
-export async function getClassroomTopicsData(classroomId: string) {
-  const session = await getVerifiedSession();
+export async function getClassroomTopicsData(
+  classroomId: string,
+  authContext?: QueryAuthContext,
+) {
+  const session = await resolveQuerySession(authContext);
   const accessResult = await resolveTeacherClassroomAccess({
     teacherUserId: session.user.id,
     classroomId,
@@ -721,8 +763,11 @@ export async function getClassroomTopicsData(classroomId: string) {
   };
 }
 
-export async function getTopicReportsData(topicId: string) {
-  const session = await getVerifiedSession();
+export async function getTopicReportsData(
+  topicId: string,
+  authContext?: QueryAuthContext,
+) {
+  const session = await resolveQuerySession(authContext);
   const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
   if (!topic) {
@@ -764,8 +809,9 @@ export async function getTopicReportsData(topicId: string) {
 export async function getTopicQuestionsData(
   topicId: string,
   classroomStudentId?: string,
+  authContext?: QueryAuthContext,
 ) {
-  const session = await getVerifiedSession();
+  const session = await resolveQuerySession(authContext);
   const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
   if (!topic) {
@@ -808,12 +854,29 @@ export async function getTopicQuestionsData(
   };
 }
 
-export async function getClassroomAssignedSurveysData(classroomId: string) {
-  const session = await getVerifiedSession();
-  const data = await ClassroomService.getClassroomSurveyProgress({
-    classroomId,
-    teacherUserId: session.user.id,
-  });
+export async function getClassroomAssignedSurveysData(
+  classroomId: string,
+  authContext?: QueryAuthContext,
+) {
+  const session = await resolveQuerySession(authContext);
+  let data: Awaited<ReturnType<typeof ClassroomService.getClassroomSurveyProgress>>;
+
+  try {
+    data = await ClassroomService.getClassroomSurveyProgress({
+      classroomId,
+      teacherUserId: session.user.id,
+    });
+  } catch (error) {
+    if (!isTransientDatabaseError(error)) {
+      throw error;
+    }
+
+    console.warn("[learning] assigned survey progress unavailable", {
+      classroomId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    data = [];
+  }
 
   return {
     success: true as const,
@@ -825,8 +888,8 @@ export async function getLearningInterventionsData(input: {
   classroomId: string;
   topicId?: string;
   classroomStudentId?: string;
-}) {
-  const session = await getVerifiedSession();
+}, authContext?: QueryAuthContext) {
+  const session = await resolveQuerySession(authContext);
   const accessResult = await resolveTeacherClassroomAccess({
     teacherUserId: session.user.id,
     classroomId: input.classroomId,
@@ -848,8 +911,11 @@ export async function getLearningInterventionsData(input: {
   };
 }
 
-export async function getTopicMaterialsData(topicId: string) {
-  const session = await getVerifiedSession();
+export async function getTopicMaterialsData(
+  topicId: string,
+  authContext?: QueryAuthContext,
+) {
+  const session = await resolveQuerySession(authContext);
   const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
   if (!topic) {
@@ -859,12 +925,18 @@ export async function getTopicMaterialsData(topicId: string) {
   return {
     success: true as const,
     data: (await getDb().query.topicMaterials.findMany({
-      where: eq(topicMaterials.topicId, topicId),
+      where: and(
+        eq(topicMaterials.topicId, topicId),
+        ne(topicMaterials.extractionStatus, "failed"),
+        ne(topicMaterials.indexingStatus, "failed"),
+      ),
       orderBy: (table, operators) => [operators.desc(table.createdAt)],
-    })).map((material) => ({
-      ...material,
-      analysis: material.analysis ?? undefined,
-    })),
+    }))
+      .filter((material) => !isMaterialAnalysisFailed(material.analysis))
+      .map((material) => ({
+        ...material,
+        analysis: material.analysis ?? undefined,
+      })),
   };
 }
 
@@ -881,41 +953,31 @@ export async function getTopicReadinessData(topicId: string) {
     throw new Error("Topic not found");
   }
 
-  const materialAnalyses = topic.materials.map((material) => ({
-    title: material.title,
-    analysis: material.analysis ?? {},
-    extractedTextSample: material.extractedText?.slice(0, 4000) ?? "",
-  }));
+  try {
+    const readiness = await getOrGenerateTopicReadiness(topic);
 
-  const { output } = await generateText({
-    model: analysisModel,
-    output: Output.object({
-      schema: readinessSchema,
-    }),
-    prompt: `You are helping a teacher decide whether a topic is ready for a grounded AI tutor.
+    return {
+      success: true as const,
+      data: readiness.data,
+      generatedAt: readiness.generatedAt,
+      cacheStatus: readiness.cacheStatus,
+    };
+  } catch (error) {
+    if (isReadinessQuotaError(error)) {
+      return {
+        success: true as const,
+        data: buildReadinessUnavailableFallback(),
+        generatedAt: null,
+        cacheStatus: "unavailable" as const,
+      };
+    }
 
-Topic: ${topic.title}
-Description: ${topic.description ?? ""}
-Learning outcomes:
-${topic.learningOutcomes.map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`).join("\n")}
-
-Uploaded materials and analyses:
-${JSON.stringify(materialAnalyses)}
-
-Rules:
-- Mark ready true only if the materials appear sufficient to support the outcomes without large factual gaps.
-- Ask clarifying questions only when they are genuinely needed.
-- Gaps should focus on missing source material, vague outcomes, or unsupported expectations.`,
-  });
-
-  return {
-    success: true as const,
-    data: output,
-  };
+    throw error;
+  }
 }
 
-export async function getOnboardingStateData() {
-  const session = await getVerifiedSession();
+export async function getOnboardingStateData(authContext?: QueryAuthContext) {
+  const session = await resolveQuerySession(authContext);
   const state = await getOnboardingState(session.user.id);
 
   if (!state.membership) {
@@ -939,8 +1001,9 @@ export async function getOnboardingStateData() {
 export async function getTutoringSessionInitialData(
   topicId: string,
   language?: string | null,
+  authContext?: QueryAuthContext,
 ) {
-  const session = await getVerifiedSession();
+  const session = await resolveQuerySession(authContext);
   const { access, studyLanguage } = await resolveStudentTutoringContext({
     userId: session.user.id,
     topicId,
@@ -971,7 +1034,6 @@ export async function getTutoringSessionInitialData(
           title: access.topic.title,
           subject: access.topic.subject,
           subjectKey: access.topic.subjectKey,
-          subjectLabel: access.topic.subjectLabel,
         },
         sessionState: state,
         messages: messages.map((message) => ({
@@ -982,13 +1044,19 @@ export async function getTutoringSessionInitialData(
     };
 }
 
-export const getNotificationsForCurrentUser = cache(async (): Promise<NotificationRecord[]> => {
-  const session = await getVerifiedSession();
+export async function getNotificationsForSession(
+  session: VerifiedSession,
+): Promise<NotificationRecord[]> {
   return getDb().query.notifications.findMany({
     where: eq(notifications.userId, session.user.id),
     orderBy: [desc(notifications.createdAt)],
     limit: 20,
   });
+}
+
+export const getNotificationsForCurrentUser = cache(async (): Promise<NotificationRecord[]> => {
+  const session = await getVerifiedSession();
+  return getNotificationsForSession(session);
 });
 
 export async function getFolderListData() {
@@ -1111,64 +1179,35 @@ export const getCurrentUiLocaleValue = cache(async () => {
   return normalizeAppLocale(session?.user.uiLocale ?? session?.user.preferredLanguage);
 });
 
-export async function getTeacherLearningWorkspaceInitialData() {
-  const initialClassrooms = await getTeacherClassroomsData();
+export async function getTeacherLearningWorkspaceInitialData(
+  authContext?: QueryAuthContext,
+) {
+  const session = await resolveQuerySession(authContext);
+  const queryAuthContext = { session };
+  const initialClassrooms = await getTeacherClassroomsData(queryAuthContext);
   const initialClassroomId = initialClassrooms.data[0]?.id ?? null;
 
-  const [initialStudents, initialTopics, initialAssignedSurveys] = initialClassroomId
+  const [initialStudents, initialTopics] = initialClassroomId
     ? await Promise.all([
-        getClassroomStudentsData(initialClassroomId),
-        getClassroomTopicsData(initialClassroomId),
-        getClassroomAssignedSurveysData(initialClassroomId),
+        getClassroomStudentsData(initialClassroomId, queryAuthContext),
+        getClassroomTopicsData(initialClassroomId, queryAuthContext),
       ])
-    : [undefined, undefined, undefined];
-
-  const initialClassroomStudentId = initialStudents?.data.students[0]?.id ?? null;
-  const initialTopicId = initialTopics?.data[0]?.id ?? null;
-
-  const [
-    initialMaterials,
-    initialReadiness,
-    initialReportsPayload,
-    initialQuestions,
-    initialClassroomStudentPatterns,
-    initialInterventions,
-  ] = await Promise.all([
-    initialTopicId ? getTopicMaterialsData(initialTopicId) : Promise.resolve(undefined),
-    initialTopicId ? getTopicReadinessData(initialTopicId) : Promise.resolve(undefined),
-    initialTopicId ? getTopicReportsData(initialTopicId) : Promise.resolve(undefined),
-    initialTopicId ? getTopicQuestionsData(initialTopicId) : Promise.resolve(undefined),
-    initialClassroomStudentId
-      ? getClassroomStudentPatternData(initialClassroomStudentId)
-      : Promise.resolve(undefined),
-    initialClassroomId && initialClassroomStudentId
-      ? getLearningInterventionsData({
-          classroomId: initialClassroomId,
-          classroomStudentId: initialClassroomStudentId,
-          topicId: initialTopicId ?? undefined,
-        })
-      : Promise.resolve(undefined),
-  ]);
+    : [undefined, undefined];
 
   return {
     initialClassrooms,
     initialStudents,
     initialTopics,
-    initialAssignedSurveys,
-    initialMaterials,
-    initialReadiness,
-    initialReportsPayload,
-    initialQuestions,
-    initialClassroomStudentPatterns,
-    initialInterventions,
   };
 }
 
 export async function getStudentLearningWorkspaceInitialData(options: {
   classroomId?: string | null;
   language?: string | null;
-} = {}) {
-  const learningMe = await getLearningMeData();
+} = {}, authContext?: QueryAuthContext) {
+  const session = await resolveQuerySession(authContext);
+  const queryAuthContext = { session };
+  const learningMe = await getLearningMeDataForSession(session);
   if (learningMe.role !== "student") {
     return {
       learningMe,
@@ -1190,12 +1229,12 @@ export async function getStudentLearningWorkspaceInitialData(options: {
   const initialTopicId = selectedMembership?.topics[0]?.id ?? null;
   const [initialPatterns, initialOnboardingState, initialTutoringSession] =
     await Promise.all([
-      getMyPatternSummaries(),
+      getMyPatternSummariesForSession(session),
       selectedMembership?.needsOnboarding
-        ? getOnboardingStateData()
+        ? getOnboardingStateData(queryAuthContext)
         : Promise.resolve(undefined),
       selectedMembership && !selectedMembership.needsOnboarding && initialTopicId
-        ? getTutoringSessionInitialData(initialTopicId, options.language)
+        ? getTutoringSessionInitialData(initialTopicId, options.language, queryAuthContext)
         : Promise.resolve(undefined),
     ]);
 

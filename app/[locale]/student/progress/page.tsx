@@ -4,6 +4,7 @@ import { classroomStudents, studentProgressReports, studentModels, studentModelS
 import { desc, eq } from "drizzle-orm";
 import { TrendingUp, Award, Target, AlertCircle, ChevronLeft, Sparkles, Lightbulb, Map } from "lucide-react";
 import { Link } from "@/i18n/routing";
+import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 import type { KnowledgeStateNode } from "@/lib/learning/types";
 import { cn } from "@/lib/utils";
 
@@ -189,7 +190,9 @@ export default async function StudentProgressPage(props: {
                                 <div key={report.id} className="group rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-colors hover:border-gray-300">
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="min-w-0 space-y-1">
-                                            <span className="text-xs font-medium text-gray-500">{report.topic?.subjectLabel || "General"}</span>
+                                            <span className="text-xs font-medium text-gray-500">
+                                                {report.topic?.subject || getSubjectDisplayLabel(report.topic?.subjectKey)}
+                                            </span>
                                             <h3 className="text-lg font-semibold text-gray-900 transition-colors group-hover:text-gray-700">
                                                 {report.topic?.title || "Topic check-in"}
                                             </h3>

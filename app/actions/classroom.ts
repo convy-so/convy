@@ -10,6 +10,8 @@ export {
 
 export {
   createLearningTopicAction,
+  normalizeLearningOutcomesAction,
+  updateLearningTopicDetailsAction,
   updateTopicStatusAction,
 } from "./classroom/topic-actions";
 

@@ -3,6 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 
 import { auth, type AuthSessionWithUser } from "@/lib/auth";
+import { isTransientDatabaseError } from "@/lib/db/errors";
 import type { AppLocale } from "@/lib/i18n/config";
 import type { PlatformRole } from "./roles";
 
@@ -47,14 +48,84 @@ async function buildHeaders(authHeaders?: Headers | string | null): Promise<Head
   return new Headers(await headers());
 }
 
+function isTransientSessionLookupError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  if (isTransientDatabaseError(error)) return true;
+
+  const message = error.message;
+  const status =
+    "status" in error ? String((error as { status?: unknown }).status) : "";
+  const statusCode =
+    "statusCode" in error
+      ? String((error as { statusCode?: unknown }).statusCode)
+      : "";
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : null;
+  const causeMessage = cause instanceof Error ? cause.message : "";
+  const causeCode =
+    cause && typeof cause === "object" && "code" in cause
+      ? String((cause as { code?: unknown }).code)
+      : "";
+
+  if (
+    message.includes("Failed to get session") &&
+    (status === "INTERNAL_SERVER_ERROR" || statusCode === "500")
+  ) {
+    return true;
+  }
+
+  return [
+    message,
+    status,
+    statusCode,
+    causeMessage,
+    causeCode,
+  ].some((value) =>
+    [
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "ENOTFOUND",
+      "Connection terminated unexpectedly",
+      "read ECONNRESET",
+      "Failed query: select",
+    ].some((token) => value.includes(token)),
+  );
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function getCurrentSession(
   authHeaders?: Headers | string | null,
 ): Promise<AuthSessionWithUser | null> {
-  return normalizeSession(
-    await auth.api.getSession({
-      headers: await buildHeaders(authHeaders),
-    }),
-  );
+  const requestHeaders = await buildHeaders(authHeaders);
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return normalizeSession(
+        await auth.api.getSession({
+          headers: requestHeaders,
+        }),
+      );
+    } catch (error) {
+      lastError = error;
+      if (!isTransientSessionLookupError(error) || attempt === 2) {
+        break;
+      }
+
+      await wait(attempt === 0 ? 150 : 400);
+    }
+  }
+
+  if (isTransientSessionLookupError(lastError)) {
+    throw new AuthError(
+      "SERVICE_UNAVAILABLE",
+      "Your session could not be verified because a required database connection was interrupted. Please try again.",
+    );
+  }
+
+  throw lastError;
 }
 
 export async function getVerifiedSession(

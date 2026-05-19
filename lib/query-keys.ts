@@ -50,6 +50,8 @@ export const queryKeys = {
     students: (classroomId: string) => ["learningStudents", classroomId] as const,
     topics: (classroomId: string) => ["learningTopics", classroomId] as const,
     materials: (topicId: string) => ["learningMaterials", topicId] as const,
+    materialUploadAttempts: (topicId: string) =>
+      ["learningMaterialUploadAttempts", topicId] as const,
     readiness: (topicId: string) => ["learningReadiness", topicId] as const,
     reports: (topicId: string) => ["learningReports", topicId] as const,
     questions: (topicId: string) => ["learningQuestions", topicId] as const,

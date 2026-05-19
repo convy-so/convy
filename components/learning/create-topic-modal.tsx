@@ -11,7 +11,8 @@ import { InputField } from "@/components/auth/input-field";
 import { TextareaField } from "@/components/auth/textarea-field";
 import { cn } from "@/lib/utils";
 import { getFriendlyActionError } from "@/lib/action-ux";
-import { appLocaleLabels, appLocales, type AppLocale } from "@/lib/i18n/config";
+import { useRouter } from "@/i18n/routing";
+import { teacherSessionSubjectKeys, getSubjectDisplayLabel, type TeacherSessionSubjectKey } from "@/lib/learning/subject-packages";
 
 type CreateTopicModalProps = {
     isOpen: boolean;
@@ -19,40 +20,17 @@ type CreateTopicModalProps = {
     classroomId: string;
 };
 
-function parseOutcomes(raw: string) {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const [titlePart, ...rest] = line.split("::");
-      const title = titlePart?.trim() ?? "";
-      const description = rest.join("::").trim();
-
-      if (!title || !description) {
-        throw new Error(`Outcome line ${index + 1} must follow "Title :: Description".`);
-      }
-
-      return { id: `outcome-${index + 1}`, title, description };
-    });
-}
-
 export function CreateTopicModal({ 
     isOpen, 
     onClose, 
     classroomId 
 }: CreateTopicModalProps) {
     const queryClient = useQueryClient();
+    const router = useRouter();
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [subjectKey, setSubjectKey] = useState("");
-    const [subjectLabel, setSubjectLabel] = useState("");
-    const [outcomes, setOutcomes] = useState("");
-    const [contentLocale, setContentLocale] = useState<AppLocale>("en");
-    const [teacherSummary, setTeacherSummary] = useState("");
-    const [scopeNotes, setScopeNotes] = useState("");
-    const [notationNotes, setNotationNotes] = useState("");
-    const [rigorNotes, setRigorNotes] = useState("");
+    const [subjectKey, setSubjectKey] =
+        useState<TeacherSessionSubjectKey>("mathematics");
     
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -65,14 +43,7 @@ export function CreateTopicModal({
     const resetForm = () => {
         setTitle("");
         setDescription("");
-        setSubjectKey("");
-        setSubjectLabel("");
-        setOutcomes("");
-        setContentLocale("en");
-        setTeacherSummary("");
-        setScopeNotes("");
-        setNotationNotes("");
-        setRigorNotes("");
+        setSubjectKey("mathematics");
         setError(null);
     };
 
@@ -89,33 +60,23 @@ export function CreateTopicModal({
         setError(null);
 
         try {
-            const parsedOutcomes = parseOutcomes(outcomes);
-            
             const result = await createLearningTopicAction({
                 classroomId,
                 title: title.trim(),
                 description: description.trim() || undefined,
-                subjectKey: subjectKey.trim() || undefined,
-                subjectLabel: subjectLabel.trim() || undefined,
-                contentLocale,
-                learningOutcomes: parsedOutcomes,
-                sourceBoundary: {
-                    teacherSummary: teacherSummary.trim() || description.trim() || undefined,
-                    scopeNotes: scopeNotes.split("\n").map((line) => line.trim()).filter(Boolean),
-                    notationNotes: notationNotes.split("\n").map((line) => line.trim()).filter(Boolean),
-                    rigorNotes: rigorNotes.split("\n").map((line) => line.trim()).filter(Boolean),
-                },
+                subjectKey,
             });
             if (!result.success) {
                 throw new Error(getFriendlyActionError(result.error));
             }
 
-            toast.success("Session created");
+            toast.success("Session draft created");
             await queryClient.invalidateQueries({
                 queryKey: queryKeys.learning.topics(classroomId),
             });
             resetForm();
             onClose();
+            router.push(`/dashboard/learning/topics/${result.data.id}`);
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {
@@ -150,7 +111,7 @@ export function CreateTopicModal({
                         <div>
                             <h3 className="text-lg font-semibold text-[#080808]">Create a new session</h3>
                             <p className="mt-1 text-sm text-[#696969]">
-                                Define the learning scope, outcomes, and grounding that students will move through in this session.
+                                Add the session title, subject, and overview to create the draft.
                             </p>
                         </div>
                     </div>
@@ -178,23 +139,27 @@ export function CreateTopicModal({
                         />
 
                         <div className="grid gap-4 ">
-                            <InputField
-                                label="Subject area"
-                                id="subject-area"
-                                placeholder="e.g. Classical Mechanics"
-                                icon={Hash}
-                                value={subjectLabel}
-                                onChange={(e) => setSubjectLabel(e.target.value)}
-                            />
-
-                            <InputField
-                                label="Subject key"
-                                id="subject-key"
-                                placeholder="e.g. physics.mechanics"
-                                icon={Hash}
-                                value={subjectKey}
-                                onChange={(e) => setSubjectKey(e.target.value)}
-                            />
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-[#292929]">
+                                    Subject
+                                </label>
+                                <div className="relative">
+                                    <Hash className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#696969]" />
+                                    <select
+                                        value={subjectKey}
+                                        onChange={(e) =>
+                                            setSubjectKey(e.target.value as TeacherSessionSubjectKey)
+                                        }
+                                        className="w-full rounded-xl border border-gray-200 bg-white py-3 pr-4 pl-10 text-sm text-[#292929] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#292929]"
+                                    >
+                                        {teacherSessionSubjectKeys.map((value) => (
+                                            <option key={value} value={value}>
+                                                {getSubjectDisplayLabel(value)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
 
                             <TextareaField
                                 label="Session overview"
@@ -204,78 +169,6 @@ export function CreateTopicModal({
                                 rows={4}
                                 placeholder="Briefly describe what this session will cover..."
                                 className="resize-none"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-[#292929]">
-                                Content language
-                            </label>
-                            <select
-                                value={contentLocale}
-                                onChange={(e) => setContentLocale(e.target.value as AppLocale)}
-                                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-[#292929] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#292929]"
-                            >
-                                {appLocales.map((locale) => (
-                                    <option key={locale} value={locale}>
-                                        {appLocaleLabels[locale]}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <TextareaField
-                            label="Session outcomes"
-                            id="topic-outcomes"
-                            value={outcomes}
-                            onChange={(e) => setOutcomes(e.target.value)}
-                            rows={4}
-                            placeholder={"Outcome Title :: Detailed description\ne.g. Inertia :: Understand resistance to change in motion"}
-                            helperText='Use one outcome per line in the format: Title :: Description.'
-                            className="resize-none font-mono text-[13px] leading-5"
-                            required
-                        />
-
-                        <TextareaField
-                            label="Teacher grounding summary"
-                            id="topic-teacher-summary"
-                            value={teacherSummary}
-                            onChange={(e) => setTeacherSummary(e.target.value)}
-                            rows={3}
-                            placeholder="Summarize the boundaries, framing, and what the tutor should emphasize for this topic."
-                            className="resize-none"
-                        />
-
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <TextareaField
-                                label="Scope notes"
-                                id="topic-scope-notes"
-                                value={scopeNotes}
-                                onChange={(e) => setScopeNotes(e.target.value)}
-                                rows={4}
-                                placeholder={"Stay within Newtonian mechanics\nAvoid relativistic edge cases"}
-                                helperText="One note per line."
-                                className="resize-none text-[13px] leading-5"
-                            />
-                            <TextareaField
-                                label="Notation notes"
-                                id="topic-notation-notes"
-                                value={notationNotes}
-                                onChange={(e) => setNotationNotes(e.target.value)}
-                                rows={4}
-                                placeholder={"Use F = ma\nPrefer SI units"}
-                                helperText="One note per line."
-                                className="resize-none text-[13px] leading-5"
-                            />
-                            <TextareaField
-                                label="Rigor notes"
-                                id="topic-rigor-notes"
-                                value={rigorNotes}
-                                onChange={(e) => setRigorNotes(e.target.value)}
-                                rows={4}
-                                placeholder={"Derive before summarizing\nShow assumptions explicitly"}
-                                helperText="One note per line."
-                                className="resize-none text-[13px] leading-5"
                             />
                         </div>
                     </div>

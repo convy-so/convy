@@ -22,6 +22,27 @@
       "when": 1778839200000,
       "tag": "0002_auth_intent_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778956021632,
+      "tag": "0003_glorious_network",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779022821642,
+      "tag": "0004_amusing_machine_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779165246682,
+      "tag": "0005_amusing_cammi",
+      "breakpoints": true
     }
   ]
 }

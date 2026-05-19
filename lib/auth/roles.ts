@@ -1,7 +1,11 @@
 
 export class AuthError extends Error {
   constructor(
-    public readonly code: "UNAUTHENTICATED" | "EMAIL_NOT_VERIFIED" | "FORBIDDEN",
+    public readonly code:
+      | "UNAUTHENTICATED"
+      | "EMAIL_NOT_VERIFIED"
+      | "FORBIDDEN"
+      | "SERVICE_UNAVAILABLE",
     message?: string,
   ) {
     super(message ?? code);

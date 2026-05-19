@@ -3,13 +3,13 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import { learningTopics } from "@/db/schema";
-import { deriveSubjectInfo } from "@/lib/learning/patterns";
 import {
   learningOutcomeDefinitionSchema,
   topicSourceBoundarySchema,
   type LearningOutcomeDefinition,
   type TopicSourceBoundary,
 } from "@/lib/learning/types";
+import { getSubjectDisplayLabel, type TeacherSessionSubjectKey } from "@/lib/learning/subject-packages";
 
 function normalizeLearningOutcome(
   outcome: LearningOutcomeDefinition,
@@ -33,17 +33,15 @@ export async function createLearningTopic(params: {
   createdByUserId: string;
   title: string;
   description?: string;
-  subject?: string;
-  subjectKey?: string;
-  subjectLabel?: string;
+  subjectKey: TeacherSessionSubjectKey;
   contentLocale: "en" | "fr" | "de";
-  learningOutcomes: LearningOutcomeDefinition[];
+  learningOutcomes?: LearningOutcomeDefinition[];
   sourceBoundary?: Partial<TopicSourceBoundary>;
 }) {
   const topicId = nanoid();
   const now = new Date();
 
-  const learningOutcomes = params.learningOutcomes.map((outcome, index) =>
+  const learningOutcomes = (params.learningOutcomes ?? []).map((outcome, index) =>
     normalizeLearningOutcome(outcome, index),
   );
 
@@ -51,12 +49,7 @@ export async function createLearningTopic(params: {
     ...params.sourceBoundary,
     teacherSummary: params.sourceBoundary?.teacherSummary ?? params.description ?? "",
   });
-
-  const subjectInfo = deriveSubjectInfo({
-    subjectKey: params.subjectKey,
-    subjectLabel: params.subjectLabel,
-    subject: params.subject,
-  });
+  const subjectDisplayLabel = getSubjectDisplayLabel(params.subjectKey);
 
   const [topic] = await getDb().insert(learningTopics).values({
     id: topicId,
@@ -64,10 +57,9 @@ export async function createLearningTopic(params: {
     createdByUserId: params.createdByUserId,
     title: params.title,
     description: params.description || null,
-    subject: subjectInfo.subjectLabel,
+    subject: subjectDisplayLabel,
     contentLocale: params.contentLocale,
-    subjectKey: subjectInfo.subjectKey,
-    subjectLabel: subjectInfo.subjectLabel,
+    subjectKey: params.subjectKey,
     status: "draft",
     openingPreference: "auto",
     sourceBoundary,
@@ -75,6 +67,56 @@ export async function createLearningTopic(params: {
     createdAt: now,
     updatedAt: now,
   }).returning();
+
+  return topic;
+}
+
+export async function updateLearningTopicDetails(params: {
+  topicId: string;
+  title?: string;
+  description?: string;
+  contentLocale?: "en" | "fr" | "de";
+  learningOutcomes?: LearningOutcomeDefinition[];
+  sourceBoundary?: Partial<TopicSourceBoundary>;
+}) {
+  const existing = await getDb().query.learningTopics.findFirst({
+    where: eq(learningTopics.id, params.topicId),
+    columns: {
+      sourceBoundary: true,
+      learningOutcomes: true,
+    },
+  });
+
+  if (!existing) {
+    throw new Error("Topic not found");
+  }
+
+  const learningOutcomes = (params.learningOutcomes ?? existing.learningOutcomes ?? []).map(
+    (outcome, index) => normalizeLearningOutcome(outcome, index),
+  );
+
+  const sourceBoundary = topicSourceBoundarySchema.parse({
+    ...(existing.sourceBoundary ?? {}),
+    ...params.sourceBoundary,
+    teacherSummary:
+      params.sourceBoundary?.teacherSummary ??
+      params.description ??
+      existing.sourceBoundary?.teacherSummary ??
+      "",
+  });
+
+  const [topic] = await getDb()
+    .update(learningTopics)
+    .set({
+      title: params.title,
+      description: params.description,
+      contentLocale: params.contentLocale,
+      learningOutcomes,
+      sourceBoundary,
+      updatedAt: new Date(),
+    })
+    .where(eq(learningTopics.id, params.topicId))
+    .returning();
 
   return topic;
 }

@@ -36,6 +36,11 @@ import type { SearchResult } from "@/lib/rag/search";
 import { createLogger, serializeError } from "@/lib/logger";
 
 const log = createLogger("few-shot-library");
+const FEW_SHOT_CACHE_TTL_MS = 5 * 60 * 1000;
+const fewShotResultCache = new Map<
+  string,
+  { expiresAt: number; value: PromptExample[] }
+>();
 
 
 // ─── Internal Helpers ────────────────────────────────────────────────────────
@@ -47,6 +52,46 @@ function normalizeMetadata(value: unknown): Record<string, unknown> {
 
 function getPgLanguage(locale?: string): PgLanguage {
   return LANG_TO_PG_CONFIG[locale ?? "en"] ?? "english";
+}
+
+function getFewShotCacheKey(input: {
+  feature: string;
+  limit: number;
+  context: string;
+  locale: string;
+}) {
+  return [
+    input.feature,
+    input.limit,
+    input.locale,
+    input.context.trim().toLowerCase().replace(/\s+/g, " "),
+  ].join("::");
+}
+
+function readCachedFewShotExamples(cacheKey: string) {
+  const cached = fewShotResultCache.get(cacheKey);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    fewShotResultCache.delete(cacheKey);
+    return null;
+  }
+  return cached.value;
+}
+
+function writeCachedFewShotExamples(cacheKey: string, value: PromptExample[]) {
+  fewShotResultCache.set(cacheKey, {
+    expiresAt: Date.now() + FEW_SHOT_CACHE_TTL_MS,
+    value,
+  });
+}
+
+function shouldBypassSemanticRetrieval(context: string) {
+  const normalized = context.trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized.length < 24) return true;
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (tokens.length < 4) return true;
+  return new Set(tokens).size <= 2;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -128,6 +173,12 @@ export async function getDynamicFewShotExamples({
   context = "",
   locale = "en",
 }: GetDynamicExamplesOptions): Promise<PromptExample[]> {
+  const cacheKey = getFewShotCacheKey({ feature, limit, context, locale });
+  const cached = readCachedFewShotExamples(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   try {
     const db = getDb();
     const lang = getPgLanguage(locale);
@@ -140,7 +191,7 @@ export async function getDynamicFewShotExamples({
 
     // ─── Phase 1: Vector recall via HNSW (skipped when no context) ──────────
     let vectorResults: SearchResult[] = [];
-    if (context.trim()) {
+    if (context.trim() && !shouldBypassSemanticRetrieval(context)) {
       const queryVector = JSON.stringify(
         await generateEmbedding(context, { feature }),
       );
@@ -198,8 +249,12 @@ export async function getDynamicFewShotExamples({
     if (candidatePool.length === 0) return [];
 
     // ─── Phase 4: Rerank ──────────────────────────────────────────────────────
-    const reranked = await rerank(searchText, candidatePool, limit, { feature });
-    const finalIds = reranked.map((r) => r.id);
+    const finalIds =
+      candidatePool.length <= limit
+        ? candidatePool.slice(0, limit).map((item) => item.id)
+        : (await rerank(searchText, candidatePool, limit, { feature })).map(
+            (item) => item.id,
+          );
 
     // ─── Phase 5: Hydrate full `content` JSON from DB in reranker order ──────
     // We only stored `retrievalContent` in the candidate pool; the actual
@@ -212,9 +267,11 @@ export async function getDynamicFewShotExamples({
     });
 
     const hydratedMap = new Map(hydrated.map((h) => [h.id, h]));
-    return finalIds
+    const finalExamples = finalIds
       .map((id) => hydratedMap.get(id)?.content as PromptExample | undefined)
       .filter((c): c is PromptExample => c !== undefined);
+    writeCachedFewShotExamples(cacheKey, finalExamples);
+    return finalExamples;
   } catch (error) {
     log.error("Retrieval failed", {
       feature,
@@ -231,9 +288,11 @@ export async function getDynamicFewShotExamples({
         limit,
       });
 
-      return fallbackRows
+      const fallbackExamples = fallbackRows
         .map((row) => row.content as PromptExample)
         .filter((row) => row !== undefined);
+      writeCachedFewShotExamples(cacheKey, fallbackExamples);
+      return fallbackExamples;
     } catch (fallbackError) {
       log.error("Few-shot fallback retrieval failed", {
         feature,
