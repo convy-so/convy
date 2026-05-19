@@ -12,6 +12,14 @@ import {
 import { createLogger, serializeError } from "@/lib/logger";
 
 const log = createLogger("analytics-chat");
+const ANALYTICS_CLASSIFIER_CACHE_TTL_MS = 5 * 60 * 1000;
+const analyticsClassifierCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    value: ReturnType<typeof parseClassifierResult>;
+  }
+>();
 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -81,10 +89,86 @@ function parseQuestionAnswerResult(value: unknown): {
   };
 }
 
+function getClassifierCacheKey(surveyId: string, question: string) {
+  return `${surveyId}::${question.trim().toLowerCase().replace(/\s+/g, " ")}`;
+}
+
+function readClassifierCache(cacheKey: string) {
+  const cached = analyticsClassifierCache.get(cacheKey);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    analyticsClassifierCache.delete(cacheKey);
+    return null;
+  }
+  return cached.value;
+}
+
+function writeClassifierCache(
+  cacheKey: string,
+  value: ReturnType<typeof parseClassifierResult>,
+) {
+  analyticsClassifierCache.set(cacheKey, {
+    expiresAt: Date.now() + ANALYTICS_CLASSIFIER_CACHE_TTL_MS,
+    value,
+  });
+}
+
+function classifyQuestionHeuristically(question: string) {
+  const normalizedQuestion = question.toLowerCase();
+  if (/compare(?:\s+version)?\s+\d+\s+(?:and|with|to)\s+\d+/.test(normalizedQuestion)) {
+    return {
+      intent: "comparison" as const,
+      needsChart: true,
+      needsTable: true,
+      theme: "version_comparison",
+    };
+  }
+
+  if (/version\s+\d+/.test(normalizedQuestion) || /\bsnapshot\b/.test(normalizedQuestion)) {
+    return {
+      intent: "snapshot" as const,
+      needsChart: false,
+      needsTable: false,
+      theme: "snapshot_lookup",
+    };
+  }
+
+  if (
+    /\b(evidence|quote|quotes|respondent|session|sessions|why|because|examples?)\b/.test(
+      normalizedQuestion,
+    )
+  ) {
+    return {
+      intent: "evidence" as const,
+      needsChart: false,
+      needsTable: false,
+      theme: "evidence_lookup",
+    };
+  }
+
+  return null;
+}
+
 /**
  * Classify the user's question to determine retrieval strategy
  */
 export async function classifyQuestionIntent(surveyId: string, question: string) {
+  const cacheKey = getClassifierCacheKey(surveyId, question);
+  const cached = readClassifierCache(cacheKey);
+  if (cached) {
+    return cached ?? {
+      intent: "mixed" as const,
+      needsChart: false,
+      needsTable: false,
+    };
+  }
+
+  const heuristic = classifyQuestionHeuristically(question);
+  if (heuristic) {
+    writeClassifierCache(cacheKey, heuristic);
+    return heuristic;
+  }
+
   let raw = "";
   try {
     raw = await generateAIResponse(
@@ -107,11 +191,13 @@ export async function classifyQuestionIntent(surveyId: string, question: string)
     });
   }
 
-  return parseClassifierResult(safeJsonParse(raw)) ?? {
+  const result = parseClassifierResult(safeJsonParse(raw)) ?? {
     intent: "mixed" as const,
     needsChart: false,
     needsTable: false,
   };
+  writeClassifierCache(cacheKey, result);
+  return result;
 }
 
 /**

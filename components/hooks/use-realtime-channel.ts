@@ -59,6 +59,7 @@ export function useRealtimeChannel({
     let disposed = false;
     let reconnectTimer: number | null = null;
     let reconnectAttempts = 0;
+    let hasLoggedConnectionFailure = false;
 
     const clearReconnectTimer = () => {
       if (reconnectTimer !== null) {
@@ -91,6 +92,7 @@ export function useRealtimeChannel({
 
         socket.addEventListener("open", () => {
           reconnectAttempts = 0;
+          hasLoggedConnectionFailure = false;
           socket?.send(JSON.stringify({ type: "subscribe", channel }));
         });
 
@@ -133,10 +135,13 @@ export function useRealtimeChannel({
           }
         });
       } catch (error) {
-        console.error("[realtime] failed to connect", {
-          channel,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        if (!hasLoggedConnectionFailure) {
+          console.error("[realtime] failed to connect", {
+            channel,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          hasLoggedConnectionFailure = true;
+        }
         scheduleReconnect();
       }
     };

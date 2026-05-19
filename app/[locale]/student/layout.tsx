@@ -5,7 +5,10 @@ import { DashboardHeader } from "@/components/dashboard/header";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
-import { getLearningMeData, getNotificationsForCurrentUser } from "@/lib/server/app-queries";
+import {
+    getLearningMeDataForSession,
+    getNotificationsForSession,
+} from "@/lib/server/app-queries";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
@@ -51,8 +54,8 @@ async function StudentLayoutContent({
 
     const messages = await getMessages();
     const [learningMe, notifications] = await Promise.all([
-        getLearningMeData(),
-        getNotificationsForCurrentUser(),
+        getLearningMeDataForSession(session),
+        getNotificationsForSession(session),
     ]);
 
     return (

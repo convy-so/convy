@@ -4,6 +4,17 @@ import { getFriendlyActionError } from "@/lib/action-ux";
 import { learningSessionStateSchema, teacherProgressReportSchema } from "@/lib/learning/types";
 import { appLocales } from "@/lib/i18n/config";
 
+export class ApiClientError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiClientError";
+  }
+}
+
 const classroomSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -48,7 +59,6 @@ const topicSchema = z
     subject: z.string().nullable().optional(),
     contentLocale: z.enum(appLocales).optional(),
     subjectKey: z.string().nullable().optional(),
-    subjectLabel: z.string().nullable().optional(),
     status: z.string(),
   })
   .passthrough();
@@ -65,6 +75,29 @@ const topicMaterialSchema = z.object({
   createdAt: z.union([z.string(), z.date()]),
   analysis: z.record(z.string(), z.unknown()).optional(),
 });
+
+const topicMaterialUploadAttemptSchema = z.object({
+  id: z.string(),
+  batchId: z.string(),
+  topicId: z.string(),
+  uploadedByUserId: z.string(),
+  fileName: z.string(),
+  title: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  mimeType: z.string().nullable().optional(),
+  sizeBytes: z.number().nullable().optional(),
+  storageBucket: z.string().nullable().optional(),
+  storagePath: z.string().nullable().optional(),
+  status: z.enum(["queued", "processing", "succeeded", "failed"]),
+  stage: z.enum(["upload", "extraction", "review", "indexing"]),
+  failureMessage: z.string().nullable().optional(),
+  materialId: z.string().nullable().optional(),
+  createdAt: z.union([z.string(), z.date()]),
+  updatedAt: z.union([z.string(), z.date()]),
+});
+export type TopicMaterialUploadAttempt = z.infer<
+  typeof topicMaterialUploadAttemptSchema
+>;
 
 const readinessSchema = z.object({
   ready: z.boolean(),
@@ -91,7 +124,6 @@ const learningStudentMembershipSchema = z.object({
       title: z.string(),
       subject: z.string().nullable().optional(),
       subjectKey: z.string().optional(),
-      subjectLabel: z.string().optional(),
       status: z.string(),
     }),
   ),
@@ -160,7 +192,6 @@ const tutoringSessionSchema = z.object({
     title: z.string(),
     subject: z.string().nullable().optional(),
     subjectKey: z.string().optional(),
-    subjectLabel: z.string().optional(),
   }),
   sessionState: learningSessionStateSchema,
   messages: z.array(onboardingMessageSchema),
@@ -168,8 +199,7 @@ const tutoringSessionSchema = z.object({
 
 const patternSchema = z.object({
   scopeType: z.string(),
-  subjectKey: z.string().nullable().optional(),
-  subjectLabel: z.string().nullable().optional(),
+  subjectKey: z.string().nullable().default(null),
   patternConfidence: z.number().default(0),
   explanationApproaches: z.array(z.record(z.string(), z.unknown())).optional(),
   interestResonance: z.record(z.string(), z.unknown()).optional(),
@@ -301,7 +331,6 @@ export const topicOverviewSchema = z.object({
       subject: z.string().nullable().optional(),
       contentLocale: z.enum(appLocales).optional(),
       subjectKey: z.string(),
-      subjectLabel: z.string(),
       status: z.string(),
       classroom: z.object({
         id: z.string(),
@@ -422,7 +451,15 @@ async function parseResponse<T>(
   const payload: unknown = await response.json();
 
   if (!response.ok) {
-    throw new Error(getApiErrorMessage(payload) ?? "Request failed");
+    const errorPayload =
+      typeof payload === "object" && payload !== null && "error" in payload
+        ? (payload as { error?: { code?: unknown } }).error
+        : null;
+    throw new ApiClientError(
+      getApiErrorMessage(payload) ?? "Request failed",
+      typeof errorPayload?.code === "string" ? errorPayload.code : "INTERNAL_ERROR",
+      response.status,
+    );
   }
 
   return schema.parse(payload);
@@ -475,6 +512,18 @@ export async function fetchTopicMaterials(topicId: string) {
   );
 }
 
+export async function fetchTopicMaterialUploadAttempts(topicId: string) {
+  return await parseResponse(
+    await fetch(`/api/learning/topics/${topicId}/material-upload-attempts`, {
+      credentials: "include",
+    }),
+    z.object({
+      success: z.literal(true),
+      data: z.array(topicMaterialUploadAttemptSchema),
+    }),
+  );
+}
+
 export async function fetchClassroomAssignedSurveys(classroomId: string) {
   return await parseResponse(
     await fetch(`/api/learning/classrooms/${classroomId}/assigned-surveys`, {
@@ -517,12 +566,16 @@ export async function fetchLearningInterventions(input: {
 
 export async function uploadTopicMaterial(input: {
   topicId: string;
-  file: File;
+  file?: File;
+  files?: File[];
   title?: string;
   description?: string;
 }) {
   const formData = new FormData();
-  formData.append("file", input.file);
+  const files = input.files ?? (input.file ? [input.file] : []);
+  for (const file of files) {
+    formData.append("files", file);
+  }
   if (input.title) formData.append("title", input.title);
   if (input.description) formData.append("description", input.description);
 
@@ -535,9 +588,8 @@ export async function uploadTopicMaterial(input: {
     z.object({
       success: z.literal(true),
       data: z.object({
-        material: topicMaterialSchema,
-        analysis: z.record(z.string(), z.unknown()),
-        groundingSummary: z.string(),
+        batchId: z.string(),
+        attempts: z.array(topicMaterialUploadAttemptSchema),
       }),
     }),
   );

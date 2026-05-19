@@ -188,7 +188,6 @@ export async function analyzeOnboardingLearningPatterns(params: {
         ...profile,
         scopeType: "global",
         subjectKey: null,
-        subjectLabel: null,
         patternConfidence: Math.min(profile.patternConfidence, 0.25),
       }),
     ),
@@ -247,12 +246,10 @@ export async function analyzeSessionLearningPatterns(params: {
           ? {
               ...profile,
               subjectKey: params.subjectKey,
-              subjectLabel: params.subjectLabel,
             }
           : {
               ...profile,
               subjectKey: null,
-              subjectLabel: null,
             },
       ),
     ),

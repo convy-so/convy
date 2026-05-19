@@ -1,10 +1,7 @@
-import { TeacherTopicDetailPage } from "@/components/learning/teacher-topic-detail-page";
+import { TopicSetupPage } from "@/components/learning/topic-setup-page";
 import {
   getTopicMaterialsData,
-  getTopicOverviewData,
-  getTopicQuestionsData,
-  getTopicReadinessData,
-  getTopicReportsData,
+  getTopicSetupData,
 } from "@/lib/server/app-queries";
 
 export default async function LearningTopicDetailPage({
@@ -13,21 +10,15 @@ export default async function LearningTopicDetailPage({
   params: Promise<{ topicId: string }>;
 }) {
   const { topicId } = await params;
-  const [overview, materials, readiness, reports, questions] = await Promise.all([
-    getTopicOverviewData(topicId),
+  const [topicSetup, materials] = await Promise.all([
+    getTopicSetupData(topicId),
     getTopicMaterialsData(topicId),
-    getTopicReadinessData(topicId),
-    getTopicReportsData(topicId),
-    getTopicQuestionsData(topicId),
   ]);
 
   return (
-    <TeacherTopicDetailPage
-      initialOverview={overview}
+    <TopicSetupPage
+      initialData={topicSetup}
       initialMaterials={materials}
-      initialReadiness={readiness}
-      initialReports={reports}
-      initialQuestions={questions}
     />
   );
 }

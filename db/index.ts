@@ -28,6 +28,8 @@ const shouldUseInsecureTls = env.ALLOW_INSECURE_TLS && !isLocal;
 const poolConfig = {
   connectionString: env.DATABASE_URL,
   max: 5,
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 30_000,
   ssl: isLocal ? undefined : { rejectUnauthorized: !shouldUseInsecureTls },
 };
 

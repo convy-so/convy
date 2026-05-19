@@ -29,7 +29,6 @@ import {
   persistCreationConversation,
   runCreationWorkflow,
 } from "@/lib/education/creation-workflow";
-import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { mapSessionAuthError } from "@/lib/route-auth-error";
 import {
@@ -158,62 +157,6 @@ export async function POST(
     }
 
     const messages = normalizeCreationMessages(incomingMessages);
-    const latestUserMessage =
-      [...messages].reverse().find((message) => message.role === "user")?.content?.trim() ??
-      "";
-    const priorDriftCount = messages.filter(
-      (message) =>
-        message.role === "assistant" &&
-        /let's stay focused on|we need to stay on the current objective/i.test(
-          message.content,
-        ),
-    ).length;
-
-    if (latestUserMessage) {
-      const scopeDecision = await evaluateScopePolicy({
-        feature: "survey_creation",
-        objective: survey.coreObjective || survey.title,
-        currentPhase: "survey creation",
-        activeTopic: survey.title,
-        latestUserMessage,
-        strictMode: true,
-        driftCount: priorDriftCount,
-        allowedDetours: [
-          "brief clarification of the current survey-design question",
-          "discussion tied directly to the current brief or target audience",
-        ],
-      });
-
-      if (scopeDecision.shouldRedirect) {
-        const redirectMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: scopeDecision.redirectMessage,
-          parts: [{ type: "text", text: scopeDecision.redirectMessage }],
-          timestamp: new Date().toISOString(),
-        };
-        const redirectedMessages = [...messages, redirectMessage];
-        await persistCreationConversation(surveyId, redirectedMessages);
-        const revision = await incrementSurveyRevision(surveyId);
-
-
-        const response = createUIMessageStreamResponse({
-          stream: createUIMessageStream({
-            execute: async ({ writer }) => {
-              writer.write({
-                id: redirectMessage.id,
-                type: "text-delta",
-                delta: scopeDecision.redirectMessage,
-              });
-            },
-          }),
-        });
-        response.headers.set("X-Survey-Revision", String(revision));
-        response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
-        return response;
-      }
-    }
-
     await persistCreationConversation(surveyId, messages);
 
     const result = await runCreationWorkflow({

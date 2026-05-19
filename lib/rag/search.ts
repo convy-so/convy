@@ -191,6 +191,38 @@ export async function executeRAGQuery(
     throw new Error("executeRAGQuery requires surveyId.");
   }
 
+  const fetchLimit = filters.limit ?? 20;
+  const initialVectorResults = await vectorSearch(rawQuery, {
+    ...filters,
+    limit: fetchLimit * 2,
+    language,
+  });
+  const initialTextResults = await fullTextSearch(
+    rawQuery,
+    { ...filters, limit: fetchLimit * 2 },
+    language,
+  );
+  const initialCandidatePool = buildRRFCandidatePool(
+    initialVectorResults,
+    initialTextResults,
+    fetchLimit * 10,
+  ).map((result) => ({
+    ...result,
+    content: result.retrievalContent ?? result.content,
+  }));
+
+  if (initialCandidatePool.length >= Math.max(fetchLimit, 8)) {
+    const reranked = await rerank(rawQuery, initialCandidatePool, fetchLimit, {
+      surveyId: filters.surveyId,
+      feature: "rag-query",
+    });
+
+    return reranked.map((result) => {
+      result.content = `[Source ID: ${result.id}] Context chunk:\n${result.content}`;
+      return result;
+    });
+  }
+
   const queriesToRun = [rawQuery];
 
   try {
@@ -206,7 +238,7 @@ export async function executeRAGQuery(
             .describe("3 semantically distinct alternative phrasings of the raw user query."),
         }),
       }),
-      prompt: `Original Query: "${rawQuery}"\nLanguage: ${language}\nGenerate a hypothetical answer and query variants for better RAG retrieval.`,
+      prompt: `Original Query: "${rawQuery}"\nLanguage: ${language}\nGenerate a hypothetical answer and query variants only because the first retrieval pass was weak.`,
     });
 
     if (object.hydeAnswer) queriesToRun.push(object.hydeAnswer);
@@ -215,14 +247,12 @@ export async function executeRAGQuery(
     // Non-fatal: fall through with just the raw query.
   }
 
-  const fetchLimit = filters.limit ?? 20;
-
   // Collect partial results from all query variants in parallel.
-  const allVector: SearchResult[] = [];
-  const allText: SearchResult[] = [];
+  const allVector: SearchResult[] = [...initialVectorResults];
+  const allText: SearchResult[] = [...initialTextResults];
 
   await Promise.all(
-    queriesToRun.map(async (q) => {
+    queriesToRun.slice(1).map(async (q) => {
       const [v, t] = await Promise.all([
         vectorSearch(q, { ...filters, limit: fetchLimit * 2, language }),
         fullTextSearch(q, { ...filters, limit: fetchLimit * 2 }, language),

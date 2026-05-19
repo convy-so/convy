@@ -1,21 +1,32 @@
-import { eq } from "drizzle-orm";
-import { fileTypeFromBuffer } from "file-type";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
-import { learningTopics, topicMaterials } from "@/db/schema";
+import {
+  learningEvidenceEmbeddings,
+  learningTopics,
+  topicMaterialUploadAttempts,
+  topicMaterials,
+} from "@/db/schema";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import {
   analyzeLearningMaterial,
   extractLearningMaterialText,
-  generateMaterialGroundingSummary,
 } from "@/lib/learning/materials";
 import { indexLearningMaterialEvidence } from "@/lib/learning/evidence";
 import { buildLearningMaterialAccessPath } from "@/lib/media-access";
 import { replaceLearningMaterialEmbeddings } from "@/lib/learning/rag";
-import { uploadLearningMaterial } from "@/lib/storage";
-import { assertLearningMaterialFile } from "@/lib/security/uploads";
+import {
+  deleteLearningMaterial,
+  downloadLearningMaterial,
+} from "@/lib/storage";
 import { topicSourceBoundarySchema } from "@/lib/learning/types";
+import { publishClassroomRealtimeEvent } from "@/lib/realtime";
+import type { LearningMaterialProcessingJobData } from "@/lib/queue";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export function inferMaterialKind(mimeType: string) {
   if (mimeType === "application/pdf") return "pdf";
@@ -23,105 +34,130 @@ export function inferMaterialKind(mimeType: string) {
   return "document";
 }
 
+export function normalizeDetectedLearningMaterialMime(params: {
+  filename: string;
+  fileType?: string | null;
+  detectedMime?: string | null;
+}) {
+  const extension = params.filename.split(".").pop()?.trim().toLowerCase();
+  const mime = params.detectedMime || params.fileType || "application/octet-stream";
+
+  if (
+    extension === "docx" &&
+    (mime === "application/zip" ||
+      mime === "application/x-zip-compressed" ||
+      mime === "application/octet-stream")
+  ) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+
+  return mime;
+}
+
+export function isMaterialAnalysisFailed(
+  analysis: Record<string, unknown> | null | undefined,
+) {
+  return (
+    analysis?.analysisStatus === "failed" ||
+    analysis?.status === "failed" ||
+    typeof analysis?.analysisError === "string"
+  );
+}
+
 export async function getTeacherTopicOrNull(userId: string, topicId: string) {
   return getTeacherTopicAccess(userId, topicId);
 }
 
-export async function createTopicMaterial(params: {
+async function publishMaterialUploadUpdated(params: {
+  classroomId: string;
   topicId: string;
-  userId: string;
-  topic: Awaited<ReturnType<typeof getTeacherTopicAccess>>;
-  file: File;
-  title: string;
-  description: string;
+  batchId: string;
+  attemptId: string;
 }) {
-  const { file, topicId, userId, topic } = params;
-  if (!topic) throw new Error("Topic not found");
+  await publishClassroomRealtimeEvent(params.classroomId, {
+    type: "learning_material_upload_updated",
+    topicId: params.topicId,
+    batchId: params.batchId,
+    attemptIds: [params.attemptId],
+  });
+}
 
-  assertLearningMaterialFile(file);
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const detected = await fileTypeFromBuffer(buffer);
-  const mimeType = detected?.mime || file.type || "application/octet-stream";
-  assertLearningMaterialFile({ name: file.name, size: file.size, type: mimeType });
+export async function updateLearningMaterialUploadAttempt(params: {
+  attemptId: string;
+  classroomId?: string;
+  topicId?: string;
+  batchId?: string;
+  status?: "queued" | "processing" | "succeeded" | "failed";
+  stage?: "upload" | "extraction" | "review" | "indexing";
+  failureMessage?: string | null;
+  materialId?: string | null;
+}) {
+  const [attempt] = await getDb()
+    .update(topicMaterialUploadAttempts)
+    .set({
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.stage ? { stage: params.stage } : {}),
+      ...(params.failureMessage !== undefined
+        ? { failureMessage: params.failureMessage }
+        : {}),
+      ...(params.materialId !== undefined ? { materialId: params.materialId } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(topicMaterialUploadAttempts.id, params.attemptId))
+    .returning();
 
-  const materialId = nanoid();
-  const uploaded = await uploadLearningMaterial(buffer, topicId, materialId, mimeType, file.name);
+  const classroomId = params.classroomId;
+  if (attempt && classroomId) {
+    await publishMaterialUploadUpdated({
+      classroomId,
+      topicId: params.topicId ?? attempt.topicId,
+      batchId: params.batchId ?? attempt.batchId,
+      attemptId: attempt.id,
+    });
+  }
 
-  const [material] = await getDb()
-    .insert(topicMaterials)
+  return attempt;
+}
+
+export async function createLearningMaterialUploadAttempt(params: {
+  id: string;
+  batchId: string;
+  topicId: string;
+  uploadedByUserId: string;
+  fileName: string;
+  title?: string | null;
+  description?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
+  status: "queued" | "failed";
+  stage?: "upload" | "extraction" | "review" | "indexing";
+  failureMessage?: string | null;
+}) {
+  const [attempt] = await getDb()
+    .insert(topicMaterialUploadAttempts)
     .values({
-      id: materialId,
-      topicId,
-      uploadedByUserId: userId,
-      title: params.title.trim() || file.name,
-      description: params.description.trim() || null,
-      materialKind: inferMaterialKind(mimeType),
-      storageBucket: uploaded.bucket,
-      storagePath: uploaded.path,
-      publicUrl: buildLearningMaterialAccessPath(materialId),
-      mimeType,
-      sizeBytes: file.size,
-      extractionStatus: "processing",
-      indexingStatus: "pending",
-      extractedText: null,
-      analysis: {},
+      id: params.id,
+      batchId: params.batchId,
+      topicId: params.topicId,
+      uploadedByUserId: params.uploadedByUserId,
+      fileName: params.fileName,
+      title: params.title?.trim() || null,
+      description: params.description?.trim() || null,
+      mimeType: params.mimeType ?? null,
+      sizeBytes: params.sizeBytes ?? null,
+      storageBucket: params.storageBucket ?? null,
+      storagePath: params.storagePath ?? null,
+      status: params.status,
+      stage: params.stage ?? "upload",
+      failureMessage: params.failureMessage ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
     .returning();
 
-  return { material, buffer, mimeType, topic };
-}
-
-export async function enrichMaterialContent(params: {
-  materialId: string;
-  fileName: string;
-  mimeType: string;
-  buffer: Buffer;
-  topic: NonNullable<Awaited<ReturnType<typeof getTeacherTopicAccess>>>;
-}) {
-  let extractedText = "";
-  let analysis: Record<string, unknown> = {};
-  let groundingSummary = "";
-
-  try {
-    extractedText = await extractLearningMaterialText({
-      buffer: params.buffer,
-      filename: params.fileName,
-      mimeType: params.mimeType,
-    });
-    analysis = await analyzeLearningMaterial({
-      topicTitle: params.topic.title,
-      topicDescription: params.topic.description,
-      learningOutcomes: params.topic.learningOutcomes,
-      materialText: extractedText,
-    });
-    groundingSummary = await generateMaterialGroundingSummary({
-      topicTitle: params.topic.title,
-      materialText: extractedText,
-    });
-
-    await getDb().update(topicMaterials).set({
-      extractionStatus: "completed",
-      extractionError: null,
-      extractedText,
-      analysis: { ...analysis, groundingSummary },
-      indexingStatus: "processing",
-      indexingError: null,
-      updatedAt: new Date(),
-    }).where(eq(topicMaterials.id, params.materialId));
-  } catch (error) {
-    await getDb().update(topicMaterials).set({
-      extractionStatus: "failed",
-      extractionError: error instanceof Error ? error.message : "Material extraction failed",
-      indexingStatus: "failed",
-      indexingError: "Indexing skipped because extraction failed.",
-      updatedAt: new Date(),
-    }).where(eq(topicMaterials.id, params.materialId));
-    throw error;
-  }
-
-  return { extractedText, analysis, groundingSummary };
+  return attempt;
 }
 
 export async function indexMaterialAndSyncBoundary(params: {
@@ -133,6 +169,19 @@ export async function indexMaterialAndSyncBoundary(params: {
   analysis: Record<string, unknown>;
   topic: NonNullable<Awaited<ReturnType<typeof getTeacherTopicAccess>>>;
 }) {
+  console.info("[learning-material-upload] extracted content before embeddings", {
+    topicId: params.topicId,
+    materialId: params.materialId,
+    characterLength: params.extractedText.length,
+  });
+  console.log(
+    [
+      "----- BEGIN EXTRACTED LEARNING MATERIAL -----",
+      params.extractedText,
+      "----- END EXTRACTED LEARNING MATERIAL -----",
+    ].join("\n"),
+  );
+
   await replaceLearningMaterialEmbeddings({
     classroomId: params.topic.classroomId,
     topicId: params.topicId,
@@ -186,4 +235,171 @@ export async function indexMaterialAndSyncBoundary(params: {
     getDb().update(topicMaterials).set({ indexingStatus: "completed", indexingError: null, updatedAt: new Date() }).where(eq(topicMaterials.id, params.materialId)),
     getDb().update(learningTopics).set({ sourceBoundary: updatedBoundary, lastMaterialSyncAt: new Date(), updatedAt: new Date() }).where(eq(learningTopics.id, params.topicId)),
   ]);
+}
+
+async function deleteMaterialProcessingArtifacts(params: {
+  materialId?: string | null;
+  storagePath?: string | null;
+}) {
+  if (params.materialId) {
+    await getDb()
+      .delete(learningEvidenceEmbeddings)
+      .where(
+        and(
+          eq(learningEvidenceEmbeddings.sourceType, "material"),
+          eq(learningEvidenceEmbeddings.sourceId, params.materialId),
+        ),
+      );
+    await getDb()
+      .delete(topicMaterials)
+      .where(eq(topicMaterials.id, params.materialId));
+  }
+
+  if (params.storagePath) {
+    try {
+      await deleteLearningMaterial(params.storagePath);
+    } catch (error) {
+      console.warn("[learning-material-worker] failed to cleanup storage object", {
+        storagePath: params.storagePath,
+        error: getErrorMessage(error, "Storage cleanup failed"),
+      });
+    }
+  }
+}
+
+export async function processLearningMaterialUploadAttempt(
+  data: LearningMaterialProcessingJobData,
+) {
+  const attempt = await getDb().query.topicMaterialUploadAttempts.findFirst({
+    where: eq(topicMaterialUploadAttempts.id, data.attemptId),
+  });
+
+  if (!attempt || attempt.status === "succeeded") {
+    return { success: true, skipped: "missing_or_completed" as const };
+  }
+
+  let materialId: string | null = null;
+
+  try {
+    const topic = await getTeacherTopicAccess(data.userId, data.topicId);
+    if (!topic) {
+      throw new Error("Topic not found or user is no longer authorized.");
+    }
+
+    await updateLearningMaterialUploadAttempt({
+      attemptId: data.attemptId,
+      classroomId: data.classroomId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      status: "processing",
+      stage: "extraction",
+      failureMessage: null,
+    });
+
+    const buffer = await downloadLearningMaterial(data.storagePath);
+    const extractedText = await extractLearningMaterialText({
+      buffer,
+      filename: data.fileName,
+      mimeType: data.mimeType,
+    });
+
+    await updateLearningMaterialUploadAttempt({
+      attemptId: data.attemptId,
+      classroomId: data.classroomId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      status: "processing",
+      stage: "review",
+    });
+
+    const analysis = await analyzeLearningMaterial({
+      topicTitle: topic.title,
+      topicDescription: topic.description,
+      learningOutcomes: topic.learningOutcomes,
+      materialText: extractedText,
+    });
+
+    if (isMaterialAnalysisFailed(analysis)) {
+      throw new Error("AI material review failed for this file.");
+    }
+
+    await updateLearningMaterialUploadAttempt({
+      attemptId: data.attemptId,
+      classroomId: data.classroomId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      status: "processing",
+      stage: "indexing",
+    });
+
+    materialId = nanoid();
+    const [material] = await getDb()
+      .insert(topicMaterials)
+      .values({
+        id: materialId,
+        topicId: data.topicId,
+        uploadedByUserId: data.userId,
+        title: data.title?.trim() || data.fileName,
+        description: data.description?.trim() || null,
+        materialKind: inferMaterialKind(data.mimeType),
+        storageBucket: attempt.storageBucket,
+        storagePath: data.storagePath,
+        publicUrl: buildLearningMaterialAccessPath(materialId),
+        mimeType: data.mimeType,
+        sizeBytes: data.sizeBytes,
+        extractionStatus: "completed",
+        extractionError: null,
+        indexingStatus: "processing",
+        indexingError: null,
+        extractedText,
+        analysis,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    await indexMaterialAndSyncBoundary({
+      topicId: data.topicId,
+      materialId,
+      material,
+      mimeType: data.mimeType,
+      extractedText,
+      analysis,
+      topic,
+    });
+
+    await updateLearningMaterialUploadAttempt({
+      attemptId: data.attemptId,
+      classroomId: data.classroomId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      status: "succeeded",
+      stage: "indexing",
+      failureMessage: null,
+      materialId,
+    });
+
+    return { success: true, materialId };
+  } catch (error) {
+    const failureMessage = getErrorMessage(error, "Learning material processing failed");
+
+    await deleteMaterialProcessingArtifacts({
+      materialId,
+      storagePath: data.storagePath,
+    });
+
+    await updateLearningMaterialUploadAttempt({
+      attemptId: data.attemptId,
+      classroomId: data.classroomId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      status: "failed",
+      failureMessage,
+    });
+
+    return {
+      success: false,
+      error: failureMessage,
+    };
+  }
 }

@@ -15,6 +15,9 @@ declare global {
   var tutoringReportQueue:
     | Queue<TutoringReportJobData>
     | undefined;
+  var learningMaterialProcessingQueue:
+    | Queue<LearningMaterialProcessingJobData>
+    | undefined;
 
   var contentTranslationQueue: Queue<ContentTranslationJobData> | undefined;
   var experimentEvaluationQueue: Queue<unknown> | undefined;
@@ -78,6 +81,19 @@ export interface TutoringReportJobData {
   sourceLocale?: string | null;
   previousReport?: Record<string, unknown> | null;
   subjectKey?: string | null;
+}
+
+export interface LearningMaterialProcessingJobData {
+  attemptId: string;
+  topicId: string;
+  classroomId: string;
+  userId: string;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  title?: string | null;
+  description?: string | null;
 }
 
 
@@ -156,6 +172,24 @@ export const getTutoringReportQueue = () => {
   }
 
   return global.tutoringReportQueue;
+};
+
+export const getLearningMaterialProcessingQueue = () => {
+  if (!global.learningMaterialProcessingQueue) {
+    global.learningMaterialProcessingQueue =
+      createQueue<LearningMaterialProcessingJobData>(
+        "learning-material-processing",
+        {
+          defaultJobOptions: {
+            attempts: 1,
+            removeOnComplete: true,
+            removeOnFail: { age: 7 * 24 * 3600 },
+          },
+        },
+      );
+  }
+
+  return global.learningMaterialProcessingQueue;
 };
 
 
@@ -306,6 +340,19 @@ export async function enqueueTutoringReportGeneration(
   });
 }
 
+export async function enqueueLearningMaterialProcessing(
+  data: LearningMaterialProcessingJobData,
+) {
+  return await getLearningMaterialProcessingQueue().add(
+    "process-learning-material",
+    data,
+    {
+      jobId: `learning-material-${data.attemptId}`,
+      priority: 2,
+    },
+  );
+}
+
 
 
 export async function enqueueContentTranslation(data: ContentTranslationJobData) {
@@ -346,6 +393,7 @@ export async function closeQueues() {
     global.emailQueue,
     global.imageUploadQueue,
     global.tutoringReportQueue,
+    global.learningMaterialProcessingQueue,
 
     global.contentTranslationQueue,
     global.experimentEvaluationQueue,
@@ -358,6 +406,7 @@ export async function closeQueues() {
     global.emailQueue = undefined;
     global.imageUploadQueue = undefined;
     global.tutoringReportQueue = undefined;
+    global.learningMaterialProcessingQueue = undefined;
 
     global.contentTranslationQueue = undefined;
     global.experimentEvaluationQueue = undefined;

@@ -1,4 +1,5 @@
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { toApiAuthError } from "@/lib/auth/error-map";
 import { isLearningStateConflictError } from "@/lib/learning/errors";
 
 export function handleLearningRouteError(
@@ -6,6 +7,9 @@ export function handleLearningRouteError(
   fallbackMessage: string,
   route: string,
 ) {
+  const authError = toApiAuthError(error);
+  if (authError) return authError;
+
   if (isLearningStateConflictError(error)) {
     return apiError(
       "CONFLICT",

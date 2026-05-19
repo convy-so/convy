@@ -67,7 +67,8 @@ export function DashboardSidebar({
     queryKey: queryKeys.learning.me,
     queryFn: fetchLearningMe,
     initialData: initialLearningMe,
-    retry: false
+    enabled: viewerAccess.authRole === "student",
+    retry: false,
   });
 
   const isStudent = viewerAccess.authRole === "student" || learningMeQuery.data?.role === "student";

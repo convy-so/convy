@@ -19,7 +19,7 @@ type FrameworkSummary = {
 type TopicOption = {
   id: string;
   title: string;
-  subjectLabel: string;
+  subject: string;
   contentLocale: string;
   classroomTitle: string;
 };
@@ -226,7 +226,7 @@ export function ExpertFrameworkStudio({
               >
                 {topics.map((topic) => (
                   <option key={topic.id} value={topic.id}>
-                    {topic.title} · {topic.subjectLabel}
+                    {topic.title} · {topic.subject}
                   </option>
                 ))}
               </select>
@@ -291,7 +291,7 @@ export function ExpertFrameworkStudio({
                     </div>
                     <div className="grid gap-2 text-xs text-slate-600">
                       <div className="rounded-xl bg-white px-3 py-2">
-                        Subject: {topic.subjectLabel}
+                        Subject: {topic.subject}
                       </div>
                       <div className="rounded-xl bg-white px-3 py-2">
                         Locale: {topic.contentLocale}

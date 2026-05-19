@@ -15,17 +15,13 @@ type FileLike = {
 export const LEARNING_MATERIAL_MIME_ALLOWLIST = new Set([
   "application/pdf",
   "text/plain",
-  "text/markdown",
-  "text/csv",
-  "application/json",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
 const LEARNING_MATERIAL_EXTENSION_ALLOWLIST = new Set([
   "pdf",
   "txt",
-  "md",
-  "csv",
-  "json",
+  "docx",
 ]);
 
 const AUDIO_UPLOAD_MIME_PREFIX = "audio/";

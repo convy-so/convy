@@ -1,21 +1,16 @@
-import { generateText, Output } from "ai";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api/error-contract";
-import { z } from "zod";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
-import { analysisModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import { getTopicWithMaterials } from "@/lib/learning/storage";
-
-const readinessSchema = z.object({
-  ready: z.boolean(),
-  summary: z.string(),
-  clarifyingQuestions: z.array(z.string()).default([]),
-  gaps: z.array(z.string()).default([]),
-  strengths: z.array(z.string()).default([]),
-});
+import {
+  buildReadinessUnavailableFallback,
+  getOrGenerateTopicReadiness,
+  isReadinessQuotaError,
+} from "@/lib/learning/readiness";
+import { isMaterialAnalysisFailed } from "@/lib/learning/materials-route-service";
 
 export async function GET(
   _request: Request,
@@ -35,37 +30,35 @@ export async function GET(
       return apiError("NOT_FOUND", "Topic not found");
     }
 
-    const materialAnalyses = topic.materials.map((material) => ({
-      title: material.title,
-      analysis: material.analysis ?? {},
-      extractedTextSample: material.extractedText?.slice(0, 4000) ?? "",
-    }));
+    try {
+      const readiness = await getOrGenerateTopicReadiness({
+        ...topic,
+        materials: topic.materials.filter(
+          (material) =>
+            material.extractionStatus === "completed" &&
+            material.indexingStatus === "completed" &&
+            !isMaterialAnalysisFailed(material.analysis),
+        ),
+      });
 
-    const { output } = await generateText({
-      model: analysisModel,
-      output: Output.object({
-        schema: readinessSchema,
-      }),
-      prompt: `You are helping a teacher decide whether a topic is ready for a grounded AI tutor.
+      return NextResponse.json({
+        success: true,
+        data: readiness.data,
+        generatedAt: readiness.generatedAt,
+        cacheStatus: readiness.cacheStatus,
+      });
+    } catch (error) {
+      if (isReadinessQuotaError(error)) {
+        return NextResponse.json({
+          success: true,
+          data: buildReadinessUnavailableFallback(),
+          generatedAt: null,
+          cacheStatus: "unavailable",
+        });
+      }
 
-Topic: ${topic.title}
-Description: ${topic.description ?? ""}
-Learning outcomes:
-${topic.learningOutcomes.map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`).join("\n")}
-
-Uploaded materials and analyses:
-${JSON.stringify(materialAnalyses)}
-
-Rules:
-- Mark ready true only if the materials appear sufficient to support the outcomes without large factual gaps.
-- Ask clarifying questions only when they are genuinely needed.
-- Gaps should focus on missing source material, vague outcomes, or unsupported expectations.`,
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: output,
-    });
+      throw error;
+    }
   } catch (error) {
     return handleLearningRouteError(error, "Failed to evaluate topic readiness", "/api/learning/topics/[topicId]/readiness");
   }

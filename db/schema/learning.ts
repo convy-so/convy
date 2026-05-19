@@ -150,7 +150,6 @@ export const learningTopics = pgTable(
     subject: text("subject"),
     contentLocale: text("content_locale").default("en").notNull(),
     subjectKey: text("subject_key").default("general").notNull(),
-    subjectLabel: text("subject_label").default("General").notNull(),
     status: text("status").default("draft").notNull(),
     openingPreference: text("opening_preference").default("auto").notNull(),
     sourceBoundary: jsonb("source_boundary")
@@ -160,6 +159,14 @@ export const learningTopics = pgTable(
       .$type<LearningOutcomeDefinition[]>()
       .notNull()
       .default([]),
+    readinessAnalysis: jsonb("readiness_analysis")
+      .$type<Record<string, unknown> | null>()
+      .default(null),
+    readinessSourceHash: text("readiness_source_hash"),
+    readinessGeneratedAt: timestamp("readiness_generated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     lastMaterialSyncAt: timestamp("last_material_sync_at", {
       withTimezone: true,
       mode: "date",
@@ -209,6 +216,47 @@ export const topicMaterials = pgTable(
     check(
       "topic_materials_indexing_status_check",
       sql`${table.indexingStatus} in ('pending', 'processing', 'completed', 'failed')`,
+    ),
+  ],
+);
+
+export const topicMaterialUploadAttempts = pgTable(
+  "topic_material_upload_attempts",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    batchId: text("batch_id").notNull(),
+    topicId: text("topic_id")
+      .notNull()
+      .references(() => learningTopics.id, { onDelete: "cascade" }),
+    uploadedByUserId: text("uploaded_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    title: text("title"),
+    description: text("description"),
+    mimeType: text("mime_type"),
+    sizeBytes: integer("size_bytes"),
+    storageBucket: text("storage_bucket"),
+    storagePath: text("storage_path"),
+    status: text("status").default("queued").notNull(),
+    stage: text("stage").default("upload").notNull(),
+    failureMessage: text("failure_message"),
+    materialId: text("material_id").references(() => topicMaterials.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    index("topic_material_upload_attempts_topic_id_idx").on(table.topicId),
+    index("topic_material_upload_attempts_batch_id_idx").on(table.batchId),
+    index("topic_material_upload_attempts_status_idx").on(table.status),
+    check(
+      "topic_material_upload_attempts_status_check",
+      sql`${table.status} in ('queued', 'processing', 'succeeded', 'failed')`,
+    ),
+    check(
+      "topic_material_upload_attempts_stage_check",
+      sql`${table.stage} in ('upload', 'extraction', 'review', 'indexing')`,
     ),
   ],
 );
@@ -1122,6 +1170,7 @@ export const learningTopicsRelations = relations(
       relationName: "created_learning_topics",
     }),
     materials: many(topicMaterials),
+    materialUploadAttempts: many(topicMaterialUploadAttempts),
     embeddings: many(learningMaterialEmbeddings),
     sessions: many(learningSessions),
     interactions: many(learningInteractions),
@@ -1150,6 +1199,25 @@ export const topicMaterialsRelations = relations(topicMaterials, ({ one, many })
   }),
   embeddings: many(learningMaterialEmbeddings),
 }));
+
+export const topicMaterialUploadAttemptsRelations = relations(
+  topicMaterialUploadAttempts,
+  ({ one }) => ({
+    topic: one(learningTopics, {
+      fields: [topicMaterialUploadAttempts.topicId],
+      references: [learningTopics.id],
+    }),
+    uploadedBy: one(users, {
+      fields: [topicMaterialUploadAttempts.uploadedByUserId],
+      references: [users.id],
+      relationName: "uploaded_topic_material_upload_attempts",
+    }),
+    material: one(topicMaterials, {
+      fields: [topicMaterialUploadAttempts.materialId],
+      references: [topicMaterials.id],
+    }),
+  }),
+);
 
 export const studentInterestProfilesRelations = relations(
   studentInterestProfiles,

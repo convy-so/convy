@@ -4,51 +4,49 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 
-import { useRouter } from "@/i18n/routing";
-import { useRealtimeChannel } from "@/components/hooks/use-realtime-channel";
-import {
-  updateLearningInterventionAction,
-  updateTopicStatusAction,
-} from "@/app/actions/classroom";
+import { useServerEventStream } from "@/components/hooks/use-server-event-stream";
+import { updateTopicStatusAction } from "@/app/actions/classroom";
 import {
   resendStudentInvitationAction,
   cancelStudentInvitationAction,
 } from "@/app/actions/classroom/student-actions";
-import { createSurveyDraftAction } from "@/app/actions/survey";
 import {
-  fetchClassroomAssignedSurveys,
-  fetchClassroomStudentPatterns,
   fetchClassroomStudents,
   fetchClassroomTopics,
-  fetchLearningInterventions,
+  fetchTopicMaterialUploadAttempts,
   fetchTeacherClassrooms,
   fetchTopicMaterials,
-  fetchTopicQuestions,
-  fetchTopicReadiness,
   fetchTopicReports,
   uploadTopicMaterial,
+  ApiClientError,
 } from "@/lib/api/learning";
-import type { ClassroomStudent, LearningIntervention, PendingInvitation, Topic } from "@/lib/api/learning";
+import type { ClassroomStudent, PendingInvitation, Topic } from "@/lib/api/learning";
 import { queryKeys } from "@/lib/query-keys";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import type { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
 
+function retryTransientLearningApiFailure(failureCount: number, error: Error) {
+  return (
+    error instanceof ApiClientError &&
+    error.code === "SERVICE_UNAVAILABLE" &&
+    failureCount < 2
+  );
+}
+
 export function useTeacherLearningWorkspace(
   initialData: Awaited<ReturnType<typeof getTeacherLearningWorkspaceInitialData>>,
+  options: { activeTopicView?: "overview" | "reports" | "students" } = {},
 ) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
-  const [selectedClassroomStudentId, setSelectedClassroomStudentId] = useState<
-    string | null
-  >(null);
 
   const classroomsQuery = useQuery({
     queryKey: queryKeys.learning.classrooms,
     queryFn: fetchTeacherClassrooms,
     initialData: initialData.initialClassrooms,
     staleTime: 30_000,
+    retry: retryTransientLearningApiFailure,
   });
 
   const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
@@ -57,12 +55,14 @@ export function useTeacherLearningWorkspace(
   const selectedAccessibleClassroomId = selectedDirectoryClassroom?.id ?? null;
   const canManageStudents = Boolean(selectedDirectoryClassroom);
 
-  useRealtimeChannel({
-    channel: selectedAccessibleClassroomId
-      ? `classroom:${selectedAccessibleClassroomId}`
-      : null,
+  useServerEventStream({
+    url:
+      selectedAccessibleClassroomId
+        ? `/api/learning/classrooms/${selectedAccessibleClassroomId}/events`
+        : null,
     enabled: Boolean(selectedAccessibleClassroomId),
-    onMessage: (message) => {
+    event: "classroom_roster_updated",
+    onEvent: (message) => {
       if (
         !selectedAccessibleClassroomId ||
         message.type !== "classroom_roster_updated"
@@ -76,6 +76,40 @@ export function useTeacherLearningWorkspace(
         }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.learning.classrooms,
+        }),
+      ]);
+    },
+  });
+
+  useServerEventStream({
+    url: selectedAccessibleClassroomId
+      ? `/api/learning/classrooms/${selectedAccessibleClassroomId}/events`
+      : null,
+    enabled: Boolean(selectedAccessibleClassroomId),
+    event: "learning_material_upload_updated",
+    onEvent: (message) => {
+      if (
+        !selectedAccessibleClassroomId ||
+        message.type !== "learning_material_upload_updated"
+      ) {
+        return;
+      }
+
+      const topicId =
+        typeof message.topicId === "string" ? message.topicId : selectedTopic?.id;
+      if (!topicId) {
+        return;
+      }
+
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.materials(topicId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.materialUploadAttempts(topicId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.readiness(topicId),
         }),
       ]);
     },
@@ -99,6 +133,7 @@ export function useTeacherLearningWorkspace(
         ? initialData.initialStudents
         : undefined,
     staleTime: 30_000,
+    retry: retryTransientLearningApiFailure,
   });
   const topicsQuery = useQuery({
     queryKey: selectedAccessibleClassroomId
@@ -118,6 +153,7 @@ export function useTeacherLearningWorkspace(
         ? initialData.initialTopics
         : undefined,
     staleTime: 30_000,
+    retry: retryTransientLearningApiFailure,
   });
 
   const students = useMemo(
@@ -132,10 +168,6 @@ export function useTeacherLearningWorkspace(
     () => topicsQuery.data?.data ?? ([] as Topic[]),
     [topicsQuery.data],
   );
-  const selectedStudent =
-    students.find((student) => student.id === selectedClassroomStudentId) ??
-    students[0] ??
-    null;
   const selectedTopic =
     topics.find((topic) => topic.id === selectedTopicId) ?? null;
 
@@ -148,28 +180,30 @@ export function useTeacherLearningWorkspace(
       return fetchTopicMaterials(selectedTopic.id);
     },
     enabled: Boolean(selectedTopic),
-    initialData:
-      initialData.initialMaterials &&
-      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
-        ? initialData.initialMaterials
-        : undefined,
     staleTime: 30_000,
+    retry: retryTransientLearningApiFailure,
   });
-  const readinessQuery = useQuery({
-    queryKey: selectedTopic ? queryKeys.learning.readiness(selectedTopic.id) : ["learningReadiness", "idle"],
+  const materialUploadAttemptsQuery = useQuery({
+    queryKey: selectedTopic
+      ? queryKeys.learning.materialUploadAttempts(selectedTopic.id)
+      : ["learningMaterialUploadAttempts", "idle"],
     queryFn: async () => {
       if (!selectedTopic) {
         throw new Error("Missing topic");
       }
-      return fetchTopicReadiness(selectedTopic.id);
+      return fetchTopicMaterialUploadAttempts(selectedTopic.id);
     },
     enabled: Boolean(selectedTopic),
-    initialData:
-      initialData.initialReadiness &&
-      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
-        ? initialData.initialReadiness
-        : undefined,
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: (query) => {
+      const attempts = query.state.data?.data ?? [];
+      return attempts.some((attempt) =>
+        attempt.status === "queued" || attempt.status === "processing"
+      )
+        ? 2_500
+        : false;
+    },
+    retry: retryTransientLearningApiFailure,
   });
   const reportsQuery = useQuery({
     queryKey: selectedTopic ? queryKeys.learning.reports(selectedTopic.id) : ["learningReports", "idle"],
@@ -179,105 +213,37 @@ export function useTeacherLearningWorkspace(
       }
       return fetchTopicReports(selectedTopic.id);
     },
-    enabled: Boolean(selectedTopic),
-    initialData:
-      initialData.initialReportsPayload &&
-      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
-        ? initialData.initialReportsPayload
-        : undefined,
+    enabled: Boolean(selectedTopic) && options.activeTopicView === "reports",
     staleTime: 30_000,
-  });
-  const questionsQuery = useQuery({
-    queryKey: selectedTopic ? queryKeys.learning.questions(selectedTopic.id) : ["learningQuestions", "idle"],
-    queryFn: async () => {
-      if (!selectedTopic) {
-        throw new Error("Missing topic");
-      }
-      return fetchTopicQuestions(selectedTopic.id);
-    },
-    enabled: Boolean(selectedTopic),
-    initialData:
-      initialData.initialQuestions &&
-      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
-        ? initialData.initialQuestions
-        : undefined,
-    staleTime: 30_000,
-  });
-  const classroomStudentPatternsQuery = useQuery({
-    queryKey: selectedStudent
-      ? queryKeys.learning.classroomStudentPatterns(selectedStudent.id)
-      : ["learningClassroomStudentPatterns", "idle"],
-    queryFn: async () => {
-      if (!selectedStudent) {
-        throw new Error("Missing student");
-      }
-      return fetchClassroomStudentPatterns(selectedStudent.id);
-    },
-    enabled: Boolean(selectedStudent),
-    initialData:
-      initialData.initialClassroomStudentPatterns &&
-      selectedStudent?.id === (initialData.initialStudents?.data.students[0]?.id ?? null)
-        ? initialData.initialClassroomStudentPatterns
-        : undefined,
-    staleTime: 30_000,
-  });
-  const assignedSurveysQuery = useQuery({
-    queryKey: selectedAccessibleClassroomId
-      ? queryKeys.learning.assignedSurveys(selectedAccessibleClassroomId)
-      : ["learningAssignedSurveys", "idle"],
-    queryFn: async () => {
-      if (!selectedAccessibleClassroomId) {
-        throw new Error("Missing classroom");
-      }
-      return fetchClassroomAssignedSurveys(selectedAccessibleClassroomId);
-    },
-    enabled: Boolean(selectedAccessibleClassroomId),
-    initialData:
-      initialData.initialAssignedSurveys &&
-      selectedAccessibleClassroomId ===
-        (initialData.initialClassrooms.data[0]?.id ?? null)
-        ? initialData.initialAssignedSurveys
-        : undefined,
-    staleTime: 30_000,
-  });
-  const interventionsQuery = useQuery({
-    queryKey:
-      selectedAccessibleClassroomId && selectedStudent
-        ? queryKeys.learning.interventions(
-            selectedAccessibleClassroomId,
-            selectedStudent.id,
-            selectedTopic?.id ?? null,
-          )
-        : ["learningInterventions", "idle"],
-    queryFn: async () => {
-      if (!selectedAccessibleClassroomId || !selectedStudent) {
-        throw new Error("Missing intervention context");
-      }
-      return fetchLearningInterventions({
-        classroomId: selectedAccessibleClassroomId,
-        classroomStudentId: selectedStudent.id,
-        topicId: selectedTopic?.id,
-      });
-    },
-    enabled: Boolean(selectedAccessibleClassroomId && selectedStudent),
-    initialData:
-      initialData.initialInterventions &&
-      selectedAccessibleClassroomId ===
-        (initialData.initialClassrooms.data[0]?.id ?? null) &&
-      selectedStudent?.id === (initialData.initialStudents?.data.students[0]?.id ?? null) &&
-      (selectedTopic?.id ?? null) === (initialData.initialTopics?.data[0]?.id ?? null)
-        ? initialData.initialInterventions
-        : undefined,
-    staleTime: 30_000,
+    retry: retryTransientLearningApiFailure,
   });
 
   const uploadMaterialMutation = useMutation({
     mutationFn: uploadTopicMaterial,
-    onSuccess: async () => {
-      toast.success("Material uploaded");
+    onSuccess: async (result) => {
+      const failedCount = result.data.attempts.filter(
+        (attempt) => attempt.status === "failed",
+      ).length;
+      const queuedCount = result.data.attempts.length - failedCount;
+      if (queuedCount > 0) {
+        toast.success(
+          queuedCount === 1
+            ? "Material queued for processing"
+            : `${queuedCount} materials queued for processing`,
+        );
+      }
+      if (failedCount > 0) {
+        toast.error(
+          failedCount === 1
+            ? "One file could not be queued"
+            : `${failedCount} files could not be queued`,
+        );
+      } else {
+      }
       if (selectedTopic) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: queryKeys.learning.materials(selectedTopic.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.learning.materialUploadAttempts(selectedTopic.id) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.learning.readiness(selectedTopic.id) }),
         ]);
       }
@@ -305,57 +271,6 @@ export function useTeacherLearningWorkspace(
       }
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to update topic"),
-  });
-  const createClassSurveyMutation = useMutation({
-    mutationFn: async (classroomId: string) => {
-      const result = await createSurveyDraftAction({
-        deliveryMode: "classroom_assigned",
-        classroomId,
-      });
-      if (!result.success) {
-        throw new Error(getFriendlyActionError(result.error));
-      }
-      return result.data;
-    },
-    onSuccess: async (data) => {
-      toast.success("Class-linked survey draft created");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(null) });
-      router.push(`/dashboard/create?id=${encodeURIComponent(data.id)}`);
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create class-linked survey",
-      ),
-  });
-  const updateInterventionMutation = useMutation({
-    mutationFn: async (input: {
-      interventionId: string;
-      status: "planned" | "in_progress" | "completed" | "dismissed";
-      notes?: string;
-      dueAt?: string;
-    }) => {
-      const result = await updateLearningInterventionAction(input);
-      if (!result.success) {
-        throw new Error(getFriendlyActionError(result.error));
-      }
-      return result.data;
-    },
-    onSuccess: async () => {
-      toast.success("Intervention updated");
-      if (selectedAccessibleClassroomId && selectedStudent) {
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.interventions(
-            selectedAccessibleClassroomId,
-            selectedStudent.id,
-            selectedTopic?.id ?? null,
-          ),
-        });
-      }
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update intervention",
-      ),
   });
 
   const resendInvitationMutation = useMutation({
@@ -403,19 +318,6 @@ export function useTeacherLearningWorkspace(
 
   const reportsPayload = reportsQuery.data?.data ?? null;
   const reports = reportsPayload?.reports ?? [];
-  const questions = questionsQuery.data?.data ?? [];
-  const assignedSurveys = assignedSurveysQuery.data?.data ?? [];
-  const interventions = interventionsQuery.data?.data ?? ([] as LearningIntervention[]);
-  const selectedStudentReport =
-    reports.find((report) => report.student.id === selectedStudent?.id) ?? null;
-  const selectedStudentAssignedSurveyStates = assignedSurveys.map((survey) => ({
-    ...survey,
-    selectedStudentState:
-      survey.students.find((student) => student.classroomStudentId === selectedStudent?.id) ??
-      null,
-  }));
-  const patternSummary =
-    classroomStudentPatternsQuery.data?.data.profiles[0]?.studentSummary ?? null;
 
   return {
     classroomsQuery,
@@ -428,34 +330,19 @@ export function useTeacherLearningWorkspace(
     students,
     pendingInvitations,
     topics,
-    selectedStudent,
     selectedTopic,
     materialsQuery,
-    readinessQuery,
+    materialUploadAttemptsQuery,
     reportsQuery,
-    questionsQuery,
-    classroomStudentPatternsQuery,
-    assignedSurveysQuery,
-    interventionsQuery,
     uploadMaterialMutation,
     updateTopicStatusMutation,
-    createClassSurveyMutation,
-    updateInterventionMutation,
     resendInvitationMutation,
     cancelInvitationMutation,
     reportsPayload,
     reports,
-    questions,
-    assignedSurveys,
-    interventions,
-    selectedStudentReport,
-    selectedStudentAssignedSurveyStates,
-    patternSummary,
     selectedClassroomId,
     setSelectedClassroomId,
     selectedTopicId,
     setSelectedTopicId,
-    selectedClassroomStudentId,
-    setSelectedClassroomStudentId,
   };
 }

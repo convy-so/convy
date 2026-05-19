@@ -2,6 +2,7 @@
 
 import { AlertCircle, ArrowRight, Clock, FileText, Sparkles } from "lucide-react";
 import { Link } from "@/i18n/routing";
+import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 import { classroomInitials } from "@/lib/student-course-accents";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +14,7 @@ export type StudentCourseCardMembership = {
     title: string;
     gradeLabel: string;
   };
-  topics: Array<{ id: string; subjectLabel?: string }>;
+  topics: Array<{ id: string; subject?: string | null; subjectKey?: string | null }>;
 };
 
 type Props = {
@@ -92,7 +93,7 @@ export function StudentCourseCard({
         <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-4">
           <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
             <Clock className="h-3.5 w-3.5" aria-hidden />
-            {membership.topics[0]?.subjectLabel ?? "General"}
+            {membership.topics[0]?.subject ?? getSubjectDisplayLabel(membership.topics[0]?.subjectKey)}
           </span>
           <span
             className={cn(

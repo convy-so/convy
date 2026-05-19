@@ -9,6 +9,7 @@ import {
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
+import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 import type {
   getMyPatternSummaries,
   getOnboardingStateData,
@@ -244,7 +245,9 @@ export function StudentProfilePage({
                         <div className="text-sm font-semibold text-slate-950">
                           {pattern.scopeType === "global"
                             ? "Across subjects"
-                            : pattern.subjectLabel ?? pattern.subjectKey ?? "Subject"}
+                            : pattern.subjectKey
+                              ? getSubjectDisplayLabel(pattern.subjectKey)
+                              : "Subject"}
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
                           Confidence: {pattern.confidenceLabel}
@@ -279,7 +282,9 @@ export function StudentProfilePage({
                 <div className="text-sm font-semibold text-slate-950">
                   {strongestPattern.scopeType === "global"
                     ? "Across subjects"
-                    : strongestPattern.subjectLabel ?? strongestPattern.subjectKey ?? "Subject"}
+                    : strongestPattern.subjectKey
+                      ? getSubjectDisplayLabel(strongestPattern.subjectKey)
+                      : "Subject"}
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
                   {strongestPattern.studentSummary}
