@@ -56,6 +56,21 @@ export const EmailService = {
     });
   },
 
+  async sendExpertInvitationVerificationEmail(params: {
+    email: string;
+    name?: string | null;
+    locale?: AppLocale;
+    customUrl: string;
+  }) {
+    return await enqueueEmail({
+      type: "expert-invitation-verification",
+      email: params.email.trim().toLowerCase(),
+      url: params.customUrl,
+      name: params.name,
+      metadata: params.locale ? { locale: params.locale } : undefined,
+    });
+  },
+
   /**
    * Sends a password reset email.
    */
@@ -72,6 +87,21 @@ export const EmailService = {
       type: "password-reset",
       email: params.email.trim().toLowerCase(),
       url: resetUrl,
+      name: params.name,
+      metadata: params.locale ? { locale: params.locale } : undefined,
+    });
+  },
+
+  async sendExpertPasswordSetupEmail(params: {
+    email: string;
+    name?: string | null;
+    locale?: AppLocale;
+    customUrl: string;
+  }) {
+    return await enqueueEmail({
+      type: "expert-password-setup",
+      email: params.email.trim().toLowerCase(),
+      url: params.customUrl,
       name: params.name,
       metadata: params.locale ? { locale: params.locale } : undefined,
     });

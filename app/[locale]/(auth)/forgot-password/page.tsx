@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { Mail, ArrowLeft, Check, Loader2 } from "lucide-react";
@@ -13,12 +13,17 @@ import { InputField } from "@/components/auth/input-field";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
+import { sanitizeReturnTo } from "@/lib/auth/redirect";
+import { getSafeReturnToHref, getSignInHref } from "@/lib/auth/hrefs";
 
 function ForgotPasswordContent() {
   const params = useParams<{ locale?: string | string[] }>();
+  const searchParams = useSearchParams();
   const locale = Array.isArray(params.locale)
     ? (params.locale[0] ?? "en")
     : (params.locale ?? "en");
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
+  const returnToHref = getSafeReturnToHref(returnTo) ?? getSignInHref();
   const t = useTranslations('Auth.ForgotPassword');
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -31,7 +36,9 @@ function ForgotPasswordContent() {
     try {
       await authClient.requestPasswordReset({
         email,
-        redirectTo: `/${locale}/reset-password`,
+        redirectTo: returnTo
+          ? `/${locale}/reset-password?returnTo=${encodeURIComponent(returnTo)}`
+          : `/${locale}/reset-password`,
         fetchOptions: {
           onSuccess: () => {
             setIsSubmitted(true);
@@ -61,7 +68,7 @@ function ForgotPasswordContent() {
         }}
         secondaryAction={{
           text: t('BackToSignIn'),
-          href: "/sign-in"
+          href: returnToHref
         }}
       />
     );
@@ -91,7 +98,7 @@ function ForgotPasswordContent() {
 
       <div className="text-center mt-6">
         <Link
-          href="/sign-in"
+          href={returnToHref}
           className="inline-flex items-center gap-2 text-[#696969] text-sm hover:text-[#292929] transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

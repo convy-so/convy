@@ -3,6 +3,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
+import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -13,6 +14,11 @@ import {
   validateSignupIntent,
 } from "@/lib/auth/auth-intent";
 import { logAuthAuditEvent } from "@/lib/auth/audit";
+import {
+  findActivePendingExpertInvitationByEmail,
+  markExpertInvitationCompleted,
+} from "@/lib/auth/expert-invitations";
+import { normalizeExpertDisplayName } from "@/lib/auth/expert-profile";
 import { env } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n/config";
 import { defaultAppLocale, isAppLocale } from "@/lib/i18n/config";
@@ -140,7 +146,12 @@ export const auth = betterAuth({
     admin({
       adminRoles: ["admin"],
       defaultRole: "student",
-      adminUserIds: env.ADMIN_USER_IDS,
+      roles: {
+        admin: adminAc,
+        expert: userAc,
+        teacher: userAc,
+        student: userAc,
+      },
     }),
     nextCookies(),
   ],
@@ -156,12 +167,28 @@ export const auth = betterAuth({
         readLocaleField(user, "uiLocale") ??
         readLocaleField(user, "preferredLanguage") ??
         defaultAppLocale;
+      const pendingExpertInvitation = await findActivePendingExpertInvitationByEmail(user.email);
+      if (pendingExpertInvitation) {
+        await EmailService.sendExpertPasswordSetupEmail({
+          email: user.email,
+          name: normalizeExpertDisplayName(user.name),
+          customUrl: url,
+          locale,
+        });
+        return;
+      }
       await EmailService.sendPasswordResetEmail({
         email: user.email,
         name: user.name,
         token: "",
         customUrl: url,
         locale,
+      });
+    },
+    onPasswordReset: async ({ user }) => {
+      await markExpertInvitationCompleted({
+        invitedUserId: user.id,
+        email: user.email,
       });
     },
   },
@@ -174,6 +201,16 @@ export const auth = betterAuth({
         readLocaleField(user, "uiLocale") ??
         readLocaleField(user, "preferredLanguage") ??
         defaultAppLocale;
+      const pendingExpertInvitation = await findActivePendingExpertInvitationByEmail(user.email);
+      if (pendingExpertInvitation) {
+        await EmailService.sendExpertInvitationVerificationEmail({
+          email: user.email,
+          name: normalizeExpertDisplayName(user.name),
+          customUrl: url,
+          locale,
+        });
+        return;
+      }
       await EmailService.sendVerificationEmail({
         email: user.email,
         name: user.name,
@@ -233,10 +270,6 @@ export const auth = betterAuth({
         before: async (user) => {
           if (typeof user.email === "string") {
             user.email = normalizeIdentityEmail(user.email);
-          }
-
-          if (user.email && env.ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-            throw new Error("Admin emails cannot be registered as normal users.");
           }
 
           if (user.initialRole) {

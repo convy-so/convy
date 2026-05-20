@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { Mail, Lock, Loader2, ShieldCheck, ArrowRight } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
-import { useRouter } from "@/i18n/routing";
+import { Link, useRouter } from "@/i18n/routing";
 import { prepareAuthIntent } from "@/lib/auth/intent-client";
 
 export default function ExpertLoginPage() {
@@ -135,9 +135,17 @@ export default function ExpertLoginPage() {
               </div>
 
               <div className="text-sm leading-6">
-                <a href="#" className="font-medium text-slate-900 hover:text-slate-700 transition-colors">
+                <Link
+                  href={{
+                    pathname: "/forgot-password",
+                    query: {
+                      returnTo: `/${locale}/expert-login`,
+                    },
+                  }}
+                  className="font-medium text-slate-900 hover:text-slate-700 transition-colors"
+                >
                   Forgot password?
-                </a>
+                </Link>
               </div>
             </div>
 

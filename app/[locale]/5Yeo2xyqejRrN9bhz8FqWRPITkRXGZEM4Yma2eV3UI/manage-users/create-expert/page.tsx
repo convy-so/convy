@@ -10,10 +10,7 @@ import toast from "react-hot-toast";
 export default function CreateExpertPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-  });
+  const [email, setEmail] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,16 +20,18 @@ export default function CreateExpertPage() {
       const res = await fetch("/api/admin/experts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to provision expert account");
+        throw new Error(
+          data?.error?.message ?? data?.error ?? "Failed to send expert invitation",
+        );
       }
 
-      toast.success("Expert account provisioned successfully.");
+      toast.success("Expert invitation sent.");
       router.push(getAdminAppPath("/manage-users"));
       router.refresh();
     } catch (error) {
@@ -55,10 +54,10 @@ export default function CreateExpertPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Provision Expert Account
+            Provision Expert
           </h1>
           <p className="mt-1 text-slate-500">
-            Create a new pedagogical expert with elevated system access.
+            Create the expert account from email only, then let the expert set their own name during onboarding.
           </p>
         </div>
       </div>
@@ -66,26 +65,6 @@ export default function CreateExpertPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-4">
-            <div>
-              <label
-                htmlFor="name"
-                className="mb-1 block text-sm font-medium text-slate-700"
-              >
-                Full Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 outline-none transition-all focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600"
-                placeholder="Dr. Jane Doe"
-              />
-            </div>
-
             <div>
               <label
                 htmlFor="email"
@@ -101,10 +80,8 @@ export default function CreateExpertPage() {
                   id="email"
                   type="email"
                   required
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 outline-none transition-all focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600"
                   placeholder="jane.doe@convy.com"
                 />
@@ -129,7 +106,7 @@ export default function CreateExpertPage() {
               ) : (
                 <UserPlus className="h-4 w-4" />
               )}
-              Provision Account
+              Send Invitation
             </button>
           </div>
         </form>

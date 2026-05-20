@@ -1,25 +1,3 @@
-/**
- * lib/rag/core.ts
- *
- * Generic RAG Engine — the single source of truth for the Convy retrieval stack.
- *
- * This module exports three groups of utilities that every AI feature
- * (Surveys, Learning Materials, Learning Evidence, Few-Shot Library) must
- * use instead of hand-rolling bespoke SQL or chunking code:
- *
- *   1. Indexing Utilities — `prepareEmbeddingsForIndexing`
- *      Token-aware chunking, retrieval-content formatting, and Voyage
- *      embedding generation packaged into one call.
- *
- *   2. SQL Query Helpers — `vectorSimilaritySql`, `textRankSql`, `textMatchSql`
- *      Drizzle SQL template fragments for pgvector cosine similarity and
- *      Postgres full-text search. Each feature keeps its own `db.select()` so
- *      Drizzle's column-level type inference is preserved.
- *
- *   3. Hybrid Retrieval Utilities — `fuseWithRRF`, `HybridSearchRow`
- *      Reciprocal Rank Fusion (k=60, the industry default proven in the TREC
- *      evaluations) for merging heterogeneous result sets before reranking.
- */
 
 import { type AnyColumn, sql, type SQL } from "drizzle-orm";
 
