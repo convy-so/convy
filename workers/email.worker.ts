@@ -9,6 +9,8 @@ import type { EmailJobData } from "@/lib/queue";
 import { getRedisClient } from "@/lib/redis";
 import { VerificationEmail } from "@/components/emails/verification";
 import { PasswordResetEmail } from "@/components/emails/password-reset";
+import { ExpertInvitationVerificationEmail } from "@/components/emails/expert-invitation-verification";
+import { ExpertPasswordSetupEmail } from "@/components/emails/expert-password-setup";
 import { SecondaryVerificationEmail } from "@/components/emails/secondary-verification";
 import { SurveyDeletedEmail } from "@/components/emails/survey-deleted";
 import { StudentInvitationEmail } from "@/components/emails/student-invitation";
@@ -27,6 +29,8 @@ const jobDataSchema = z.object({
   type: z.enum([
     "verification",
     "password-reset",
+    "expert-invitation-verification",
+    "expert-password-setup",
     "secondary-verification",
     "survey-deleted",
     "student-invitation",
@@ -59,6 +63,8 @@ function getLocalizedEmailCopy(locale: ReturnType<typeof getMetadataLocale>) {
     {
       verificationSubject: string;
       resetSubject: string;
+      expertInvitationVerificationSubject: string;
+      expertPasswordSetupSubject: string;
       secondaryVerificationSubject: string;
       surveyDeletedSubject: string;
       studentInvitationSubject: (classroomName: string) => string;
@@ -67,6 +73,8 @@ function getLocalizedEmailCopy(locale: ReturnType<typeof getMetadataLocale>) {
     en: {
       verificationSubject: "Verify your Convyy account",
       resetSubject: "Reset your Convyy password",
+      expertInvitationVerificationSubject: "Verify your Convyy expert invitation",
+      expertPasswordSetupSubject: "Set your Convyy expert password",
       secondaryVerificationSubject: "Verify your secondary email address",
       surveyDeletedSubject: "Your survey has been deleted",
       studentInvitationSubject: (classroomName: string) =>
@@ -75,6 +83,8 @@ function getLocalizedEmailCopy(locale: ReturnType<typeof getMetadataLocale>) {
     fr: {
       verificationSubject: "Verifiez votre compte Convyy",
       resetSubject: "Reinitialisez votre mot de passe Convyy",
+      expertInvitationVerificationSubject: "Verifiez votre invitation expert Convyy",
+      expertPasswordSetupSubject: "Definissez votre mot de passe expert Convyy",
       secondaryVerificationSubject: "Verifiez votre adresse e-mail secondaire",
       surveyDeletedSubject: "Votre sondage a ete supprime",
       studentInvitationSubject: (classroomName: string) =>
@@ -83,6 +93,8 @@ function getLocalizedEmailCopy(locale: ReturnType<typeof getMetadataLocale>) {
     de: {
       verificationSubject: "Bestaetige dein Convyy-Konto",
       resetSubject: "Setze dein Convyy-Passwort zurueck",
+      expertInvitationVerificationSubject: "Bestaetige deine Convyy-Experteneinladung",
+      expertPasswordSetupSubject: "Lege dein Convyy-Expertenpasswort fest",
       secondaryVerificationSubject: "Bestaetige deine zusaetzliche E-Mail-Adresse",
       surveyDeletedSubject: "Deine Umfrage wurde geloescht",
       studentInvitationSubject: (classroomName: string) =>
@@ -122,6 +134,16 @@ const emailWorker = new Worker<EmailJobData>(
     } else if (type === "password-reset") {
       subject = localizedCopy.resetSubject;
       html = await render(React.createElement(PasswordResetEmail, { url, name }));
+    } else if (type === "expert-invitation-verification") {
+      subject = localizedCopy.expertInvitationVerificationSubject;
+      html = await render(
+        React.createElement(ExpertInvitationVerificationEmail, { url, name }),
+      );
+    } else if (type === "expert-password-setup") {
+      subject = localizedCopy.expertPasswordSetupSubject;
+      html = await render(
+        React.createElement(ExpertPasswordSetupEmail, { url, name }),
+      );
     } else if (type === "secondary-verification") {
       subject = localizedCopy.secondaryVerificationSubject;
       html = await render(

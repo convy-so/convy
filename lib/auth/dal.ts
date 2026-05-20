@@ -3,11 +3,16 @@ import "server-only";
 import { headers } from "next/headers";
 
 import { auth, type AuthSessionWithUser } from "@/lib/auth";
+import { getDatabaseConnectionInfo } from "@/lib/db/connection-mode";
 import { isTransientDatabaseError } from "@/lib/db/errors";
+import { env } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n/config";
+import { createLogger } from "@/lib/logger";
 import type { PlatformRole } from "./roles";
 
 const SUPPORTED_LOCALE_SET = new Set<string>(["en", "fr", "de"]);
+const log = createLogger("auth-session");
+const databaseInfo = getDatabaseConnectionInfo(env.DATABASE_URL);
 
 export { AuthError, type PlatformRole, type RolePrincipal } from "./roles";
 import { AuthError, getPlatformRole } from "./roles";
@@ -86,13 +91,45 @@ function isTransientSessionLookupError(error: unknown) {
       "ENOTFOUND",
       "Connection terminated unexpectedly",
       "read ECONNRESET",
-      "Failed query: select",
     ].some((token) => value.includes(token)),
   );
 }
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logSessionLookupFailure(error: unknown, attempt: number) {
+  if (!(error instanceof Error)) {
+    log.error("Session lookup failed", {
+      attempt,
+      db_mode: databaseInfo.mode,
+      db_host: databaseInfo.host,
+      db_port: databaseInfo.port,
+      db_is_local: databaseInfo.isLocal,
+      error_message: String(error),
+    });
+    return;
+  }
+
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : null;
+  const causeError = cause instanceof Error ? cause : null;
+  const causeCode =
+    cause && typeof cause === "object" && "code" in cause
+      ? String((cause as { code?: unknown }).code ?? "")
+      : "";
+
+  log.error("Session lookup failed", {
+    attempt,
+    db_mode: databaseInfo.mode,
+    db_host: databaseInfo.host,
+    db_port: databaseInfo.port,
+    db_is_local: databaseInfo.isLocal,
+    error_name: error.name,
+    error_message: error.message,
+    ...(causeError ? { cause_name: causeError.name, cause_message: causeError.message } : {}),
+    ...(causeCode ? { cause_code: causeCode } : {}),
+  });
 }
 
 export async function getCurrentSession(
@@ -109,6 +146,7 @@ export async function getCurrentSession(
         }),
       );
     } catch (error) {
+      logSessionLookupFailure(error, attempt + 1);
       lastError = error;
       if (!isTransientSessionLookupError(error) || attempt === 2) {
         break;

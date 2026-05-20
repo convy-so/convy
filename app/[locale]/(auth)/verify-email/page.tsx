@@ -8,7 +8,8 @@ import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 import { StatusCard } from "@/components/auth/status-card";
 import { LoadingOverlay } from "@/components/auth/loading-overlay";
-import { getAuthContinueHref, getSignInHref } from "@/lib/auth/hrefs";
+import { getAuthContinueHref, getSafeReturnToHref, getSignInHref } from "@/lib/auth/hrefs";
+import { sanitizeReturnTo } from "@/lib/auth/redirect";
 
 import { Suspense } from "react";
 
@@ -35,6 +36,8 @@ function VerifyEmailContent() {
   const token = searchParams.get("token");
   const callbackURL = searchParams.get("callbackURL");
   const invitationId = searchParams.get("invitationId");
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
+  const returnToHref = getSafeReturnToHref(returnTo);
   const t = useTranslations('Auth.VerifyEmail');
 
   const [email, setEmail] = useState<string | null>(null);
@@ -125,7 +128,7 @@ function VerifyEmailContent() {
       } : undefined}
       secondaryAction={{
         text: t('BackToSignIn'),
-        href: getSignInHref(invitationId)
+        href: returnToHref ?? getSignInHref(invitationId)
       }}
     />
   );

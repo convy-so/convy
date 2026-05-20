@@ -1,6 +1,4 @@
-import type { AppLocale } from "@/lib/i18n/config";
-
-import { localizeAppPath } from "@/lib/auth/redirect";
+import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
 
 export const ADMIN_ROUTE_SEGMENT = "5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI";
 
@@ -17,5 +15,5 @@ export function getLocalizedAdminAppPath(
   locale: AppLocale,
   path = "",
 ): string {
-  return localizeAppPath(locale, getAdminAppPath(path));
+  return `/${normalizeAppLocale(locale)}${getAdminAppPath(path)}`;
 }

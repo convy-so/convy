@@ -5,9 +5,12 @@ const SAFE_PREFIXES = [
   "/dashboard",
   "/student",
   "/expert",
+  "/expert-login",
   getAdminAppPath(),
   "/invite",
+  "/expert-invite",
   "/auth/continue",
+  "/sign-in",
   "/verify-email",
 ] as const;
 

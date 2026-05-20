@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   ShieldAlert,
   Shield,
@@ -9,17 +9,28 @@ import {
 } from "lucide-react";
 
 import { getDb } from "@/db";
-import { users } from "@/db/schema";
+import { expertInvitations, users } from "@/db/schema";
 import { Link } from "@/i18n/routing";
 import { getAdminAppPath } from "@/lib/auth/admin-path";
+import { normalizeExpertDisplayName } from "@/lib/auth/expert-profile";
+import { isExpertInvitationExpired } from "@/lib/auth/expert-invitations";
+import { ResendExpertInviteButton } from "@/components/admin/resend-expert-invite-button";
 
 export default async function AdminUsersPage() {
   await headers();
 
-  const allUsers = await getDb()
-    .select()
-    .from(users)
-    .orderBy(desc(users.createdAt));
+  const [allUsers, pendingInvites] = await Promise.all([
+    getDb().select().from(users).orderBy(desc(users.createdAt)),
+    getDb()
+      .select()
+      .from(expertInvitations)
+      .where(eq(expertInvitations.status, "pending"))
+      .orderBy(desc(expertInvitations.createdAt)),
+  ]);
+
+  const pendingInviteByUserId = new Map(
+    pendingInvites.map((invite) => [invite.invitedUserId, invite]),
+  );
 
   return (
     <div className="space-y-6">
@@ -50,7 +61,11 @@ export default async function AdminUsersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {allUsers.map((user) => (
+            {allUsers.map((user) => {
+              const displayName = normalizeExpertDisplayName(user.name);
+              const avatarLabel = (displayName ?? user.email).charAt(0).toUpperCase();
+
+              return (
               <tr
                 key={user.id}
                 className="transition-colors hover:bg-slate-50/50"
@@ -58,10 +73,12 @@ export default async function AdminUsersPage() {
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 font-bold text-slate-600">
-                      {user.name?.charAt(0).toUpperCase()}
+                      {avatarLabel}
                     </div>
                     <div>
-                      <p className="font-medium text-slate-900">{user.name}</p>
+                      <p className="font-medium text-slate-900">
+                        {displayName ?? "Name pending"}
+                      </p>
                       <p className="text-sm text-slate-500">{user.email}</p>
                     </div>
                   </div>
@@ -89,6 +106,24 @@ export default async function AdminUsersPage() {
                     <span className="inline-flex items-center gap-1 text-sm font-medium text-red-600">
                       <ShieldAlert className="h-4 w-4" /> Banned
                     </span>
+                  ) : user.role === "expert" && pendingInviteByUserId.has(user.id) ? (
+                    (() => {
+                      const invite = pendingInviteByUserId.get(user.id)!;
+                      const expired = isExpertInvitationExpired(invite);
+
+                      return (
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`text-sm font-medium ${
+                              expired ? "text-amber-600" : "text-sky-600"
+                            }`}
+                          >
+                            {expired ? "Invite expired" : "Invite pending"}
+                          </span>
+                          <ResendExpertInviteButton invitationId={invite.id} />
+                        </div>
+                      );
+                    })()
                   ) : (
                     <span className="text-sm font-medium text-emerald-600">
                       Active
@@ -99,7 +134,8 @@ export default async function AdminUsersPage() {
                   {new Date(user.createdAt).toLocaleDateString()}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

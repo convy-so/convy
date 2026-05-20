@@ -18,7 +18,6 @@ dns.setDefaultResultOrder("ipv4first");
  * In development, we use a global variable to preserve the pool across HMR reloads.
  */
 
-// Determine if we need SSL (Remote DB)
 const isLocal =
   env.DATABASE_URL.includes("localhost") ||
   env.DATABASE_URL.includes("127.0.0.1");
@@ -34,34 +33,24 @@ const poolConfig = {
 };
 
 declare global {
-  var db: ReturnType<typeof drizzle<typeof schema>> | undefined;
   var pool: Pool | undefined;
 }
 
 export function getDb() {
-  if (global.db) return global.db;
-
-  const pool = new Pool(poolConfig);
+  const pool = global.pool ?? new Pool(poolConfig);
 
   // Prevent crash on idle client errors
-  pool.on("error", (err) => {
-    console.error("[db] idle client error", {
-      message: err?.message,
-      name: err?.name,
+  if (!global.pool) {
+    pool.on("error", (err) => {
+      console.error("[db] idle client error", {
+        message: err?.message,
+        name: err?.name,
+      });
     });
-  });
-
-  const db = drizzle(pool, { schema });
-
-  // In Next.js, we want to persist the connection across HMR in dev.
-  // In production, each request/edge function might get its own,
-  // but during build, we MUST NOT instantiate this at the top level of a module.
-  if (env.NODE_ENV !== "production") {
-    global.db = db;
     global.pool = pool;
   }
 
-  return db;
+  return drizzle(pool, { schema });
 }
 
 export type DbClient = ReturnType<typeof getDb>;

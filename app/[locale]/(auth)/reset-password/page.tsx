@@ -14,10 +14,14 @@ import { PasswordStrength } from "@/components/auth/password-strength";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
+import { sanitizeReturnTo } from "@/lib/auth/redirect";
+import { getSafeReturnToHref, getSignInHref } from "@/lib/auth/hrefs";
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo")) ?? "/sign-in";
+  const returnToHref = getSafeReturnToHref(returnTo) ?? getSignInHref();
   const t = useTranslations('Auth.ResetPassword');
 
   const [showPassword, setShowPassword] = useState(false);
@@ -90,7 +94,7 @@ function ResetPasswordContent() {
         description={t('Success.Description')}
         actionButton={{
           text: t('Success.Button'),
-          href: "/sign-in"
+          href: returnToHref
         }}
       />
     );
@@ -174,7 +178,7 @@ function ResetPasswordContent() {
 
       <div className="text-center mt-6">
         <Link
-          href="/sign-in"
+          href={returnToHref}
           className="text-[#696969] text-sm hover:text-[#292929] transition-colors"
         >
           {t('Success.Button')}

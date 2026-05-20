@@ -107,18 +107,6 @@ export const env = {
         .filter(Boolean)
     : [],
 
-  ADMIN_EMAILS: optional("ADMIN_EMAILS")
-    ? optional("ADMIN_EMAILS")!
-        .split(",")
-        .map((e) => e.trim().toLowerCase())
-    : [],
-  ADMIN_USER_IDS: optional("ADMIN_USER_IDS")
-    ? optional("ADMIN_USER_IDS")!
-        .split(",")
-        .map((id) => id.trim())
-        .filter(Boolean)
-    : [],
-  ADMIN_PASSWORD: required("ADMIN_PASSWORD"),
   MEM0_API_KEY: optional("MEM0_API_KEY"),
   MEM0_ORG_ID: optional("MEM0_ORG_ID"),
   MEM0_PROJECT_ID: optional("MEM0_PROJECT_ID"),

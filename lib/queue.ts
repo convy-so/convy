@@ -52,6 +52,8 @@ export interface EmailJobData {
   type:
     | "verification"
     | "password-reset"
+    | "expert-invitation-verification"
+    | "expert-password-setup"
     | "secondary-verification"
     | "survey-deleted"
     | "student-invitation";

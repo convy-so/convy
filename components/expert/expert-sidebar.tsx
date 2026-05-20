@@ -14,14 +14,19 @@ import {
   Boxes,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useParams, usePathname, useRouter } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import { Link, usePathname, useRouter } from "@/i18n/routing";
+import { Link } from "@/i18n/routing";
 
 export function ExpertSidebar() {
   const pathname = usePathname();
+  const params = useParams<{ locale?: string | string[] }>();
   const router = useRouter();
+  const locale = Array.isArray(params.locale)
+    ? (params.locale[0] ?? "en")
+    : (params.locale ?? "en");
 
   const navigation = [
     { name: "Pedagogical Frameworks", href: "/expert/frameworks", icon: BookOpen },
@@ -40,7 +45,7 @@ export function ExpertSidebar() {
       fetchOptions: {
         onSuccess: () => {
           toast.success("Signed out successfully");
-          router.replace("/expert-login");
+          router.replace(`/${locale}/expert-login`);
         },
       },
     });
@@ -57,7 +62,7 @@ export function ExpertSidebar() {
 
       <nav className="flex-1 p-4 space-y-1">
         {navigation.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === `/${locale}${item.href}` || pathname.endsWith(item.href);
           return (
             <Link
               key={item.name}
