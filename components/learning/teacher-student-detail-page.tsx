@@ -589,7 +589,7 @@ export function TeacherStudentDetailPage({
                         </div>
                         {selectedConversationSession.topicId ? (
                           <Link
-                            href={`/dashboard/learning/topics/${selectedConversationSession.topicId}`}
+                            href={`/dashboard/learning/sessions/${selectedConversationSession.topicId}`}
                             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
                           >
                             Open topic

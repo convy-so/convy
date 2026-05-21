@@ -143,7 +143,6 @@ export function TeacherLearningHome(
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
                             <span>{classroom.gradeLabel}</span>
                             <span>•</span>
-                            <span>{classroom.subject ?? "General"}</span>
                             <span>•</span>
                             <span>{appLocaleLabels[classroom.defaultContentLocale]}</span>
                           </div>
@@ -249,7 +248,6 @@ export function TeacherLearningHome(
                   <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                     <span>{selectedDirectoryClassroom.gradeLabel}</span>
                     <span>•</span>
-                    <span>{selectedDirectoryClassroom.subject ?? "General"}</span>
                     <span>•</span>
                     <span>{appLocaleLabels[selectedDirectoryClassroom.defaultContentLocale]}</span>
                   </div>
@@ -592,12 +590,6 @@ export function TeacherLearningHome(
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
-                        <span className="text-slate-500">Subject</span>
-                        <span className="font-medium text-slate-900">
-                          {selectedDirectoryClassroom.subject ?? "General"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
                         <span className="text-slate-500">Default language</span>
                         <span className="font-medium text-slate-900">
                           {appLocaleLabels[selectedDirectoryClassroom.defaultContentLocale]}
@@ -687,6 +679,7 @@ export function TeacherLearningHome(
             isOpen={isTopicModalOpen}
             onClose={() => setIsTopicModalOpen(false)}
             classroomId={selectedAccessibleClassroomId}
+            availableCourses={initialData.availableCourses}
           />
         </>
       ) : null}

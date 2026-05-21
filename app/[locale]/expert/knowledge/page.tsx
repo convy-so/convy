@@ -12,7 +12,7 @@ export default async function ExpertKnowledgePage() {
           Knowledge Inbox
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Approve or archive crystallized heuristics before they enter published runtime models.
+          Review draft heuristics synthesized from expert-reviewed conversations, then approve, reject, or tighten them before they influence live tutoring.
         </p>
       </div>
 

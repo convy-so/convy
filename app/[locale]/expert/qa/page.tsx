@@ -6,10 +6,10 @@ export default function QaReviewPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-950">
-            QA Review & Conflicts
+            Conversation Review
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Audit student-AI interactions, provide expert corrections, and resolve reasoning conflicts.
+            Review student conversations with the tutor, explain what went wrong, and record a stronger example response with clear rationale.
           </p>
         </div>
       </div>

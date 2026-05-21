@@ -12,25 +12,29 @@ import { TextareaField } from "@/components/auth/textarea-field";
 import { cn } from "@/lib/utils";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import { useRouter } from "@/i18n/routing";
-import { teacherSessionSubjectKeys, getSubjectDisplayLabel, type TeacherSessionSubjectKey } from "@/lib/learning/subject-packages";
 
 type CreateTopicModalProps = {
     isOpen: boolean;
     onClose: () => void;
     classroomId: string;
+    availableCourses: Array<{
+        id: string;
+        key: string;
+        title: string;
+    }>;
 };
 
 export function CreateTopicModal({ 
     isOpen, 
     onClose, 
-    classroomId 
+    classroomId,
+    availableCourses,
 }: CreateTopicModalProps) {
     const queryClient = useQueryClient();
     const router = useRouter();
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [subjectKey, setSubjectKey] =
-        useState<TeacherSessionSubjectKey>("mathematics");
+    const [courseId, setCourseId] = useState(availableCourses[0]?.id ?? "");
     
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -43,7 +47,7 @@ export function CreateTopicModal({
     const resetForm = () => {
         setTitle("");
         setDescription("");
-        setSubjectKey("mathematics");
+        setCourseId(availableCourses[0]?.id ?? "");
         setError(null);
     };
 
@@ -60,11 +64,17 @@ export function CreateTopicModal({
         setError(null);
 
         try {
+            const selectedCourse = availableCourses.find((course) => course.id === courseId);
+            if (!selectedCourse) {
+                throw new Error("Choose a course before creating the session.");
+            }
+
             const result = await createLearningTopicAction({
                 classroomId,
+                courseId: selectedCourse.id,
+                subjectKey: selectedCourse.key,
                 title: title.trim(),
                 description: description.trim() || undefined,
-                subjectKey,
             });
             if (!result.success) {
                 throw new Error(getFriendlyActionError(result.error));
@@ -76,7 +86,7 @@ export function CreateTopicModal({
             });
             resetForm();
             onClose();
-            router.push(`/dashboard/learning/topics/${result.data.id}`);
+            router.push(`/dashboard/learning/sessions/${result.data.id}`);
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {
@@ -111,7 +121,7 @@ export function CreateTopicModal({
                         <div>
                             <h3 className="text-lg font-semibold text-[#080808]">Create a new session</h3>
                             <p className="mt-1 text-sm text-[#696969]">
-                                Add the session title, subject, and overview to create the draft.
+                                Add the session title, course, and overview to create the draft.
                             </p>
                         </div>
                     </div>
@@ -141,20 +151,18 @@ export function CreateTopicModal({
                         <div className="grid gap-4 ">
                             <div className="space-y-2">
                                 <label className="block text-sm font-medium text-[#292929]">
-                                    Subject
+                                    Course
                                 </label>
                                 <div className="relative">
                                     <Hash className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#696969]" />
                                     <select
-                                        value={subjectKey}
-                                        onChange={(e) =>
-                                            setSubjectKey(e.target.value as TeacherSessionSubjectKey)
-                                        }
+                                        value={courseId}
+                                        onChange={(e) => setCourseId(e.target.value)}
                                         className="w-full rounded-xl border border-gray-200 bg-white py-3 pr-4 pl-10 text-sm text-[#292929] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#292929]"
                                     >
-                                        {teacherSessionSubjectKeys.map((value) => (
-                                            <option key={value} value={value}>
-                                                {getSubjectDisplayLabel(value)}
+                                        {availableCourses.map((course) => (
+                                            <option key={course.id} value={course.id}>
+                                                {course.title}
                                             </option>
                                         ))}
                                     </select>

@@ -118,13 +118,7 @@ export class TutorRuntimeService {
       studentModelId: studentModel.id,
       studentModelSnapshotId: latestSnapshotRecord?.id ?? null,
       frameworkState: {
-        currentStageId: runtimeModel.framework.startStageId,
-        completedStageIds: [],
-        stageAttemptCounts: {},
-        stageStartedAt: {
-          [runtimeModel.framework.startStageId]: new Date().toISOString(),
-        },
-        stageCompletedAt: {},
+
         lastTransitionAt: new Date().toISOString(),
         lastTransitionReason: "Initialized from published runtime model",
       },

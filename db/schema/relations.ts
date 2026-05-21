@@ -6,6 +6,7 @@ import {
   classrooms,
   classroomInvitations,
   classroomStudents,
+  courses,
   learningTopics,
   topicMaterials,
 } from "./learning";
@@ -27,6 +28,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   }),
   classroomInvitationsAccepted: many(classroomInvitations, {
     relationName: "classroom_invitations_accepted",
+  }),
+  courses: many(courses, {
+    relationName: "created_courses",
   }),
   learningTopics: many(learningTopics, {
     relationName: "created_learning_topics",

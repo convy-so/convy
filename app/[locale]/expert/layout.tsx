@@ -44,7 +44,7 @@ async function ExpertLayoutContent({
       <div className="flex-1 flex flex-col">
         <header className="h-16 border-b border-slate-200 bg-white flex items-center px-8 sticky top-0 z-10">
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-            Expert Operations
+            Expert Workspace
           </h2>
         </header>
         <main className="p-8 max-w-7xl mx-auto w-full">

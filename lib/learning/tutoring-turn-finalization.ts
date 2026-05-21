@@ -74,12 +74,12 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     topicId: params.topicId,
     assistantText,
     assistantMetadata: {
-      frameworkStageId: params.prepared.frameworkState.currentStageId,
+
       runtimeModelId: params.prepared.runtimeModel.id,
       runtimeModelVersion: params.prepared.runtimeModel.version,
       toolCalls: params.result.steps.flatMap((step) => step.toolCalls),
     },
-    interactionMetadata: { frameworkStageId: params.prepared.frameworkState.currentStageId },
+    interactionMetadata: {},
     nextState,
     expectedStateVersion: params.expectedStateVersion,
   });
@@ -111,7 +111,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
       frameworkVersion: params.prepared.runtimeModel.frameworkVersionId,
       studentModelSnapshotId: shouldUpdateStudentModel ? snapshot?.id : params.prepared.latestStudentSnapshotRecord?.id,
       materialIds: params.prepared.baselineScope.materialIds,
-      stageId: params.prepared.frameworkState.currentStageId,
+
       conflictState: params.prepared.runtimeModel.conflictIds.length > 0 ? "open" : "clear",
       autoCompleted: autoComplete,
       studentModelRefreshed: shouldUpdateStudentModel,

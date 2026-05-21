@@ -3,13 +3,14 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import { learningTopics } from "@/db/schema";
+import { getCourseById, getCourseByKey } from "@/lib/learning/course-service";
 import {
   learningOutcomeDefinitionSchema,
   topicSourceBoundarySchema,
   type LearningOutcomeDefinition,
   type TopicSourceBoundary,
 } from "@/lib/learning/types";
-import { getSubjectDisplayLabel, type TeacherSessionSubjectKey } from "@/lib/learning/subject-packages";
+import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 
 function normalizeLearningOutcome(
   outcome: LearningOutcomeDefinition,
@@ -33,7 +34,8 @@ export async function createLearningTopic(params: {
   createdByUserId: string;
   title: string;
   description?: string;
-  subjectKey: TeacherSessionSubjectKey;
+  subjectKey: string;
+  courseId?: string;
   contentLocale: "en" | "fr" | "de";
   learningOutcomes?: LearningOutcomeDefinition[];
   sourceBoundary?: Partial<TopicSourceBoundary>;
@@ -49,12 +51,21 @@ export async function createLearningTopic(params: {
     ...params.sourceBoundary,
     teacherSummary: params.sourceBoundary?.teacherSummary ?? params.description ?? "",
   });
+  const course =
+    (params.courseId ? await getCourseById(params.courseId) : null) ??
+    (await getCourseByKey(params.subjectKey));
+
+  if (!course) {
+    throw new Error("Course not found");
+  }
+
   const subjectDisplayLabel = getSubjectDisplayLabel(params.subjectKey);
 
   const [topic] = await getDb().insert(learningTopics).values({
     id: topicId,
     classroomId: params.classroomId,
     createdByUserId: params.createdByUserId,
+    courseId: course.id,
     title: params.title,
     description: params.description || null,
     subject: subjectDisplayLabel,
@@ -130,3 +141,7 @@ export async function listTopicsByClassroom(classroomId: string) {
     orderBy: (table, { desc }) => [desc(table.updatedAt)],
   });
 }
+
+export const createTeachingSession = createLearningTopic;
+export const updateTeachingSessionDetails = updateLearningTopicDetails;
+export const listSessionsByClassroom = listTopicsByClassroom;

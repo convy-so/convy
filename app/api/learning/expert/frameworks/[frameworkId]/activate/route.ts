@@ -43,13 +43,6 @@ export async function POST(
     if (!framework || !version) {
       return apiError("NOT_FOUND", "Framework or version not found");
     }
-    if (!framework.topicId) {
-      return apiError(
-        "VALIDATION_ERROR",
-        "Framework must be attached to a topic before activation",
-      );
-    }
-    const topicId = framework.topicId;
 
     const publishedRuntime = await getDb().transaction(async (tx) => {
       await tx
@@ -73,18 +66,18 @@ export async function POST(
       const [crystallizations, conflicts, latestRuntime] = await Promise.all([
         tx.query.expertCrystallizations.findMany({
           where: and(
-            eq(expertCrystallizations.topicId, framework.topicId ?? ""),
+            eq(expertCrystallizations.courseId, framework.courseId),
             eq(expertCrystallizations.status, "approved"),
           ),
         }),
         tx.query.expertConflicts.findMany({
           where: and(
-            eq(expertConflicts.topicId, framework.topicId ?? ""),
+            eq(expertConflicts.courseId, framework.courseId),
             eq(expertConflicts.status, "open"),
           ),
         }),
         tx.query.expertRuntimeModels.findFirst({
-          where: eq(expertRuntimeModels.topicId, topicId),
+          where: eq(expertRuntimeModels.courseId, framework.courseId),
           orderBy: [desc(expertRuntimeModels.version)],
         }),
       ]);
@@ -112,7 +105,8 @@ export async function POST(
         .insert(expertRuntimeModels)
         .values({
           id: nanoid(),
-          topicId,
+          courseId: framework.courseId,
+          topicId: framework.topicId ?? framework.topic?.id ?? null,
           frameworkId: framework.id,
           frameworkVersionId: version.id,
           version: nextVersion,

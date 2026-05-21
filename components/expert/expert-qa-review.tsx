@@ -68,9 +68,11 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
 export function ExpertQaReview() {
   const queryClient = useQueryClient();
   const [selectedQueueKey, setSelectedQueueKey] = useState<string | null>(null);
-  
-  const [annotationSummary, setAnnotationSummary] = useState("");
-  const [annotationEvidence, setAnnotationEvidence] = useState("");
+
+  const [failureSummary, setFailureSummary] = useState("");
+  const [reviewRationale, setReviewRationale] = useState("");
+  const [improvedExample, setImprovedExample] = useState("");
+  const [supportingEvidence, setSupportingEvidence] = useState("");
   const [annotationType, setAnnotationType] = useState("reasoning_gap");
   const [relevanceScope, setRelevanceScope] = useState<"general" | "framework_specific">("general");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -139,20 +141,31 @@ export function ExpertQaReview() {
           classroomStudentId: selectedQueueItem.classroomStudentId,
           reviewType: annotationType,
           priority: selectedQueueItem.priority,
-          tutorFailureSummary: annotationSummary.trim(),
-          expertCorrection: annotationEvidence.trim(),
+          tutorFailureSummary: failureSummary.trim(),
+          expertCorrection: [
+            reviewRationale.trim() ? `Rationale:\n${reviewRationale.trim()}` : "",
+            improvedExample.trim() ? `Improved example:\n${improvedExample.trim()}` : "",
+            supportingEvidence.trim() ? `Supporting evidence:\n${supportingEvidence.trim()}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
           relevanceScope,
           metadata: {
             reviewQueueKey: selectedQueueItem.key,
             reasons: selectedQueueItem.reasons,
+            reviewRationale: reviewRationale.trim(),
+            improvedExample: improvedExample.trim(),
+            supportingEvidence: supportingEvidence.trim(),
           },
         }),
       });
     },
     onSuccess: async () => {
-      setAnnotationSummary("");
-      setAnnotationEvidence("");
-      toast.success("Annotation saved successfully");
+      setFailureSummary("");
+      setReviewRationale("");
+      setImprovedExample("");
+      setSupportingEvidence("");
+      toast.success("Review saved");
       await queryClient.invalidateQueries({ queryKey: ["expertLearningReviewQueue"] });
       // Move to next item automatically
       if (queueQuery.data) {
@@ -167,7 +180,7 @@ export function ExpertQaReview() {
 
   const handleQuoteMessage = (message: TranscriptMessage) => {
     const formattedQuote = `> **${message.role === 'assistant' ? 'AI Tutor' : 'Student'}**: ${message.content}\n\n`;
-    setAnnotationEvidence((prev) => prev ? `${prev}\n${formattedQuote}` : formattedQuote);
+    setSupportingEvidence((prev) => prev ? `${prev}\n${formattedQuote}` : formattedQuote);
     toast.success("Quoted to evidence");
   };
 
@@ -330,13 +343,13 @@ export function ExpertQaReview() {
 
             {/* Annotation Form */}
             <div className="border-t border-slate-200 bg-white p-5">
-              <h3 className="text-sm font-bold text-slate-950 mb-4 uppercase tracking-wider">Expert Annotation</h3>
+              <h3 className="text-sm font-bold text-slate-950 mb-4 uppercase tracking-wider">Expert Review</h3>
               <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
                   <div className="space-y-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                        Error Type
+                        Review Type
                       </label>
                       <select
                         value={annotationType}
@@ -345,9 +358,9 @@ export function ExpertQaReview() {
                       >
                         <option value="reasoning_gap">Reasoning Gap</option>
                         <option value="misconception">Misconception</option>
-                        <option value="question_quality">Question Quality</option>
-                        <option value="rubric_improvement">Rubric Improvement</option>
-                        <option value="hint_ladder">Hint Ladder</option>
+                        <option value="question_quality">Questioning Quality</option>
+                        <option value="scaffolding">Scaffolding</option>
+                        <option value="feedback_quality">Feedback Quality</option>
                       </select>
                     </div>
                     <div>
@@ -386,7 +399,12 @@ export function ExpertQaReview() {
                     <button
                       type="button"
                       onClick={() => createAnnotationMutation.mutate()}
-                      disabled={createAnnotationMutation.isPending || !annotationSummary.trim()}
+                      disabled={
+                        createAnnotationMutation.isPending ||
+                        !failureSummary.trim() ||
+                        !reviewRationale.trim() ||
+                        !improvedExample.trim()
+                      }
                       className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       {createAnnotationMutation.isPending ? (
@@ -400,28 +418,52 @@ export function ExpertQaReview() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                        Correction Summary
+                        What Went Wrong
                       </label>
                       <textarea
-                        value={annotationSummary}
-                        onChange={(event) => setAnnotationSummary(event.target.value)}
+                        value={failureSummary}
+                        onChange={(event) => setFailureSummary(event.target.value)}
                         rows={4}
-                        placeholder="Explain exactly what the AI tutor should have done..."
+                        placeholder="Describe the specific tutor mistake in this exchange."
+                        className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Why It Was Wrong
+                      </label>
+                      <textarea
+                        value={reviewRationale}
+                        onChange={(event) => setReviewRationale(event.target.value)}
+                        rows={4}
+                        placeholder="Explain the pedagogical rationale for the correction."
+                        className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Better Example
+                      </label>
+                      <textarea
+                        value={improvedExample}
+                        onChange={(event) => setImprovedExample(event.target.value)}
+                        rows={5}
+                        placeholder="Write what a stronger tutor response would have looked like."
                         className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
-                        <span>Evidence</span>
+                        <span>Supporting Evidence</span>
                         <span className="text-[10px] font-medium normal-case text-slate-400 flex items-center gap-1">
                           <Quote className="h-3 w-3" /> Hover transcript to quote
                         </span>
                       </label>
                       <textarea
-                        value={annotationEvidence}
-                        onChange={(event) => setAnnotationEvidence(event.target.value)}
-                        rows={4}
-                        placeholder="Paste or quote evidence from the transcript..."
+                        value={supportingEvidence}
+                        onChange={(event) => setSupportingEvidence(event.target.value)}
+                        rows={5}
+                        placeholder="Paste or quote the transcript evidence that supports this review."
                         className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
                       />
                     </div>

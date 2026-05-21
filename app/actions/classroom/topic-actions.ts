@@ -8,7 +8,6 @@ import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 import * as TopicService from "@/lib/learning/topic-service";
 import {
   getSubjectDisplayLabel,
-  teacherSessionSubjectKeys,
 } from "@/lib/learning/subject-packages";
 import {
   learningOutcomeDefinitionSchema,
@@ -32,7 +31,8 @@ const createLearningTopicSchema = z.object({
   classroomId: z.string().min(1),
   title: z.string().trim().min(2),
   description: z.string().trim().optional(),
-  subjectKey: z.enum(teacherSessionSubjectKeys),
+  courseId: z.string().min(1),
+  subjectKey: z.string().min(1),
   learningOutcomes: z.array(learningOutcomeDefinitionSchema).optional(),
   sourceBoundary: topicSourceBoundarySchema.optional(),
   contentLocale: appLocaleSchema.optional(),
@@ -122,6 +122,7 @@ export async function createLearningTopicAction(input: unknown): Promise<
       createdByUserId: session.user.id,
       title: body.title,
       description: body.description,
+      courseId: body.courseId,
       subjectKey: body.subjectKey,
       contentLocale,
       learningOutcomes: normalizedLearningOutcomes,

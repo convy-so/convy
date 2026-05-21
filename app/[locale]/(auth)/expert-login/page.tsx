@@ -61,10 +61,10 @@ export default function ExpertLoginPage() {
           </div>
         </div>
         <h2 className="mt-6 text-center text-2xl font-bold tracking-tight text-slate-950">
-          Expert Operations Portal
+          Expert Portal
         </h2>
         <p className="mt-2 text-center text-sm text-slate-500">
-          Sign in to manage pedagogical frameworks and AI guidance.
+          Sign in to manage course frameworks, review tutoring conversations, and handle expert feedback.
         </p>
       </div>
 

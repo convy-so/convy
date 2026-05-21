@@ -27,6 +27,7 @@ import { isTransientDatabaseError } from "@/lib/db/errors";
 import { env } from "@/lib/env";
 import { listStudentMemberships, getTeacherTopicAccess } from "@/lib/learning/access";
 import * as ClassroomService from "@/lib/learning/classroom-service";
+import { listCourses } from "@/lib/learning/course-service";
 import * as InterventionService from "@/lib/learning/intervention-service";
 import { getOnboardingState } from "@/lib/learning/onboarding-route-service";
 import { buildClassroomTopicReportSummary } from "@/lib/learning/reporting";
@@ -1184,7 +1185,10 @@ export async function getTeacherLearningWorkspaceInitialData(
 ) {
   const session = await resolveQuerySession(authContext);
   const queryAuthContext = { session };
-  const initialClassrooms = await getTeacherClassroomsData(queryAuthContext);
+  const [initialClassrooms, availableCourses] = await Promise.all([
+    getTeacherClassroomsData(queryAuthContext),
+    listCourses(),
+  ]);
   const initialClassroomId = initialClassrooms.data[0]?.id ?? null;
 
   const [initialStudents, initialTopics] = initialClassroomId
@@ -1198,6 +1202,11 @@ export async function getTeacherLearningWorkspaceInitialData(
     initialClassrooms,
     initialStudents,
     initialTopics,
+    availableCourses: availableCourses.map((course) => ({
+      id: course.id,
+      key: course.key,
+      title: course.title,
+    })),
   };
 }
 
