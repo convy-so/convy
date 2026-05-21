@@ -1,8 +1,4 @@
-import { TopicSetupPage } from "@/components/learning/topic-setup-page";
-import {
-  getTopicMaterialsData,
-  getTopicSetupData,
-} from "@/lib/server/app-queries";
+import { redirect } from "next/navigation";
 
 export default async function LearningTopicDetailPage({
   params,
@@ -10,15 +6,5 @@ export default async function LearningTopicDetailPage({
   params: Promise<{ topicId: string }>;
 }) {
   const { topicId } = await params;
-  const [topicSetup, materials] = await Promise.all([
-    getTopicSetupData(topicId),
-    getTopicMaterialsData(topicId),
-  ]);
-
-  return (
-    <TopicSetupPage
-      initialData={topicSetup}
-      initialMaterials={materials}
-    />
-  );
+  redirect(`/dashboard/learning/sessions/${topicId}`);
 }

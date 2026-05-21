@@ -3,11 +3,11 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   classroomStudents,
-  expertFrameworks,
   learningInteractions,
   learningSessions,
   learningTopics,
 } from "@/db/schema";
+import { getFrameworkWithTopicLite } from "@/lib/learning/framework-records";
 
 export async function getExpertAccessibleTopic(topicId: string) {
   const topic = await getDb().query.learningTopics.findFirst({
@@ -25,17 +25,7 @@ export async function getExpertAccessibleTopic(topicId: string) {
 }
 
 export async function getExpertAccessibleFramework(frameworkId: string) {
-  const framework = await getDb().query.expertFrameworks.findFirst({
-    where: eq(expertFrameworks.id, frameworkId),
-    with: {
-      classroom: true,
-      topic: {
-        with: {
-          classroom: true,
-        },
-      },
-    },
-  });
+  const framework = await getFrameworkWithTopicLite(frameworkId);
 
   if (!framework) {
     return null;

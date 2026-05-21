@@ -2,16 +2,10 @@
 
 import {
   ShieldCheck,
-  ChevronLeft,
   LogOut,
-  Settings,
   BookOpen,
-  Cpu,
-  BrainCircuit,
-  FlaskConical,
-  Sparkles,
+  MessageSquare,
   Inbox,
-  Boxes,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -30,14 +24,9 @@ export function ExpertSidebar() {
 
   const navigation = [
     { name: "Pedagogical Frameworks", href: "/expert/frameworks", icon: BookOpen },
-    { name: "Runtime Models", href: "/expert/runtime-models", icon: Cpu },
-    { name: "QA Review", href: "/expert/qa", icon: ShieldCheck },
-    { name: "Knowledge Inbox", href: "/expert/knowledge", icon: Inbox },
-    { name: "Runtime Preview", href: "/expert/runtime-preview", icon: Sparkles },
-    { name: "Eval Baselines", href: "/expert/evals", icon: FlaskConical },
-    { name: "AI Ops", href: "/expert/ai-ops", icon: BrainCircuit },
-    { name: "Few-Shot Library", href: "/expert/few-shot", icon: Boxes },
-    { name: "Settings", href: "/expert/settings", icon: Settings },
+    { name: "Conversation Review", href: "/expert/qa", icon: MessageSquare },
+    { name: "Knowledge Inbox", href: "/expert/knowledge", icon: ShieldCheck },
+    { name: "Feedback", href: "/expert/feedback", icon: Inbox },
   ];
 
   const handleSignOut = async () => {
@@ -82,13 +71,6 @@ export function ExpertSidebar() {
       </nav>
 
       <div className="p-4 border-t border-slate-200 space-y-2">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Back to Dashboard
-        </Link>
         <button
           onClick={handleSignOut}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors"

@@ -496,7 +496,7 @@ export async function fetchClassroomStudents(classroomId: string) {
 
 export async function fetchClassroomTopics(classroomId: string) {
   return await parseResponse(
-    await fetch(`/api/learning/classrooms/${classroomId}/topics`, {
+    await fetch(`/api/learning/classrooms/${classroomId}/sessions`, {
       credentials: "include",
     }),
     z.object({ success: z.literal(true), data: z.array(topicSchema) }),
@@ -505,7 +505,7 @@ export async function fetchClassroomTopics(classroomId: string) {
 
 export async function fetchTopicMaterials(topicId: string) {
   return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/materials`, {
+    await fetch(`/api/learning/sessions/${topicId}/materials`, {
       credentials: "include",
     }),
     z.object({ success: z.literal(true), data: z.array(topicMaterialSchema) }),
@@ -514,7 +514,7 @@ export async function fetchTopicMaterials(topicId: string) {
 
 export async function fetchTopicMaterialUploadAttempts(topicId: string) {
   return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/material-upload-attempts`, {
+    await fetch(`/api/learning/sessions/${topicId}/material-upload-attempts`, {
       credentials: "include",
     }),
     z.object({
@@ -580,7 +580,7 @@ export async function uploadTopicMaterial(input: {
   if (input.description) formData.append("description", input.description);
 
   return await parseResponse(
-    await fetch(`/api/learning/topics/${input.topicId}/materials`, {
+    await fetch(`/api/learning/sessions/${input.topicId}/materials`, {
       method: "POST",
       credentials: "include",
       body: formData,
@@ -597,7 +597,7 @@ export async function uploadTopicMaterial(input: {
 
 export async function fetchTopicReadiness(topicId: string) {
   return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/readiness`, {
+    await fetch(`/api/learning/sessions/${topicId}/readiness`, {
       credentials: "include",
     }),
     z.object({ success: z.literal(true), data: readinessSchema }),
@@ -606,7 +606,7 @@ export async function fetchTopicReadiness(topicId: string) {
 
 export async function fetchTopicReports(topicId: string) {
   return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/reports`, {
+    await fetch(`/api/learning/sessions/${topicId}/reports`, {
       credentials: "include",
     }),
     z.object({
@@ -656,7 +656,7 @@ export async function fetchTopicQuestions(
     ? `?classroomStudentId=${encodeURIComponent(classroomStudentId)}`
     : "";
   return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/questions${query}`, {
+    await fetch(`/api/learning/sessions/${topicId}/questions${query}`, {
       credentials: "include",
     }),
     z.object({
@@ -714,7 +714,7 @@ export async function fetchTutoringSession(
 
   return await parseResponse(
     await fetch(
-      `/api/learning/topics/${topicId}/chat${searchParams.size ? `?${searchParams.toString()}` : ""}`,
+      `/api/learning/sessions/${topicId}/chat${searchParams.size ? `?${searchParams.toString()}` : ""}`,
       {
         credentials: "include",
       },

@@ -144,22 +144,23 @@ export const studentMasteryLevelSchema = z.enum([
 
 export type StudentMasteryLevel = z.infer<typeof studentMasteryLevelSchema>;
 
-export const expertFrameworkStageSchema = z.object({
+export const expertFrameworkExampleSchema = z.object({
   id: z.string().min(1),
-  label: z.string().min(1),
-  objective: z.string().min(1),
-  exitCriteria: z.array(z.string()).default([]),
-  guidance: z.array(z.string()).default([]),
-  allowedNextStageIds: z.array(z.string()).default([]),
+  title: z.string().min(1),
+  focusArea: z.string().default(""),
+  studentMessage: z.string().min(1),
+  tutorResponse: z.string().min(1),
+  rationale: z.string().default(""),
 });
 
-export type ExpertFrameworkStage = z.infer<typeof expertFrameworkStageSchema>;
+export type ExpertFrameworkExample = z.infer<typeof expertFrameworkExampleSchema>;
+
+
 
 export const expertFrameworkSchema = z.object({
   name: z.string().min(1),
   description: z.string().default(""),
-  startStageId: z.string().min(1),
-  stages: z.array(expertFrameworkStageSchema).min(1),
+  fewShotExamples: z.array(expertFrameworkExampleSchema).default([]),
 });
 
 export type ExpertFramework = z.infer<typeof expertFrameworkSchema>;
@@ -274,11 +275,6 @@ export const studentModelSnapshotSchema = z.object({
 export type StudentModelSnapshot = z.infer<typeof studentModelSnapshotSchema>;
 
 export const frameworkStateSchema = z.object({
-  currentStageId: z.string().nullable().default(null),
-  completedStageIds: z.array(z.string()).default([]),
-  stageAttemptCounts: z.record(z.string(), z.number().int().min(0)).default({}),
-  stageStartedAt: z.record(z.string(), z.string()).default({}),
-  stageCompletedAt: z.record(z.string(), z.string()).default({}),
   lastTransitionAt: z.string().nullable().default(null),
   lastTransitionReason: z.string().default(""),
 });

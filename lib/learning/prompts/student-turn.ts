@@ -9,6 +9,32 @@ function renderList(values: string[]) {
   return values.length ? values.map((value) => `- ${value}`).join("\n") : "- none";
 }
 
+function renderFewShotExamples(
+  label: string,
+  examples: Array<{
+    title: string;
+    focusArea?: string;
+    studentMessage: string;
+    tutorResponse: string;
+    rationale?: string;
+  }>,
+) {
+  if (!examples.length) {
+    return `${label}:\n- none`;
+  }
+
+  return `${label}:\n${examples
+    .map((example) =>
+      [
+        `- ${example.title}${example.focusArea ? ` (${example.focusArea})` : ""}`,
+        `  Student: ${example.studentMessage}`,
+        `  Tutor: ${example.tutorResponse}`,
+        `  Why: ${example.rationale || "No rationale provided."}`,
+      ].join("\n"),
+    )
+    .join("\n")}`;
+}
+
 export function buildStudentTurnSystemPrompt(params: {
   contentScope: ContentScopeSnapshot;
   runtimeModel: ExpertTutorRuntimeModel;
@@ -16,10 +42,7 @@ export function buildStudentTurnSystemPrompt(params: {
   frameworkState: FrameworkState;
   studyLanguage: string;
 }) {
-  const currentStage =
-    params.runtimeModel.framework.stages.find(
-      (stage) => stage.id === params.frameworkState.currentStageId,
-    ) ?? params.runtimeModel.framework.stages[0];
+
 
   return `You are Convy's tutor.
 
@@ -54,10 +77,11 @@ ${renderList(params.contentScope.retrievedContext)}
 
 Published expert framework:
 - Framework: ${params.runtimeModel.framework.name}
-- Current stage: ${currentStage?.label ?? "Unknown"}
-- Stage objective: ${currentStage?.objective ?? ""}
-- Stage guidance:
-${renderList(currentStage?.guidance ?? [])}
+- Framework description: ${params.runtimeModel.framework.description}
+${renderFewShotExamples(
+    "Framework reference examples",
+    params.runtimeModel.framework.fewShotExamples.slice(0, 3),
+  )}
 
 Crystallized pedagogical heuristics:
 ${renderList(
@@ -81,7 +105,7 @@ ${renderList(params.studentModel.longitudinalDevelopment.betterQuestionSignals)}
 Teaching rules:
 - Use the \`search_course_materials\` tool to find accurate evidence, definitions, and notation from the uploaded teacher content. You should always prefer searching to guessing.
 - Stay inside the uploaded material scope for concepts and claims.
-- Use the current stage objective and heuristics to decide your next move.
+- Use the framework description, heuristics, and reference examples to decide your next move.
 - Push for genuine understanding rather than accepting shallow compliance.
 - Keep the student in productive struggle: challenging but not discouraging.
 - Prefer one strong move per turn.

@@ -4,8 +4,8 @@ export function buildCrystallizationPrompt(params: {
   scope: "general" | "framework_specific";
 }) {
   const scopeInstruction = params.scope === "general"
-    ? "Focus on universal pedagogical principles that apply regardless of the specific framework stages. Avoid mentioning specific framework stage IDs unless they are fundamental concepts."
-    : "Focus on improving the specific framework provided. You may reference specific framework stage IDs and objectives to create precise patches for the current framework structure.";
+    ? "Focus on universal pedagogical principles that apply regardless of the specific framework. Avoid mentioning specific framework details unless they are fundamental concepts."
+    : "Focus on improving the specific framework provided. You may reference specific framework details and objectives to create precise patches for the current framework structure.";
 
   return `Crystallize reusable pedagogical knowledge from these expert-reviewed tutoring cases.
 
@@ -23,6 +23,5 @@ Each heuristic should state:
 - trigger
 - action
 - rationale
-- examples
-- likely stage relevance`;
+- examples`;
 }

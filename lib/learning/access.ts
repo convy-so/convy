@@ -67,6 +67,7 @@ export async function getTeacherTopicAccess(userId: string, topicId: string) {
     where: eq(learningTopics.id, topicId),
     with: {
       classroom: true,
+      course: true,
     },
   });
 
@@ -93,6 +94,7 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
     ),
     with: {
       classroom: true,
+      course: true,
     },
   });
 
@@ -122,6 +124,9 @@ export async function getStudentTutoringAccess(userId: string, topicId: string) 
   if (!access.classroomStudent.interestProfile) return null;
   return access;
 }
+
+export const getTeacherSessionAccess = getTeacherTopicAccess;
+export const getStudentSessionAccess = getStudentTopicAccess;
 
 export async function getPrimaryStudentMembership(userId: string) {
   const memberships = await listStudentMemberships(userId);

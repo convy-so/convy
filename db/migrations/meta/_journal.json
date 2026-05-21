@@ -57,6 +57,13 @@
       "when": 1779292770515,
       "tag": "0007_lush_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779356393921,
+      "tag": "0008_colorful_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

@@ -18,11 +18,6 @@ export class ExpertRuntimeModelService {
     topicId: string;
     classroomId?: string | null;
   }): Promise<ExpertTutorRuntimeModel> {
-    const published = await getPublishedRuntimeModel(params.topicId);
-    if (published) {
-      return expertTutorRuntimeModelSchema.parse(published.runtimeModel);
-    }
-
     const framework = await ensureTopicFramework({
       topicId: params.topicId,
       classroomId: params.classroomId,
@@ -32,8 +27,14 @@ export class ExpertRuntimeModelService {
       throw new Error("Active framework version not found.");
     }
 
+    const published = await getPublishedRuntimeModel(params.topicId);
+    if (published && published.frameworkVersionId === frameworkVersion.id) {
+      return expertTutorRuntimeModelSchema.parse(published.runtimeModel);
+    }
+
     const [approvedCrystallizations, openConflicts] = await Promise.all([
       listApprovedCrystallizations({
+        courseId: framework.courseId,
         topicId: params.topicId,
         frameworkVersionId: frameworkVersion.id,
       }),
@@ -61,6 +62,7 @@ export class ExpertRuntimeModelService {
     });
 
     await createRuntimeModel({
+      courseId: framework.courseId,
       topicId: params.topicId,
       frameworkId: framework.id,
       frameworkVersionId: frameworkVersion.id,

@@ -218,7 +218,7 @@ export function useStudentLearningWorkspace({
     () =>
       effectiveSelectedTopicId
         ? new DefaultChatTransport({
-            api: `/api/learning/topics/${effectiveSelectedTopicId}/chat`,
+            api: `/api/learning/sessions/${effectiveSelectedTopicId}/chat`,
             body: {
               sessionId: tutoringSessionQuery.data?.data.sessionId,
               language: selectedStudyLanguage,
@@ -425,9 +425,7 @@ export function useStudentLearningWorkspace({
   const selectedTopic =
     selectedMembership?.topics.find((topic) => topic.id === effectiveSelectedTopicId) ?? null;
   const sessionState = tutoringSessionQuery.data?.data.sessionState ?? null;
-  const currentStageId = sessionState?.frameworkState?.currentStageId ?? null;
-  const completedPhaseCount =
-    sessionState?.frameworkState?.completedStageIds?.length ?? 0;
+
   const conceptCount = sessionState?.knowledgeFocus?.length ?? 0;
   const patterns = patternsQuery.data?.data ?? [];
   const strongestPattern = patterns[0] ?? null;
@@ -462,8 +460,6 @@ export function useStudentLearningWorkspace({
     setOutOfSessionReply,
     selectedTopic,
     sessionState,
-    currentStageId,
-    completedPhaseCount,
     conceptCount,
     patterns,
     strongestPattern,

@@ -23,6 +23,7 @@ export async function getTopicWithMaterials(topicId: string) {
     where: eq(learningTopics.id, topicId),
     with: {
       classroom: true,
+      course: true,
       materials: {
         orderBy: [asc(topicMaterials.createdAt)],
       },
@@ -162,6 +163,13 @@ export async function getActiveLearningSession(params: {
     orderBy: [desc(learningSessions.createdAt)],
   });
 }
+
+export const getTeachingSessionWithMaterials = getTopicWithMaterials;
+export const createTutoringSession = createLearningSession;
+export const getTutoringSessionById = getLearningSessionById;
+export const updateTutoringSessionState = updateLearningSessionState;
+export const completeTutoringSession = completeLearningSession;
+export const getActiveTutoringSession = getActiveLearningSession;
 
 export async function getLatestCompletedLearningSession(params: {
   classroomStudentId: string;
@@ -333,6 +341,7 @@ export {
 } from "@/lib/learning/student-model-storage";
 
 export {
+  ensureSubjectFramework,
   ensureTopicFramework,
   getActiveFrameworkVersion,
   listApprovedCrystallizations,

@@ -6,26 +6,15 @@ const FRAMEWORK_COMPLETE_MESSAGE =
   "Tutoring session completed after the framework reached its terminal stage.";
 const STUDENT_COMPLETE_MESSAGE = "Tutoring session completed by the student.";
 
-function getTerminalStageIds(runtimeModel: ExpertTutorRuntimeModel) {
-  return new Set(
-    runtimeModel.framework.stages
-      .filter((stage) => stage.allowedNextStageIds.length === 0)
-      .map((stage) => stage.id),
-  );
-}
 
 export function shouldRefreshStudentModel(params: {
   previousState: LearningSessionState;
   nextState: LearningSessionState;
   forcedCompletion: boolean;
 }) {
-  const stageChanged =
-    params.previousState.frameworkState.currentStageId !==
-    params.nextState.frameworkState.currentStageId;
 
   return (
     params.previousState.turnCount === 0 ||
-    stageChanged ||
     params.previousState.turnsSinceStudentModelRefresh >= 1 ||
     params.forcedCompletion
   );
@@ -36,16 +25,9 @@ export function shouldAutoCompleteTutoringSession(params: {
   previousState: LearningSessionState;
   nextState: LearningSessionState;
 }) {
-  const terminalStageIds = getTerminalStageIds(params.runtimeModel);
-  const previousStageId = params.previousState.frameworkState.currentStageId;
-  const nextStageId = params.nextState.frameworkState.currentStageId;
-
-  return Boolean(
-    previousStageId &&
-      nextStageId &&
-      previousStageId === nextStageId &&
-      terminalStageIds.has(nextStageId),
-  );
+  // Session completion is now determined by the AI based on covered content
+  // rather than by structural stage transitions.
+  return false;
 }
 
 export async function finalizeTutoringSession(params: {

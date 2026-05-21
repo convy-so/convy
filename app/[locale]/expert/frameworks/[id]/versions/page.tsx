@@ -2,8 +2,9 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { getDb } from "@/db";
-import { expertFrameworks, expertFrameworkVersions } from "@/db/schema/learning";
+import { expertFrameworkVersions } from "@/db/schema/learning";
 import { ExpertFrameworkVersionStudio } from "@/components/expert/expert-framework-version-studio";
+import { getFrameworkWithTopicLite } from "@/lib/learning/framework-records";
 
 export default async function ExpertFrameworkVersionsPage({
   params,
@@ -12,12 +13,7 @@ export default async function ExpertFrameworkVersionsPage({
 }) {
   const { id } = await params;
 
-  const framework = await getDb().query.expertFrameworks.findFirst({
-    where: eq(expertFrameworks.id, id),
-    with: {
-      topic: true,
-    },
-  });
+  const framework = await getFrameworkWithTopicLite(id);
 
   if (!framework) {
     redirect("/expert/frameworks");
@@ -34,8 +30,11 @@ export default async function ExpertFrameworkVersionsPage({
         id: framework.id,
         name: framework.name,
         description: framework.description,
+        courseId: framework.course.id,
+        courseKey: framework.course.key,
+        courseTitle: framework.course.title,
         topicId: framework.topicId,
-        topicTitle: framework.topic?.title ?? null,
+        anchorTopicTitle: framework.topic?.title ?? null,
         activeVersionId: framework.activeVersionId,
       }}
       initialVersions={versions.map((version) => ({

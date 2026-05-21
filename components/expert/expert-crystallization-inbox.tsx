@@ -61,7 +61,7 @@ export function ExpertCrystallizationInbox({
 
       setDrafts(drafts.filter((d) => d.id !== id));
       setEditingId(null);
-      toast.success("Heuristic approved and added to Runtime Model");
+      toast.success("Heuristic approved");
     } catch {
       toast.error("Failed to approve heuristic");
     } finally {
@@ -109,9 +109,9 @@ export function ExpertCrystallizationInbox({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Knowledge Inbox</h2>
+        <h2 className="text-xl font-bold text-slate-900">Knowledge Inbox</h2>
           <p className="text-sm text-slate-500">
-            Review AI-generated pedagogical heuristics before they are injected into live tutoring sessions.
+            Review draft pedagogical heuristics before they are allowed to shape live tutoring behavior.
           </p>
         </div>
         <div className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold flex items-center gap-1">
