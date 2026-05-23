@@ -33,6 +33,8 @@ import { StudentInvitationCard } from "@/components/learning/student-invitation-
 import { StudentCourseCard } from "@/components/student/student-course-card";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { useAuth } from "@/components/providers/auth-provider";
+import { QuizCard } from "@/components/learning/generative/quiz-card";
+import { GradeCard } from "@/components/learning/generative/grade-card";
 import { cn } from "@/lib/utils";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
@@ -46,10 +48,7 @@ type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
   }>;
 };
 
-type LiveMessage = {
-  id: string;
-  role: string;
-  content: string;
+type LiveMessage = UIMessage & {
   metadata: Record<string, unknown>;
   createdAt?: string | Date;
 };
@@ -111,6 +110,7 @@ export function StudentLearningHome({
     sendOnboardingMessage,
     tutoringChatMessages,
     sendTutoringChatMessage,
+    addTutoringToolResult,
     outOfSessionMutation,
     completeTutoringMutation,
     outOfSessionReply,
@@ -160,11 +160,9 @@ export function StudentLearningHome({
           (ann) => ann.type === "metadata",
         ) : undefined;
         return {
-          id: message.id,
-          role: message.role,
-          content: getUIMessageText(message),
+          ...message,
           metadata: metadataAnnotation?.data ?? {},
-        };
+        } as LiveMessage;
       }),
     [tutoringChatMessages],
   );
@@ -427,11 +425,70 @@ export function StudentLearningHome({
                                     <Sparkles className="w-5 h-5 text-white" />
                                   </div>
                                 )}
-                                <div className={cn(
-                                  "max-w-[80%] px-6 py-4 rounded-[1.5rem] text-sm font-medium leading-relaxed shadow-sm",
-                                  message.role === "assistant" ? "bg-white text-slate-700 border border-slate-100 rounded-tl-none" : "bg-slate-900 text-white rounded-tr-none"
-                                )}>
-                                  {message.content}
+                                <div className="flex flex-col gap-3 max-w-[80%] w-full">
+                                  {message.parts?.map((part: UIMessage["parts"][0], index) => {
+                                    if (part.type === "text" && part.text.trim().length > 0) {
+                                      return (
+                                        <div key={index} className={cn(
+                                          "px-6 py-4 rounded-[1.5rem] text-sm font-medium leading-relaxed shadow-sm w-fit",
+                                          message.role === "assistant" ? "bg-white text-slate-700 border border-slate-100 rounded-tl-none" : "bg-slate-900 text-white rounded-tr-none ml-auto"
+                                        )}>
+                                          {part.text}
+                                        </div>
+                                      );
+                                    }
+
+                                    const partAny = part as any;
+                                    const isToolCall = part.type === "tool-invocation" || part.type === "dynamic-tool" || part.type.startsWith("tool-");
+                                    if (isToolCall) {
+                                      const toolName = part.type === "tool-invocation" ? partAny.toolInvocation?.toolName : partAny.toolName;
+                                      const toolCallId = part.type === "tool-invocation" ? partAny.toolInvocation?.toolCallId : partAny.toolCallId;
+                                      const args = (part.type === "tool-invocation" ? partAny.toolInvocation?.args : partAny.input || partAny.args) as Record<string, any>;
+                                      const isResolved = part.type === "tool-invocation" ? (partAny.toolInvocation && "result" in partAny.toolInvocation) : (partAny.state === "output-available" || partAny.result !== undefined);
+
+                                      if (toolName === "administer_quiz") {
+                                        if (isResolved) return null; // Hide after resolving so only text is left
+
+                                        return (
+                                          <div key={index} className="w-full min-w-[300px]">
+                                            <QuizCard
+                                              quizId={args?.quizId ?? toolCallId}
+                                              conceptKey={args?.conceptKey ?? ""}
+                                              questionText={args?.questionText ?? ""}
+                                              acceptsImageUpload={args?.acceptsImageUpload ?? false}
+                                              onSubmit={({ answerText, attachments }) => {
+                                                (addTutoringToolResult as any)({
+                                                  toolCallId,
+                                                  result: { answerText, hasAttachments: !!attachments },
+                                                  output: { answerText, hasAttachments: !!attachments },
+                                                });
+                                                if (attachments) {
+                                                  (sendTutoringChatMessage as any)({ text: answerText, experimental_attachments: attachments, attachments });
+                                                } else {
+                                                  sendTutoringChatMessage({ text: answerText });
+                                                }
+                                              }}
+                                            />
+                                          </div>
+                                        );
+                                      }
+
+                                      if (toolName === "grade_student_work") {
+                                        if (isResolved) return null;
+                                        return (
+                                          <div key={index} className="w-full min-w-[300px]">
+                                            <GradeCard
+                                              score={args?.score !== undefined && typeof args.score === "number" ? args.score : Number(args?.score ?? 0)}
+                                              feedback={String(args?.feedback ?? "")}
+                                              masteryLevel={args?.masteryLevel && typeof args.masteryLevel === "string" ? args.masteryLevel as any : "surface"}
+                                            />
+                                          </div>
+                                        );
+                                      }
+                                    }
+
+                                    return null;
+                                  })}
                                 </div>
                                 {message.role === "user" && (
                                   <div className="w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">

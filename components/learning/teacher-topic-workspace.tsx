@@ -229,7 +229,7 @@ export function TeacherTopicWorkspace({
   const queryClient = useQueryClient();
   const topicSubjectLabel =
     selectedTopic.subject ??
-    getSubjectDisplayLabel(selectedTopic.subjectKey ?? "mathematics");
+    getSubjectDisplayLabel(selectedTopic.subjectKey ?? "general");
   const topicLocaleLabel =
     appLocaleLabels[
       (selectedTopic.contentLocale ?? "en") as keyof typeof appLocaleLabels

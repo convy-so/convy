@@ -160,11 +160,30 @@ export function toPersistedUIChatMessages(
         return [];
       }
 
-      const parts = Array.isArray(message.parts)
+      const parsedParts = Array.isArray(message.parts)
         ? message.parts
             .map(parseChatMessagePart)
             .filter((part): part is ChatMessagePart => part !== null)
-        : undefined;
+        : [];
+
+      const messageWithAttachments = message as { experimental_attachments?: unknown };
+      const attachmentParts = Array.isArray(messageWithAttachments.experimental_attachments)
+        ? messageWithAttachments.experimental_attachments.map((att: unknown) => {
+            if (typeof att === "object" && att !== null) {
+              const attObj = att as { url?: string; contentType?: string };
+              if (typeof attObj.url === "string") {
+                return {
+                  type: "image" as const,
+                  image: attObj.url,
+                  mimeType: typeof attObj.contentType === "string" ? attObj.contentType : undefined,
+                };
+              }
+            }
+            return null;
+          }).filter((part): part is NonNullable<typeof part> => part !== null)
+        : [];
+
+      const parts = [...parsedParts, ...attachmentParts];
 
       return [{
         id: message.id,
@@ -173,7 +192,7 @@ export function toPersistedUIChatMessages(
           content: typeof message.content === "string" ? message.content : undefined,
           parts,
         }),
-        parts: parts && parts.length > 0 ? parts : undefined,
+        parts: parts.length > 0 ? parts : undefined,
         timestamp:
           typeof message.timestamp === "string"
             ? message.timestamp

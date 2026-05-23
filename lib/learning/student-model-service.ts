@@ -5,6 +5,7 @@ import { buildStudentModelUpdatePrompt } from "@/lib/learning/prompting";
 import {
   studentModelSnapshotSchema,
   type ContentScopeSnapshot,
+  type ExpertTutorRuntimeModel,
   type StudentModelSnapshot,
 } from "@/lib/learning/types";
 import {
@@ -55,6 +56,7 @@ export class StudentModelService {
     existingSnapshot: StudentModelSnapshot | null;
     contentScope: ContentScopeSnapshot;
     conversationExcerpt: Array<{ role: string; content: string }>;
+    runtimeModel?: ExpertTutorRuntimeModel | null;
   }) {
     const snapshot = await generateStructuredOutput({
       schema: studentModelUpdateSchema,
@@ -62,6 +64,7 @@ export class StudentModelService {
         existingSnapshot: params.existingSnapshot,
         contentScope: params.contentScope,
         conversationExcerpt: params.conversationExcerpt,
+        runtimeModel: params.runtimeModel,
       }),
 
     });

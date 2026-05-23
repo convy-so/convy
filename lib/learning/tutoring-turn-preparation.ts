@@ -18,7 +18,7 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
     .find((message) => message.role === "assistant");
 
   const [prepared, fewShotExamples] = await Promise.all([
-    tutorRuntimeService.prepareAgentTurn({
+    tutorRuntimeService.prepareTurn({
       topicId: params.topicId,
       topicTitle: params.access.topic.title,
       sourceBoundary: params.access.topic.sourceBoundary,
@@ -41,7 +41,12 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   ]);
 
   const { createTutorTools } = await import("@/lib/learning/agent-tools");
-  const tools = createTutorTools({ topicId: params.topicId, contentLocale: params.access.topic.contentLocale });
+  const tools = createTutorTools({ 
+    topicId: params.topicId, 
+    contentLocale: params.access.topic.contentLocale,
+    topicTitle: params.access.topic.title,
+    studentContext: "Student learning " + params.access.topic.title
+  });
 
   const sanitizedMessages = toUIMessages(
     toPersistedUIChatMessages(params.messages).map((m) =>

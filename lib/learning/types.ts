@@ -144,23 +144,52 @@ export const studentMasteryLevelSchema = z.enum([
 
 export type StudentMasteryLevel = z.infer<typeof studentMasteryLevelSchema>;
 
-export const expertFrameworkExampleSchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  focusArea: z.string().default(""),
-  studentMessage: z.string().min(1),
-  tutorResponse: z.string().min(1),
-  rationale: z.string().default(""),
+const legacyExpertFrameworkExampleSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().optional(),
+  focusArea: z.string().optional(),
+  studentMessage: z.string().optional(),
+  tutorResponse: z.string().optional(),
+  rationale: z.string().optional(),
 });
 
-export type ExpertFrameworkExample = z.infer<typeof expertFrameworkExampleSchema>;
+function coerceFrameworkExampleToText(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
 
+  const parsed = legacyExpertFrameworkExampleSchema.safeParse(value);
+  if (!parsed.success) {
+    return null;
+  }
 
+  const example = parsed.data;
+  const parts = [
+    example.title?.trim(),
+    example.focusArea?.trim() ? `Focus: ${example.focusArea.trim()}` : null,
+    example.studentMessage?.trim() ? `Student: ${example.studentMessage.trim()}` : null,
+    example.tutorResponse?.trim() ? `Tutor: ${example.tutorResponse.trim()}` : null,
+    example.rationale?.trim() ? `Why: ${example.rationale.trim()}` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  const text = parts.join("\n\n").trim();
+  return text.length > 0 ? text : null;
+}
 
 export const expertFrameworkSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1, "Framework name is required"),
   description: z.string().default(""),
-  fewShotExamples: z.array(expertFrameworkExampleSchema).default([]),
+  fewShotExamples: z
+    .array(z.union([z.string(), legacyExpertFrameworkExampleSchema]))
+    .default([])
+    .transform((items) =>
+      items
+        .map(coerceFrameworkExampleToText)
+        .filter((item): item is string => item !== null),
+    ),
+  markdownContent: z.string().default(""),
+  metadata: z.record(z.unknown()).default({}),
 });
 
 export type ExpertFramework = z.infer<typeof expertFrameworkSchema>;
@@ -262,12 +291,14 @@ export type LongitudinalDevelopment = z.infer<
 
 export const studentModelSnapshotSchema = z.object({
   version: z.number().int().positive().default(1),
-  motivationalContext: motivationalContextSchema.default({}),
-  knowledgeStateModel: z.array(knowledgeStateNodeSchema).default([]),
-  cognitiveStyleCalibration: cognitiveStyleCalibrationSchema.default({}),
+  cognitiveModel: z.record(z.unknown()).default({}),
+  personalization: z.record(z.unknown()).default({}),
+  motivationalContext: motivationalContextSchema.optional().default({}),
+  knowledgeStateModel: z.array(knowledgeStateNodeSchema).optional().default([]),
+  cognitiveStyleCalibration: cognitiveStyleCalibrationSchema.optional().default({}),
   productiveStruggleCalibration:
-    productiveStruggleCalibrationSchema.default({}),
-  longitudinalDevelopment: longitudinalDevelopmentSchema.default({}),
+    productiveStruggleCalibrationSchema.optional().default({}),
+  longitudinalDevelopment: longitudinalDevelopmentSchema.optional().default({}),
   summary: z.string().default(""),
   updatedAt: z.string(),
 });
@@ -291,6 +322,7 @@ export const contentScopeSnapshotSchema = z.object({
   notationNotes: z.array(z.string()).default([]),
   rigorNotes: z.array(z.string()).default([]),
   retrievedContext: z.array(z.string()).default([]),
+  learningOutcomes: z.array(learningOutcomeDefinitionSchema).optional().default([]),
 });
 
 export type ContentScopeSnapshot = z.infer<typeof contentScopeSnapshotSchema>;

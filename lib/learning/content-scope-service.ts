@@ -35,6 +35,7 @@ export class ContentScopeService {
       notationNotes: params.sourceBoundary.notationNotes,
       rigorNotes: params.sourceBoundary.rigorNotes,
       retrievedContext: retrieved.map((item) => item.content),
+      learningOutcomes: topic.learningOutcomes || [],
     });
   }
 }

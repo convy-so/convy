@@ -7,7 +7,7 @@ import type { StudentTopicAccess } from "@/lib/learning/tutoring-route-orchestra
 
 export type TutoringSessionState = z.infer<typeof learningSessionStateSchema>;
 
-export type PreparedTutoringTurn = Awaited<ReturnType<typeof tutorRuntimeService.prepareAgentTurn>>;
+export type PreparedTutoringTurn = Awaited<ReturnType<typeof tutorRuntimeService.prepareTurn>>;
 
 export type FinalizeTurnStep = {
   text?: string;

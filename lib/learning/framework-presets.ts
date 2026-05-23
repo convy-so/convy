@@ -8,8 +8,10 @@ export const DEFAULT_DEEP_FRAMEWORK_KEY = "deep-default";
 export const DEFAULT_DEEP_FRAMEWORK = expertFrameworkSchema.parse({
   name: "DEEP",
   description:
-    "Seed framework for new courses. Experts can edit the teaching brief and few-shot examples.",
+    "Seed framework for new courses. Experts can edit the description and few-shot examples.",
   fewShotExamples: [],
+  markdownContent: "",
+  metadata: {},
 });
 
 export function createDefaultDeepFramework(): ExpertFramework {

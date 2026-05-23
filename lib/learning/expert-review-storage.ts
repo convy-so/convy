@@ -6,6 +6,7 @@ import {
   expertCrystallizations,
   expertReviewCases,
 } from "@/db/schema";
+import { generateBatchEmbeddings } from "@/lib/rag/embeddings";
 
 export async function listExpertReviewCases(params: {
   topicId?: string | null;
@@ -57,27 +58,20 @@ export async function createExpertReviewCase(params: {
 const CRYSTALLIZATION_MIN_REUSABLE_CASES = 3;
 const CRYSTALLIZATION_WINDOW_DAYS = 30;
 const CRYSTALLIZATION_MIN_DIVERSITY_SESSIONS = 2;
-const SEMANTIC_DEDUP_SIMILARITY_THRESHOLD = 0.8;
+const SEMANTIC_DEDUP_SIMILARITY_THRESHOLD = 0.85;
 
-function normalizeSemanticText(value: string): string[] {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((token) => token.length > 2);
-}
-
-function jaccardSimilarity(left: string, right: string): number {
-  const leftTokens = new Set(normalizeSemanticText(left));
-  const rightTokens = new Set(normalizeSemanticText(right));
-  if (!leftTokens.size && !rightTokens.size) return 1;
-  if (!leftTokens.size || !rightTokens.size) return 0;
-  let intersection = 0;
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) intersection += 1;
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
   }
-  const union = new Set([...leftTokens, ...rightTokens]).size;
-  return union ? intersection / union : 0;
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
 export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
@@ -86,52 +80,93 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
   relevanceScope: "general" | "framework_specific";
   frameworkVersionId?: string | null;
 }) {
+  const cutoffDate = new Date(Date.now() - CRYSTALLIZATION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const reusableCases = await getDb().query.expertReviewCases.findMany({
+    where: and(
+      eq(expertReviewCases.topicId, params.topicId),
+      eq(expertReviewCases.status, "open"),
+      eq(expertReviewCases.reusableSignal, true),
+      eq(expertReviewCases.reviewType, params.reviewType),
+      eq(expertReviewCases.relevanceScope, params.relevanceScope),
+      gte(expertReviewCases.createdAt, cutoffDate),
+      params.relevanceScope === "framework_specific"
+        ? eq(expertReviewCases.frameworkVersionId, params.frameworkVersionId ?? "")
+        : undefined,
+    ),
+    orderBy: [desc(expertReviewCases.createdAt)],
+    limit: 12,
+  });
+
+  if (reusableCases.length < CRYSTALLIZATION_MIN_REUSABLE_CASES) {
+    return { created: false as const, reason: "insufficient_reusable_cases" as const };
+  }
+
+  const uniqueSessionIds = new Set(reusableCases.map((item) => item.sessionId).filter(Boolean));
+  if (uniqueSessionIds.size < CRYSTALLIZATION_MIN_DIVERSITY_SESSIONS) {
+    return { created: false as const, reason: "insufficient_diversity" as const };
+  }
+
+  const triggers = reusableCases.map((c) => c.tutorFailureSummary);
+  const actions = reusableCases.map((c) => c.expertCorrection);
+
+  // Generate embeddings outside of the transaction block to avoid blocking DB connection pool
+  const [triggerEmbeddings, actionEmbeddings] = await Promise.all([
+    generateBatchEmbeddings(triggers, { feature: "expert-review-dedup" }),
+    generateBatchEmbeddings(actions, { feature: "expert-review-dedup" }),
+  ]);
+
+  const semanticallyDiverseCases: typeof reusableCases = [];
+  const diverseTriggerEmbeddings: number[][] = [];
+  const diverseActionEmbeddings: number[][] = [];
+
+  for (let i = 0; i < reusableCases.length; i++) {
+    const candidate = reusableCases[i];
+    const candidateTriggerEmbedding = triggerEmbeddings[i] ?? [];
+    const candidateActionEmbedding = actionEmbeddings[i] ?? [];
+
+    let isNearDuplicate = false;
+    for (let j = 0; j < semanticallyDiverseCases.length; j++) {
+      const triggerSimilarity = cosineSimilarity(diverseTriggerEmbeddings[j], candidateTriggerEmbedding);
+      const actionSimilarity = cosineSimilarity(diverseActionEmbeddings[j], candidateActionEmbedding);
+      if (
+        triggerSimilarity >= SEMANTIC_DEDUP_SIMILARITY_THRESHOLD &&
+        actionSimilarity >= SEMANTIC_DEDUP_SIMILARITY_THRESHOLD
+      ) {
+        isNearDuplicate = true;
+        break;
+      }
+    }
+
+    if (!isNearDuplicate) {
+      semanticallyDiverseCases.push(candidate);
+      diverseTriggerEmbeddings.push(candidateTriggerEmbedding);
+      diverseActionEmbeddings.push(candidateActionEmbedding);
+    }
+
+    if (semanticallyDiverseCases.length >= CRYSTALLIZATION_MIN_REUSABLE_CASES) {
+      break;
+    }
+  }
+
+  if (semanticallyDiverseCases.length < CRYSTALLIZATION_MIN_REUSABLE_CASES) {
+    return { created: false as const, reason: "insufficient_semantic_diversity" as const };
+  }
+
+  const sourceReviewCaseIds = semanticallyDiverseCases.map((item) => item.id);
+
   return await getDb().transaction(async (tx) => {
-    const cutoffDate = new Date(Date.now() - CRYSTALLIZATION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    const reusableCases = await tx.query.expertReviewCases.findMany({
+    // Confirm status is still open inside transaction block
+    const openCases = await tx.query.expertReviewCases.findMany({
       where: and(
-        eq(expertReviewCases.topicId, params.topicId),
+        inArray(expertReviewCases.id, sourceReviewCaseIds),
         eq(expertReviewCases.status, "open"),
-        eq(expertReviewCases.reusableSignal, true),
-        eq(expertReviewCases.reviewType, params.reviewType),
-        eq(expertReviewCases.relevanceScope, params.relevanceScope),
-        gte(expertReviewCases.createdAt, cutoffDate),
-        params.relevanceScope === "framework_specific"
-          ? eq(expertReviewCases.frameworkVersionId, params.frameworkVersionId ?? "")
-          : undefined,
       ),
-      orderBy: [desc(expertReviewCases.createdAt)],
-      limit: 12,
     });
 
-    if (reusableCases.length < CRYSTALLIZATION_MIN_REUSABLE_CASES) {
-      return { created: false as const, reason: "insufficient_reusable_cases" as const };
+    if (openCases.length < semanticallyDiverseCases.length) {
+      return { created: false as const, reason: "concurrency_conflict" as const };
     }
 
-    const uniqueSessionIds = new Set(reusableCases.map((item) => item.sessionId).filter(Boolean));
-    if (uniqueSessionIds.size < CRYSTALLIZATION_MIN_DIVERSITY_SESSIONS) {
-      return { created: false as const, reason: "insufficient_diversity" as const };
-    }
-
-    const semanticallyDiverseCases: typeof reusableCases = [];
-    for (const candidate of reusableCases) {
-      const isNearDuplicate = semanticallyDiverseCases.some((existing) => {
-        const triggerSimilarity = jaccardSimilarity(existing.tutorFailureSummary, candidate.tutorFailureSummary);
-        const actionSimilarity = jaccardSimilarity(existing.expertCorrection, candidate.expertCorrection);
-        return (
-          triggerSimilarity >= SEMANTIC_DEDUP_SIMILARITY_THRESHOLD
-          && actionSimilarity >= SEMANTIC_DEDUP_SIMILARITY_THRESHOLD
-        );
-      });
-      if (!isNearDuplicate) semanticallyDiverseCases.push(candidate);
-      if (semanticallyDiverseCases.length >= CRYSTALLIZATION_MIN_REUSABLE_CASES) break;
-    }
-
-    if (semanticallyDiverseCases.length < CRYSTALLIZATION_MIN_REUSABLE_CASES) {
-      return { created: false as const, reason: "insufficient_semantic_diversity" as const };
-    }
-
-    const sourceReviewCaseIds = semanticallyDiverseCases.map((item) => item.id);
     const duplicateDraft = await tx.query.expertCrystallizations.findFirst({
       where: and(
         eq(expertCrystallizations.topicId, params.topicId),

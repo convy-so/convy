@@ -10,7 +10,6 @@ import {
   type LearningOutcomeDefinition,
   type TopicSourceBoundary,
 } from "@/lib/learning/types";
-import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 
 function normalizeLearningOutcome(
   outcome: LearningOutcomeDefinition,
@@ -59,8 +58,6 @@ export async function createLearningTopic(params: {
     throw new Error("Course not found");
   }
 
-  const subjectDisplayLabel = getSubjectDisplayLabel(params.subjectKey);
-
   const [topic] = await getDb().insert(learningTopics).values({
     id: topicId,
     classroomId: params.classroomId,
@@ -68,9 +65,9 @@ export async function createLearningTopic(params: {
     courseId: course.id,
     title: params.title,
     description: params.description || null,
-    subject: subjectDisplayLabel,
+    subject: course.title,
     contentLocale: params.contentLocale,
-    subjectKey: params.subjectKey,
+    subjectKey: course.key,
     status: "draft",
     openingPreference: "auto",
     sourceBoundary,
