@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { expertFrameworkVersions } from "@/db/schema";
+import { compileFrameworkArtifact } from "@/lib/learning/framework-compiler";
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { getExpertAccessibleFramework } from "@/lib/learning/expert-access";
 import { expertFrameworkSchema } from "@/lib/learning/types";
@@ -63,6 +64,7 @@ export async function POST(
       return apiError("NOT_FOUND", "Framework not found");
     }
     const body = createVersionSchema.parse(await request.json());
+    const compiled = await compileFrameworkArtifact(body.artifact);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const version = await getDb().transaction(async (tx) => {
@@ -81,7 +83,7 @@ export async function POST(
               version: versionNumber,
               status: "draft",
               seedSource: "expert_authored",
-              framework: body.artifact,
+              framework: compiled.framework,
               notes: body.notes ?? null,
               createdAt: new Date(),
               updatedAt: new Date(),

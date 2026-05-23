@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowUpCircle,
+  CheckCircle2,
   ChevronLeft,
   CircleDot,
   History,
@@ -20,6 +22,9 @@ import { createDefaultDeepFramework } from "@/lib/learning/framework-presets";
 import {
   expertFrameworkSchema,
   type ExpertFramework,
+  frameworkRuntimeMetadataSchema,
+  type FrameworkCompileIssue,
+  type FrameworkRuntimeMetadata,
 } from "@/lib/learning/types";
 
 type FrameworkVersion = {
@@ -45,6 +50,7 @@ type FrameworkDetail = {
 };
 
 type StudioPanel = "editor" | "versions";
+const FRAMEWORK_RUNTIME_METADATA_KEY = "__convyFrameworkRuntime";
 
 function parseInitialArtifact(raw: Record<string, unknown> | undefined): ExpertFramework {
   const parsed = expertFrameworkSchema.safeParse(raw ?? createDefaultDeepFramework());
@@ -68,6 +74,66 @@ function formatVersionStatus(status: string) {
   if (status === "draft") return "Draft";
   if (status === "archived") return "Archived";
   return status;
+}
+
+function readFrameworkRuntimeMetadata(
+  raw: Record<string, unknown> | undefined,
+): FrameworkRuntimeMetadata | null {
+  const metadata = raw?.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+
+  const runtimeMetadata = (metadata as Record<string, unknown>)[
+    FRAMEWORK_RUNTIME_METADATA_KEY
+  ];
+  const parsed = frameworkRuntimeMetadataSchema.safeParse(runtimeMetadata);
+  return parsed.success ? parsed.data : null;
+}
+
+function countCompileIssues(
+  issues: FrameworkCompileIssue[],
+  severity: FrameworkCompileIssue["severity"],
+) {
+  return issues.filter((issue) => issue.severity === severity).length;
+}
+
+function formatCompileStatus(status: FrameworkRuntimeMetadata["compileStatus"]) {
+  if (status === "ready") return "Ready";
+  if (status === "failed") return "Needs fixes";
+  return "Needs review";
+}
+
+function getCompileStatusStyles(status: FrameworkRuntimeMetadata["compileStatus"]) {
+  if (status === "ready") {
+    return {
+      badge:
+        "border-emerald-200 bg-emerald-50 text-emerald-800",
+      panel:
+        "border-emerald-200 bg-emerald-50/60",
+      icon: "text-emerald-600",
+    };
+  }
+
+  if (status === "failed") {
+    return {
+      badge:
+        "border-rose-200 bg-rose-50 text-rose-800",
+      panel:
+        "border-rose-200 bg-rose-50/60",
+      icon: "text-rose-600",
+    };
+  }
+
+  return {
+    badge:
+      "border-amber-200 bg-amber-50 text-amber-800",
+    panel:
+      "border-amber-200 bg-amber-50/60",
+    icon: "text-amber-600",
+  };
+}
+
+function canPublishVersion(metadata: FrameworkRuntimeMetadata | null) {
+  return metadata?.compileStatus === "ready" && Boolean(metadata.compiledPolicy);
 }
 
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
@@ -106,6 +172,16 @@ export function ExpertFrameworkVersionStudio({
     () => versions.find((version) => version.id === activeVersionId) ?? null,
     [activeVersionId, versions],
   );
+  const latestSavedVersion = versions[0] ?? null;
+  const latestSavedRuntimeMetadata = latestSavedVersion
+    ? readFrameworkRuntimeMetadata(latestSavedVersion.framework)
+    : null;
+  const latestSavedErrors = latestSavedRuntimeMetadata
+    ? countCompileIssues(latestSavedRuntimeMetadata.issues, "error")
+    : 0;
+  const latestSavedWarnings = latestSavedRuntimeMetadata
+    ? countCompileIssues(latestSavedRuntimeMetadata.issues, "warning")
+    : 0;
 
   const exampleCount = draftFramework.fewShotExamples.filter((example) => example.trim()).length;
 
@@ -132,6 +208,7 @@ export function ExpertFrameworkVersionStudio({
       );
 
       setVersions((current) => [result.data, ...current]);
+      setDraftFramework(parseInitialArtifact(result.data.framework));
       setNotes("");
       toast.success("Draft version saved");
     } catch (error) {
@@ -272,6 +349,109 @@ export function ExpertFrameworkVersionStudio({
       {activePanel === "editor" ? (
         <div className="pt-6">
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <section className="border-b border-slate-100 px-6 py-6 sm:px-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <h2 className="text-base font-bold text-slate-950">Runtime diagnostics</h2>
+                  <p className="max-w-2xl text-sm text-slate-500">
+                    The platform validates the last saved draft and compiles it into the
+                    internal tutoring policy used at runtime. Unsaved edits are not checked
+                    until you save another draft.
+                  </p>
+                </div>
+                {latestSavedRuntimeMetadata ? (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${getCompileStatusStyles(latestSavedRuntimeMetadata.compileStatus).badge}`}
+                  >
+                    {latestSavedRuntimeMetadata.compileStatus === "ready" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    )}
+                    {formatCompileStatus(latestSavedRuntimeMetadata.compileStatus)}
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                    Save a draft to validate
+                  </span>
+                )}
+              </div>
+
+              {latestSavedRuntimeMetadata ? (
+                <div
+                  className={`mt-5 rounded-2xl border px-4 py-4 ${getCompileStatusStyles(latestSavedRuntimeMetadata.compileStatus).panel}`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Latest saved draft: Version {latestSavedVersion?.version}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {latestSavedRuntimeMetadata.compileStatus === "ready"
+                          ? "This version is ready to publish and can power live tutoring."
+                          : "This version is not yet publish-ready. Fix the issues below, then save another draft."}
+                      </p>
+                      {latestSavedRuntimeMetadata.compiledAt ? (
+                        <p className="text-xs text-slate-500">
+                          Checked{" "}
+                          {new Date(latestSavedRuntimeMetadata.compiledAt).toLocaleString(
+                            undefined,
+                            {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            },
+                          )}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                      <span className="rounded-full bg-white/80 px-2.5 py-1 text-slate-700">
+                        {latestSavedErrors} errors
+                      </span>
+                      <span className="rounded-full bg-white/80 px-2.5 py-1 text-slate-700">
+                        {latestSavedWarnings} warnings
+                      </span>
+                    </div>
+                  </div>
+
+                  {latestSavedRuntimeMetadata.issues.length > 0 ? (
+                    <div className="mt-4 space-y-2">
+                      {latestSavedRuntimeMetadata.issues.map((issue, index) => (
+                        <div
+                          key={`${issue.code}-${index}`}
+                          className="rounded-xl border border-white/70 bg-white/80 px-3 py-3"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
+                                issue.severity === "error"
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {issue.severity}
+                            </span>
+                            <span className="text-sm font-semibold text-slate-900">
+                              {issue.message}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-slate-600">
+                      No compiler issues were detected for the latest saved draft.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  Save a draft to see whether the framework is publish-ready, what the tutor
+                  can enforce from it, and which issues still need fixing.
+                </div>
+              )}
+            </section>
+
             <section className="border-b border-slate-100 px-6 py-6 sm:px-8">
               <div className="mb-5">
                 <h2 className="text-base font-bold text-slate-950">Framework</h2>
@@ -461,6 +641,7 @@ export function ExpertFrameworkVersionStudio({
                     <tr className="border-b border-slate-100 bg-slate-50/80 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
                       <th className="px-6 py-3 sm:px-8">Version</th>
                       <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Compile</th>
                       <th className="px-4 py-3">Saved</th>
                       <th className="px-4 py-3">Notes</th>
                       <th className="px-6 py-3 text-right sm:px-8">Action</th>
@@ -469,6 +650,17 @@ export function ExpertFrameworkVersionStudio({
                   <tbody className="divide-y divide-slate-100">
                     {versions.map((version) => {
                       const isLive = activeVersionId === version.id;
+                      const runtimeMetadata = readFrameworkRuntimeMetadata(version.framework);
+                      const publishReady = canPublishVersion(runtimeMetadata);
+                      const errorCount = runtimeMetadata
+                        ? countCompileIssues(runtimeMetadata.issues, "error")
+                        : 0;
+                      const warningCount = runtimeMetadata
+                        ? countCompileIssues(runtimeMetadata.issues, "warning")
+                        : 0;
+                      const firstBlockingIssue = runtimeMetadata?.issues.find(
+                        (issue) => issue.severity === "error",
+                      );
                       return (
                         <tr
                           key={version.id}
@@ -487,6 +679,32 @@ export function ExpertFrameworkVersionStudio({
                           <td className="px-4 py-4 text-slate-600">
                             {formatVersionStatus(version.status)}
                           </td>
+                          <td className="px-4 py-4">
+                            {runtimeMetadata ? (
+                              <div className="space-y-1">
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${getCompileStatusStyles(runtimeMetadata.compileStatus).badge}`}
+                                >
+                                  {runtimeMetadata.compileStatus === "ready" ? (
+                                    <CheckCircle2 className="h-3 w-3" />
+                                  ) : (
+                                    <AlertTriangle className="h-3 w-3" />
+                                  )}
+                                  {formatCompileStatus(runtimeMetadata.compileStatus)}
+                                </span>
+                                <p className="text-xs text-slate-500">
+                                  {errorCount} errors, {warningCount} warnings
+                                </p>
+                                {firstBlockingIssue ? (
+                                  <p className="max-w-xs text-xs text-rose-600">
+                                    {firstBlockingIssue.message}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">Not checked</span>
+                            )}
+                          </td>
                           <td className="px-4 py-4 whitespace-nowrap text-slate-600">
                             {new Date(version.createdAt).toLocaleString(undefined, {
                               dateStyle: "medium",
@@ -504,8 +722,17 @@ export function ExpertFrameworkVersionStudio({
                             <button
                               type="button"
                               onClick={() => handleActivateVersion(version.id)}
-                              disabled={Boolean(isActivatingVersionId) || isLive}
+                              disabled={
+                                Boolean(isActivatingVersionId) ||
+                                isLive ||
+                                !publishReady
+                              }
                               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 hover:bg-slate-50"
+                              title={
+                                publishReady
+                                  ? undefined
+                                  : "This version must compile successfully before it can be published."
+                              }
                             >
                               {isActivatingVersionId === version.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -1,14 +1,16 @@
 import { z } from "zod";
 import { searchLearningTopicContext } from "@/lib/learning/rag";
 import { executeImageSearchPipeline, executeVideoSearchPipeline } from "@/lib/learning/media-retrieval";
+import type { CompiledFrameworkPolicy } from "@/lib/learning/types";
 
 export function createTutorTools(params: {
   topicId: string;
   contentLocale: string;
   topicTitle: string;
   studentContext: string;
+  compiledPolicy?: CompiledFrameworkPolicy | null;
 }) {
-  return {
+  const tools: any = {
     search_course_materials: {
       description: "Search the course materials for a specific topic, concept, or formula. Use this to find accurate facts, teacher definitions, and notation from the uploaded course content. You should use this tool whenever you are unsure about a specific concept or need to provide a grounded explanation.",
       inputSchema: z.object({
@@ -89,4 +91,22 @@ export function createTutorTools(params: {
       }
     }
   };
+
+  if (params.compiledPolicy?.toolPolicy.images === "forbidden") {
+    delete tools.search_image;
+  }
+
+  if (params.compiledPolicy?.toolPolicy.videos === "forbidden") {
+    delete tools.search_video;
+  }
+
+  if (params.compiledPolicy?.toolPolicy.structuredQuiz === "forbidden") {
+    delete tools.administer_quiz;
+  }
+
+  if (params.compiledPolicy?.toolPolicy.formalGrading === "forbidden") {
+    delete tools.grade_student_work;
+  }
+
+  return tools;
 }

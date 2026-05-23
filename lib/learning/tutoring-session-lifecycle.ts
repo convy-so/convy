@@ -25,9 +25,13 @@ export function shouldAutoCompleteTutoringSession(params: {
   previousState: LearningSessionState;
   nextState: LearningSessionState;
 }) {
-  // Session completion is now determined by the AI based on covered content
-  // rather than by structural stage transitions.
-  return false;
+  return (
+    Boolean(params.runtimeModel.compiledPolicy) &&
+    params.nextState.frameworkState.closeRequirementsMet &&
+    !params.nextState.frameworkState.assessmentPending &&
+    !params.nextState.frameworkState.transferPending &&
+    !params.nextState.frameworkState.reflectionPending
+  );
 }
 
 export async function finalizeTutoringSession(params: {

@@ -1,6 +1,10 @@
 import { nanoid } from "nanoid";
 
 import {
+  compileFrameworkArtifact,
+  ensureFrameworkPolicyReady,
+} from "@/lib/learning/framework-compiler";
+import {
   expertTutorRuntimeModelSchema,
   type ExpertTutorRuntimeModel,
 } from "@/lib/learning/types";
@@ -29,7 +33,23 @@ export class ExpertRuntimeModelService {
 
     const published = await getPublishedRuntimeModel(params.topicId);
     if (published && published.frameworkVersionId === frameworkVersion.id) {
-      return expertTutorRuntimeModelSchema.parse(published.runtimeModel);
+      const parsedPublished = expertTutorRuntimeModelSchema.safeParse(
+        published.runtimeModel,
+      );
+      if (parsedPublished.success && parsedPublished.data.compiledPolicy) {
+        return parsedPublished.data;
+      }
+    }
+
+    const compiledFramework =
+      ensureFrameworkPolicyReady(frameworkVersion.framework) ??
+      (await compileFrameworkArtifact(frameworkVersion.framework)).metadata
+        .compiledPolicy;
+
+    if (!compiledFramework) {
+      throw new Error(
+        "The active framework version is not ready for tutoring. Publish a framework that compiles successfully first.",
+      );
     }
 
     const [approvedCrystallizations, openConflicts] = await Promise.all([
@@ -52,6 +72,7 @@ export class ExpertRuntimeModelService {
       version: 1,
       frameworkVersionId: frameworkVersion.id,
       framework: frameworkVersion.framework,
+      compiledPolicy: compiledFramework,
       heuristics: approvedCrystallizations
         .filter((item) => !blockedCrystallizationIds.has(item.id))
         .map((item) => item.heuristic),

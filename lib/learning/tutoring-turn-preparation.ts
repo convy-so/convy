@@ -2,7 +2,6 @@ import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/l
 import { listLearningMessages } from "@/lib/learning/storage";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
-import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
 
 import type { UIMessage } from "ai";
 import type { PrepareTutoringTurnParams } from "@/lib/learning/tutoring-turn-types";
@@ -17,35 +16,27 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
     .reverse()
     .find((message) => message.role === "assistant");
 
-  const [prepared, fewShotExamples] = await Promise.all([
-    tutorRuntimeService.prepareTurn({
-      topicId: params.topicId,
-      topicTitle: params.access.topic.title,
-      sourceBoundary: params.access.topic.sourceBoundary,
-      classroomId: params.access.topic.classroomId,
-      classroomStudentId: params.access.classroomStudent.id,
-      studentUserId: params.access.classroomStudent.userId,
-      sessionId: params.tutorSessionId,
-      studyLanguage: params.studyLanguage,
-      state: params.state,
-      latestStudentMessage: params.latestUserText,
-      latestTutorMessage: previousAssistant?.content ?? null,
-    }),
-    getDynamicFewShotExamples({
-      feature: "tutoring",
-      limit: 3,
-      context: [params.latestUserText, params.access.topic.title, params.access.topic.subject]
-        .filter(Boolean)
-        .join(" | "),
-    }),
-  ]);
+  const prepared = await tutorRuntimeService.prepareTurn({
+    topicId: params.topicId,
+    topicTitle: params.access.topic.title,
+    sourceBoundary: params.access.topic.sourceBoundary,
+    classroomId: params.access.topic.classroomId,
+    classroomStudentId: params.access.classroomStudent.id,
+    studentUserId: params.access.classroomStudent.userId,
+    sessionId: params.tutorSessionId,
+    studyLanguage: params.studyLanguage,
+    state: params.state,
+    latestStudentMessage: params.latestUserText,
+    latestTutorMessage: previousAssistant?.content ?? null,
+  });
 
   const { createTutorTools } = await import("@/lib/learning/agent-tools");
   const tools = createTutorTools({ 
     topicId: params.topicId, 
     contentLocale: params.access.topic.contentLocale,
     topicTitle: params.access.topic.title,
-    studentContext: "Student learning " + params.access.topic.title
+    studentContext: "Student learning " + params.access.topic.title,
+    compiledPolicy: prepared.runtimeModel.compiledPolicy,
   });
 
   const sanitizedMessages = toUIMessages(
@@ -56,5 +47,5 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
     ),
   );
 
-  return { previousAssistant, prepared, fewShotExamples, tools, sanitizedMessages };
+  return { previousAssistant, prepared, fewShotExamples: [], tools, sanitizedMessages };
 }

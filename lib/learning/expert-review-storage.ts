@@ -153,6 +153,16 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
   }
 
   const sourceReviewCaseIds = semanticallyDiverseCases.map((item) => item.id);
+  const frameworkPolicyTags = Array.from(
+    new Set(
+      semanticallyDiverseCases.flatMap((item) => {
+        const rawTags = item.metadata?.frameworkPolicyTags;
+        return Array.isArray(rawTags)
+          ? rawTags.filter((tag): tag is string => typeof tag === "string")
+          : [];
+      }),
+    ),
+  );
 
   return await getDb().transaction(async (tx) => {
     // Confirm status is still open inside transaction block
@@ -201,7 +211,11 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
           rationale: `Synthesized from ${semanticallyDiverseCases.length} reusable expert review cases within ${CRYSTALLIZATION_WINDOW_DAYS} days.`,
           examples: semanticallyDiverseCases.map((item) => item.expertCorrection).slice(0, 3),
           priority: exemplar.priority === "high" ? "high" : "medium",
-          tags: [params.reviewType, "expert-review-derived"],
+          tags: [
+            params.reviewType,
+            "expert-review-derived",
+            ...frameworkPolicyTags,
+          ],
           relevanceScope: params.relevanceScope,
         },
         sourceReviewCaseIds,

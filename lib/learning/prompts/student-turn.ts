@@ -1,4 +1,5 @@
 import type {
+  CompiledFrameworkPolicy,
   ContentScopeSnapshot,
   ExpertTutorRuntimeModel,
   FrameworkState,
@@ -25,6 +26,30 @@ function renderFewShotExamples(label: string, examples: string[]) {
     .join("\n\n")}`;
 }
 
+function renderPhaseSummary(policy: CompiledFrameworkPolicy | null) {
+  if (!policy) return "- none";
+
+  return policy.phases
+    .map(
+      (phase) =>
+        `- ${phase.label} (${phase.id}): ${phase.purpose || "no purpose provided"} | preferred moves: ${
+          phase.preferredMoves.join(", ") || "none"
+        }`,
+    )
+    .join("\n");
+}
+
+function renderLevelSummary(policy: CompiledFrameworkPolicy | null) {
+  if (!policy) return "- none";
+
+  return policy.levels
+    .map(
+      (level) =>
+        `- ${level.label} (${level.id}): ${level.description || "no description provided"}`,
+    )
+    .join("\n");
+}
+
 export function buildStudentTurnSystemPrompt(params: {
   contentScope: ContentScopeSnapshot;
   runtimeModel: ExpertTutorRuntimeModel;
@@ -32,7 +57,7 @@ export function buildStudentTurnSystemPrompt(params: {
   frameworkState: FrameworkState;
   studyLanguage: string;
 }) {
-
+  const compiledPolicy = params.runtimeModel.compiledPolicy;
 
   return `You are Convy's tutor.
 
@@ -77,6 +102,25 @@ ${
       )
 }
 
+Compiled runtime policy:
+- Summary: ${compiledPolicy?.policySummary || "none"}
+- Current phase: ${params.frameworkState.currentPhaseId ?? compiledPolicy?.defaultPhaseId ?? "none"}
+- Current level: ${params.frameworkState.currentLevelId ?? compiledPolicy?.defaultLevelId ?? "none"}
+- Diagnostic status: ${params.frameworkState.diagnosticStatus}
+- Recommended next move: ${params.frameworkState.recommendedMove}
+- Assessment pending: ${params.frameworkState.assessmentPending ? "yes" : "no"}
+- Transfer pending: ${params.frameworkState.transferPending ? "yes" : "no"}
+- Reflection pending: ${params.frameworkState.reflectionPending ? "yes" : "no"}
+- Close requirements met: ${params.frameworkState.closeRequirementsMet ? "yes" : "no"}
+- Framework phases:
+${renderPhaseSummary(compiledPolicy ?? null)}
+- Framework levels:
+${renderLevelSummary(compiledPolicy ?? null)}
+- Tool policy: search=${compiledPolicy?.toolPolicy.courseSearch ?? "required"}, images=${compiledPolicy?.toolPolicy.images ?? "forbidden"}, videos=${compiledPolicy?.toolPolicy.videos ?? "forbidden"}, quiz=${compiledPolicy?.toolPolicy.structuredQuiz ?? "allowed"}, grading=${compiledPolicy?.toolPolicy.formalGrading ?? "allowed"}, notebook uploads=${compiledPolicy?.toolPolicy.notebookUploads ?? "when_visual_or_symbolic"}
+- Completion policy: transfer=${compiledPolicy?.completionPolicy.requireTransfer ? "required" : "optional"}, reflection=${compiledPolicy?.completionPolicy.requireMetacognitiveReflection ? "required" : "optional"}, explicit understanding evidence=${compiledPolicy?.completionPolicy.requireExplicitEvidenceOfUnderstanding ? "required" : "optional"}
+- Review taxonomy:
+${renderList(compiledPolicy?.reviewTaxonomy ?? [])}
+
 Crystallized pedagogical heuristics:
 ${renderList(
   params.runtimeModel.heuristics.map(
@@ -103,11 +147,13 @@ ${renderList(params.studentModel.cognitiveStyleCalibration?.preferredEntryPoints
 ${renderList(params.studentModel.longitudinalDevelopment?.betterQuestionSignals ?? [])}
 
 Teaching rules:
-- Use the \`search_course_materials\` tool to find accurate evidence, definitions, and notation from the uploaded teacher content. You should always prefer searching to guessing.
+- You can retrieve teacher-approved course evidence, ask a structured quiz, accept notebook/photo evidence when appropriate, and return a formal graded evaluation when the framework calls for it.
+- Use course evidence before making factual or notation-sensitive claims. Prefer retrieval to guessing.
 - Stay inside the uploaded material scope for concepts and claims.
-- Use the framework description, heuristics, and reference examples to decide your next move.
-- You may occasionally assess the student's understanding by asking a quiz question using the \`administer_quiz\` tool. If the subject involves math or diagrams, set \`acceptsImageUpload: true\` so they can upload a picture of their notebook.
-- Once the student answers a quiz (via text or uploaded image), use the \`grade_student_work\` tool to formally record their score and provide feedback.
+- Follow the compiled framework policy, the expert framework text, and the heuristics together. The compiled policy takes precedence for progression and completion.
+- Respect the current framework phase and level unless the student's evidence justifies a move.
+- If diagnosis-first is required, do not skip it.
+- If the framework requires assessment, transfer, or reflection, do not close the session without them.
 - Push for genuine understanding rather than accepting shallow compliance.
 - Keep the student in productive struggle: challenging but not discouraging.
 - Prefer one strong move per turn.

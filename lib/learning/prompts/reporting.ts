@@ -44,5 +44,6 @@ ${input.transcript
 Rules:
 - Ground claims in the transcript and session state.
 - Be explicit about uncertainty when evidence is limited.
-- Focus on understanding, misconceptions, confidence, and next instructional moves.`;
+- Focus on understanding, misconceptions, confidence, and next instructional moves.
+- If the session state contains framework phase, level, or closure signals, reflect them in frameworkPhase, frameworkLevel, and frameworkProgressSummary.`;
 }

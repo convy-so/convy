@@ -194,6 +194,144 @@ export const expertFrameworkSchema = z.object({
 
 export type ExpertFramework = z.infer<typeof expertFrameworkSchema>;
 
+export const frameworkCompileIssueSchema = z.object({
+  code: z.string().min(1),
+  message: z.string().min(1),
+  severity: z.enum(["warning", "error"]).default("warning"),
+});
+
+export type FrameworkCompileIssue = z.infer<typeof frameworkCompileIssueSchema>;
+
+export const tutorMoveSchema = z.enum([
+  "probe",
+  "hint",
+  "worked_example",
+  "structural_comparison",
+  "explain",
+  "assessment",
+  "transfer_challenge",
+  "reflection",
+  "corrective_check",
+  "encouragement",
+]);
+
+export type TutorMove = z.infer<typeof tutorMoveSchema>;
+
+export const compiledFrameworkPhaseSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  purpose: z.string().default(""),
+  entrySignals: z.array(z.string()).default([]),
+  exitSignals: z.array(z.string()).default([]),
+  preferredMoves: z.array(tutorMoveSchema).default(["probe"]),
+});
+
+export type CompiledFrameworkPhase = z.infer<
+  typeof compiledFrameworkPhaseSchema
+>;
+
+export const compiledFrameworkLevelSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string().default(""),
+  successSignals: z.array(z.string()).default([]),
+  proofSignals: z.array(z.string()).default([]),
+});
+
+export type CompiledFrameworkLevel = z.infer<
+  typeof compiledFrameworkLevelSchema
+>;
+
+export const compiledTurnPolicySchema = z.object({
+  diagnosisFirst: z.boolean().default(true),
+  maxLevelJumpPerTurn: z.number().int().min(0).max(2).default(1),
+  requireStudentAttemptBeforeDirectAnswer: z.boolean().default(true),
+  preferQuestionBeforeExplanation: z.boolean().default(true),
+  oneStrongMovePerTurn: z.boolean().default(true),
+});
+
+export type CompiledTurnPolicy = z.infer<typeof compiledTurnPolicySchema>;
+
+export const compiledToolPolicySchema = z.object({
+  courseSearch: z
+    .enum(["required", "available", "minimal"])
+    .default("required"),
+  images: z.enum(["allowed", "discouraged", "forbidden"]).default("forbidden"),
+  videos: z.enum(["allowed", "discouraged", "forbidden"]).default("forbidden"),
+  structuredQuiz: z
+    .enum(["allowed", "encouraged", "required_before_close", "forbidden"])
+    .default("allowed"),
+  formalGrading: z
+    .enum(["allowed", "encouraged", "required_after_quiz", "forbidden"])
+    .default("allowed"),
+  notebookUploads: z
+    .enum(["never", "when_visual_or_symbolic", "encouraged"])
+    .default("when_visual_or_symbolic"),
+});
+
+export type CompiledToolPolicy = z.infer<typeof compiledToolPolicySchema>;
+
+export const compiledAssessmentPolicySchema = z.object({
+  requiresAssessmentBeforeAdvance: z.boolean().default(false),
+  requiresAssessmentBeforeClose: z.boolean().default(false),
+  evaluationSignals: z.array(z.string()).default([]),
+});
+
+export type CompiledAssessmentPolicy = z.infer<
+  typeof compiledAssessmentPolicySchema
+>;
+
+export const compiledCompletionPolicySchema = z.object({
+  requireTransfer: z.boolean().default(false),
+  requireMetacognitiveReflection: z.boolean().default(false),
+  requireExplicitEvidenceOfUnderstanding: z.boolean().default(true),
+  closeSignalPhrases: z.array(z.string()).default([]),
+});
+
+export type CompiledCompletionPolicy = z.infer<
+  typeof compiledCompletionPolicySchema
+>;
+
+export const compiledFrameworkPolicySchema = z.object({
+  policySummary: z.string().default(""),
+  phases: z.array(compiledFrameworkPhaseSchema).min(1),
+  defaultPhaseId: z.string().min(1),
+  levels: z.array(compiledFrameworkLevelSchema).min(1),
+  defaultLevelId: z.string().min(1),
+  turnPolicy: compiledTurnPolicySchema.default({}),
+  toolPolicy: compiledToolPolicySchema.default({}),
+  assessmentPolicy: compiledAssessmentPolicySchema.default({}),
+  completionPolicy: compiledCompletionPolicySchema.default({}),
+  reviewTaxonomy: z.array(z.string()).default([]),
+  fallbackMoves: z.array(tutorMoveSchema).default(["probe", "hint", "reflection"]),
+});
+
+export type CompiledFrameworkPolicy = z.infer<
+  typeof compiledFrameworkPolicySchema
+>;
+
+export const frameworkCompilationStatusSchema = z.enum([
+  "ready",
+  "needs_attention",
+  "failed",
+]);
+
+export type FrameworkCompilationStatus = z.infer<
+  typeof frameworkCompilationStatusSchema
+>;
+
+export const frameworkRuntimeMetadataSchema = z.object({
+  compileStatus: frameworkCompilationStatusSchema.default("needs_attention"),
+  compilerVersion: z.string().default("1"),
+  compiledAt: z.string().nullable().default(null),
+  issues: z.array(frameworkCompileIssueSchema).default([]),
+  compiledPolicy: compiledFrameworkPolicySchema.nullable().default(null),
+});
+
+export type FrameworkRuntimeMetadata = z.infer<
+  typeof frameworkRuntimeMetadataSchema
+>;
+
 export const expertHeuristicSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -213,6 +351,7 @@ export const expertTutorRuntimeModelSchema = z.object({
   version: z.number().int().positive(),
   frameworkVersionId: z.string().min(1),
   framework: expertFrameworkSchema,
+  compiledPolicy: compiledFrameworkPolicySchema.nullable().default(null),
   heuristics: z.array(expertHeuristicSchema).default([]),
   conflictIds: z.array(z.string()).default([]),
   seedSource: z.enum(["deep_default", "expert_authored"]).default("deep_default"),
@@ -306,6 +445,19 @@ export const studentModelSnapshotSchema = z.object({
 export type StudentModelSnapshot = z.infer<typeof studentModelSnapshotSchema>;
 
 export const frameworkStateSchema = z.object({
+  currentPhaseId: z.string().nullable().default(null),
+  currentLevelId: z.string().nullable().default(null),
+  targetOutcomeId: z.string().nullable().default(null),
+  diagnosticStatus: z
+    .enum(["not_started", "in_progress", "complete"])
+    .default("not_started"),
+  recommendedMove: tutorMoveSchema.default("probe"),
+  assessmentPending: z.boolean().default(false),
+  transferPending: z.boolean().default(false),
+  reflectionPending: z.boolean().default(false),
+  closeRequirementsMet: z.boolean().default(false),
+  frameworkSignals: z.array(z.string()).default([]),
+  activeMisconceptionTags: z.array(z.string()).default([]),
   lastTransitionAt: z.string().nullable().default(null),
   lastTransitionReason: z.string().default(""),
 });
@@ -361,6 +513,9 @@ export const teacherProgressReportSchema = z.object({
   topicTitle: z.string(),
   studentSummary: z.string(),
   pedagogicalSummary: z.string().default(""),
+  frameworkPhase: z.string().default(""),
+  frameworkLevel: z.string().default(""),
+  frameworkProgressSummary: z.string().default(""),
   conceptProgress: z
     .array(
       z.object({
