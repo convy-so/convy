@@ -1,3 +1,4 @@
+import { formatFunctionalityGuidanceForPrompt } from "@/lib/learning/tutor-capabilities";
 import type {
   ContentScopeSnapshot,
   ExpertTutorRuntimeModel,
@@ -13,6 +14,12 @@ export function buildStudentModelUpdatePrompt(params: {
   const frameworkGuidelines = params.runtimeModel?.framework?.markdownContent
     ? `\nFollow the guidelines, conceptual rungs, and instructions laid out in the tutoring framework below to identify and update conceptual progression:\n${params.runtimeModel.framework.markdownContent}\n`
     : "";
+  const capabilityGuidanceText = formatFunctionalityGuidanceForPrompt(
+    params.runtimeModel?.framework?.functionalityGuidance,
+  );
+  const frameworkCapabilityGuidance = capabilityGuidanceText
+    ? `\nFramework capability guidance:\n${capabilityGuidanceText}\n`
+    : "";
   const compiledPolicy = params.runtimeModel?.compiledPolicy
     ? `\nCompiled framework policy summary:\n${JSON.stringify(params.runtimeModel.compiledPolicy, null, 2)}\n`
     : "";
@@ -24,6 +31,7 @@ Your job is to update two dynamic tracking fields:
 2. "personalization": A dictionary tracking student-specific interests, motivations, relevance hooks, productive struggle preferences, or aspirations discovered during the session.
 
 ${frameworkGuidelines}
+${frameworkCapabilityGuidance}
 ${compiledPolicy}
 
 Rules:

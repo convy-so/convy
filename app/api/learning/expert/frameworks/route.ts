@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { expertFrameworks } from "@/db/schema";
 import { getCourseById, listCourses } from "@/lib/learning/course-service";
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import {
   getFrameworkWithTopicLite,
   listFrameworksWithTopicLite,
 } from "@/lib/learning/framework-records";
-import { ensureSubjectFramework } from "@/lib/learning/storage";
+import {
+  createExpertFrameworkForCourse,
+  getSubjectFramework,
+} from "@/lib/learning/storage";
 import { apiError } from "@/lib/api/error-contract";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
@@ -40,7 +40,7 @@ export async function GET() {
           courseId: course.id,
           courseKey: course.key,
           courseTitle: course.title,
-          name: framework?.name ?? `${course.title} DEEP`,
+          name: framework?.name ?? null,
           description: framework?.description ?? course.description,
           topicId: framework?.topicId ?? null,
           anchorTopicTitle: framework?.topic?.title ?? null,
@@ -64,33 +64,30 @@ export async function POST(request: Request) {
       return apiError("NOT_FOUND", "Course not found");
     }
 
-    const ensured = await ensureSubjectFramework({
-      subjectKey: course.key,
+    const existing = await getSubjectFramework({ courseId: course.id });
+    if (existing) {
+      return apiError(
+        "CONFLICT",
+        "A framework already exists for this course. Open the existing studio instead.",
+      );
+    }
+
+    const created = await createExpertFrameworkForCourse({
       courseId: course.id,
+      subjectKey: course.key,
+      name: body.name,
+      description: body.description,
     });
-    const framework = await getFrameworkWithTopicLite(ensured.id);
+
+    const framework = await getFrameworkWithTopicLite(created.id);
     if (!framework) {
       return apiError("NOT_FOUND", "Framework not found");
     }
 
-    await getDb()
-      .update(expertFrameworks)
-      .set({
-        name: body.name,
-        description:
-          body.description ??
-          "Expert-authored course framework seeded from the editable DEEP default.",
-        classroomId: framework.classroomId ?? framework.topic?.classroomId ?? null,
-        courseId: course.id,
-        subjectKey: course.key,
-        updatedAt: new Date(),
-      })
-      .where(eq(expertFrameworks.id, framework.id));
-
     return NextResponse.json({
       success: true,
       data: {
-        id: ensured.id,
+        id: created.id,
         courseId: course.id,
         courseKey: course.key,
         courseTitle: course.title,
@@ -98,7 +95,7 @@ export async function POST(request: Request) {
         description: body.description ?? "",
         topicId: framework.topicId,
         anchorTopicTitle: framework.topic?.title ?? null,
-        activeVersionId: ensured.activeVersionId,
+        activeVersionId: created.activeVersionId,
       },
     });
   } catch (error) {
@@ -106,6 +103,12 @@ export async function POST(request: Request) {
       return apiError(
         "VALIDATION_ERROR",
         error.errors[0]?.message ?? "Validation error",
+      );
+    }
+    if (error instanceof Error && error.message === "FRAMEWORK_ALREADY_EXISTS") {
+      return apiError(
+        "CONFLICT",
+        "A framework already exists for this course. Open the existing studio instead.",
       );
     }
     return handleLearningRouteError(error, "Failed to create framework", "expert-frameworks:post");

@@ -28,6 +28,7 @@ import type {
   StudentModelSnapshot,
   StudentInterestProfile,
   TeacherProgressReport,
+  TopicGroundingPack,
   TopicSourceBoundary,
 } from "@/lib/learning/types";
 import { defaultLearningSessionState } from "@/lib/learning/types";
@@ -165,6 +166,7 @@ export const learningTopics = pgTable(
     createdByUserId: text("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // restrict: block course deletion while any classroom topic still references this catalog row.
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "restrict" }),
@@ -191,6 +193,11 @@ export const learningTopics = pgTable(
       mode: "date",
     }),
     lastMaterialSyncAt: timestamp("last_material_sync_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    topicGroundingPack: jsonb("topic_grounding_pack").$type<TopicGroundingPack | null>(),
+    topicGroundingPackBuiltAt: timestamp("topic_grounding_pack_built_at", {
       withTimezone: true,
       mode: "date",
     }),
@@ -635,6 +642,8 @@ export const studentProgressReports = pgTable(
   ],
 );
 
+// Expert framework rows are owned by the course catalog entry. Deleting a course cascades
+// frameworks → versions → runtime models. Classroom topics still use restrict on course_id.
 export const expertFrameworks = pgTable(
   "expert_frameworks",
   {
@@ -642,17 +651,20 @@ export const expertFrameworks = pgTable(
     ...timestamps,
     courseId: text("course_id")
       .notNull()
-      .references(() => courses.id, { onDelete: "restrict" }),
+      .references(() => courses.id, { onDelete: "cascade" }),
     subjectKey: text("subject_key").default("general").notNull(),
     classroomId: text("classroom_id").references(() => classrooms.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     topicId: text("topic_id").references(() => learningTopics.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     name: text("name").notNull(),
     description: text("description"),
-    activeVersionId: text("active_version_id"),
+    activeVersionId: text("active_version_id").references(
+      () => expertFrameworkVersions.id,
+      { onDelete: "set null" },
+    ),
     archivedAt: timestamp("archived_at", {
       withTimezone: true,
       mode: "date",
@@ -889,7 +901,7 @@ export const expertRuntimeModels = pgTable(
     ...timestamps,
     courseId: text("course_id")
       .notNull()
-      .references(() => courses.id, { onDelete: "restrict" }),
+      .references(() => courses.id, { onDelete: "cascade" }),
     topicId: text("topic_id").references(() => learningTopics.id, {
       onDelete: "set null",
     }),

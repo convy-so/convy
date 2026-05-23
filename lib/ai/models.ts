@@ -1,6 +1,6 @@
 import type { LanguageModel } from "ai";
 
-import { analysisModel, defaultModel, flashLiteModel } from "@/lib/ai";
+import { analysisModel, defaultModel, flashLiteModel } from "@/lib/ai/language-models";
 
 export const tutorChatModel: LanguageModel = defaultModel;
 export const tutorAnalysisModel: LanguageModel = analysisModel;

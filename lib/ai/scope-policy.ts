@@ -1,7 +1,7 @@
 import { Output, generateText } from "ai";
 import { z } from "zod";
 
-import { analysisModel } from "@/lib/ai";
+import { analysisModel } from "@/lib/ai/language-models";
 
 export type ScopeClassification =
   | "on_task"

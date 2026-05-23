@@ -28,7 +28,10 @@ export const expertGuidancePacks = pgTable(
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    activeVersionId: text("active_version_id"),
+    activeVersionId: text("active_version_id").references(
+      () => expertGuidanceVersions.id,
+      { onDelete: "set null" },
+    ),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
   (table) => [

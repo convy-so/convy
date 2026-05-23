@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { coerceFunctionalityGuidance } from "@/lib/learning/tutor-capabilities";
+
 export const gradeBandSchema = z.enum([
   "nursery",
   "primary",
@@ -177,9 +179,11 @@ function coerceFrameworkExampleToText(value: unknown): string | null {
   return text.length > 0 ? text : null;
 }
 
-export const expertFrameworkSchema = z.object({
+const expertFrameworkBaseSchema = z.object({
   name: z.string().trim().min(1, "Framework name is required"),
   description: z.string().default(""),
+  functionalityGuidance: z.record(z.string()).default({}),
+  toolUseGuidance: z.string().optional(),
   fewShotExamples: z
     .array(z.union([z.string(), legacyExpertFrameworkExampleSchema]))
     .default([])
@@ -192,28 +196,30 @@ export const expertFrameworkSchema = z.object({
   metadata: z.record(z.unknown()).default({}),
 });
 
+export const expertFrameworkSchema = expertFrameworkBaseSchema.transform(
+  ({ toolUseGuidance, functionalityGuidance, ...framework }) => ({
+    ...framework,
+    functionalityGuidance: coerceFunctionalityGuidance({
+      functionalityGuidance,
+      toolUseGuidance,
+    }),
+  }),
+);
+
 export type ExpertFramework = z.infer<typeof expertFrameworkSchema>;
 
 export const frameworkCompileIssueSchema = z.object({
   code: z.string().min(1),
   message: z.string().min(1),
+  path: z.string().default(""),
+  details: z.string().default(""),
+  suggestion: z.string().default(""),
   severity: z.enum(["warning", "error"]).default("warning"),
 });
 
 export type FrameworkCompileIssue = z.infer<typeof frameworkCompileIssueSchema>;
 
-export const tutorMoveSchema = z.enum([
-  "probe",
-  "hint",
-  "worked_example",
-  "structural_comparison",
-  "explain",
-  "assessment",
-  "transfer_challenge",
-  "reflection",
-  "corrective_check",
-  "encouragement",
-]);
+export const tutorMoveSchema = z.string().min(1);
 
 export type TutorMove = z.infer<typeof tutorMoveSchema>;
 
@@ -464,6 +470,48 @@ export const frameworkStateSchema = z.object({
 
 export type FrameworkState = z.infer<typeof frameworkStateSchema>;
 
+export const topicGroundingFormulaSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  expression: z.string().min(1),
+  conditions: z.string().default(""),
+  usageNotes: z.string().default(""),
+});
+
+export type TopicGroundingFormula = z.infer<typeof topicGroundingFormulaSchema>;
+
+export const topicGroundingSectionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  summary: z.string().default(""),
+  keyPoints: z.array(z.string()).default([]),
+});
+
+export type TopicGroundingSection = z.infer<typeof topicGroundingSectionSchema>;
+
+export const topicGroundingConceptSchema = z.object({
+  name: z.string().min(1),
+  summary: z.string().default(""),
+});
+
+export const topicGroundingPackSchema = z.object({
+  version: z.number().int().positive(),
+  builtAt: z.string().min(1),
+  materialIds: z.array(z.string()).default([]),
+  topicTitle: z.string().default(""),
+  digest: z.string().default(""),
+  inScopeConcepts: z.array(topicGroundingConceptSchema).default([]),
+  explicitlyOutOfScope: z.array(z.string()).default([]),
+  formulas: z.array(topicGroundingFormulaSchema).default([]),
+  sections: z.array(topicGroundingSectionSchema).default([]),
+  notationRules: z.array(z.string()).default([]),
+  rigorRules: z.array(z.string()).default([]),
+  scopeRules: z.array(z.string()).default([]),
+  teachingNotes: z.array(z.string()).default([]),
+});
+
+export type TopicGroundingPack = z.infer<typeof topicGroundingPackSchema>;
+
 export const contentScopeSnapshotSchema = z.object({
   topicId: z.string().nullable().default(null),
   topicTitle: z.string().default(""),
@@ -473,8 +521,11 @@ export const contentScopeSnapshotSchema = z.object({
   scopeNotes: z.array(z.string()).default([]),
   notationNotes: z.array(z.string()).default([]),
   rigorNotes: z.array(z.string()).default([]),
+  /** Legacy field; populated from the topic pack section summaries for compatibility. */
   retrievedContext: z.array(z.string()).default([]),
   learningOutcomes: z.array(learningOutcomeDefinitionSchema).optional().default([]),
+  groundingPackVersion: z.number().int().nonnegative().default(0),
+  topicGroundingPack: topicGroundingPackSchema.nullable().default(null),
 });
 
 export type ContentScopeSnapshot = z.infer<typeof contentScopeSnapshotSchema>;

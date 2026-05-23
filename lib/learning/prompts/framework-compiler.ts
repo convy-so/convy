@@ -1,3 +1,4 @@
+import { formatFunctionalityGuidanceForPrompt } from "@/lib/learning/tutor-capabilities";
 import type { ExpertFramework } from "@/lib/learning/types";
 
 function renderExamples(examples: string[]) {
@@ -38,13 +39,16 @@ Important rules:
 - If the framework defines phases or rungs/levels, preserve them.
 - If the framework requires transfer, reflection, proof of understanding, or diagnosis-first teaching, encode that explicitly.
 - If the framework is silent on an area, choose a conservative tutoring default.
-- Tool policy must be expressed as allowed/forbidden/encouraged runtime behavior, not implementation details.
+- Capability policy (images, videos, quizzes, grading, material search) must be expressed as allowed/forbidden/encouraged runtime behavior, not implementation details.
 
 Framework name:
 ${framework.name}
 
 Framework description:
 ${framework.description || "(none)"}
+
+Expert capability guidance:
+${formatFunctionalityGuidanceForPrompt(framework.functionalityGuidance) || "(none)"}
 
 Framework instructions:
 ${framework.markdownContent || "(none)"}

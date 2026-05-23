@@ -341,14 +341,21 @@ export {
 } from "@/lib/learning/student-model-storage";
 
 export {
-  ensureSubjectFramework,
-  ensureTopicFramework,
+  getSubjectFramework,
+  getTopicFramework,
+  createExpertFrameworkForCourse,
   getActiveFrameworkVersion,
   listApprovedCrystallizations,
   listOpenConflicts,
   createRuntimeModel,
   getPublishedRuntimeModel,
 } from "@/lib/learning/framework-runtime-storage";
+
+export {
+  rebuildTopicGroundingPack,
+  buildContentScopeFromPack,
+} from "@/lib/learning/topic-grounding-pack-service";
+export { renderTopicGroundingPackForPrompt } from "@/lib/learning/topic-grounding-pack-render";
 
 export {
   listExpertReviewCases,

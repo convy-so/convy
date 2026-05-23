@@ -1,18 +1,14 @@
 import { nanoid } from "nanoid";
 
 import {
-  compileFrameworkArtifact,
-  ensureFrameworkPolicyReady,
-} from "@/lib/learning/framework-compiler";
-import {
   expertTutorRuntimeModelSchema,
   type ExpertTutorRuntimeModel,
 } from "@/lib/learning/types";
 import {
   createRuntimeModel,
-  ensureTopicFramework,
   getActiveFrameworkVersion,
   getPublishedRuntimeModel,
+  getTopicFramework,
   listApprovedCrystallizations,
   listOpenConflicts,
 } from "@/lib/learning/storage";
@@ -22,13 +18,18 @@ export class ExpertRuntimeModelService {
     topicId: string;
     classroomId?: string | null;
   }): Promise<ExpertTutorRuntimeModel> {
-    const framework = await ensureTopicFramework({
-      topicId: params.topicId,
-      classroomId: params.classroomId,
-    });
+    const framework = await getTopicFramework({ topicId: params.topicId });
+    if (!framework) {
+      throw new Error(
+        "No expert framework exists for this course. Create and publish a framework before activating tutoring.",
+      );
+    }
+
     const frameworkVersion = await getActiveFrameworkVersion(params.topicId);
     if (!frameworkVersion) {
-      throw new Error("Active framework version not found.");
+      throw new Error(
+        "No published framework version is active for this course. Publish a framework version in the expert studio first.",
+      );
     }
 
     const published = await getPublishedRuntimeModel(params.topicId);
@@ -36,20 +37,9 @@ export class ExpertRuntimeModelService {
       const parsedPublished = expertTutorRuntimeModelSchema.safeParse(
         published.runtimeModel,
       );
-      if (parsedPublished.success && parsedPublished.data.compiledPolicy) {
+      if (parsedPublished.success) {
         return parsedPublished.data;
       }
-    }
-
-    const compiledFramework =
-      ensureFrameworkPolicyReady(frameworkVersion.framework) ??
-      (await compileFrameworkArtifact(frameworkVersion.framework)).metadata
-        .compiledPolicy;
-
-    if (!compiledFramework) {
-      throw new Error(
-        "The active framework version is not ready for tutoring. Publish a framework that compiles successfully first.",
-      );
     }
 
     const [approvedCrystallizations, openConflicts] = await Promise.all([
@@ -72,7 +62,7 @@ export class ExpertRuntimeModelService {
       version: 1,
       frameworkVersionId: frameworkVersion.id,
       framework: frameworkVersion.framework,
-      compiledPolicy: compiledFramework,
+      compiledPolicy: null,
       heuristics: approvedCrystallizations
         .filter((item) => !blockedCrystallizationIds.has(item.id))
         .map((item) => item.heuristic),

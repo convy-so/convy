@@ -31,12 +31,9 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   });
 
   const { createTutorTools } = await import("@/lib/learning/agent-tools");
-  const tools = createTutorTools({ 
-    topicId: params.topicId, 
-    contentLocale: params.access.topic.contentLocale,
+  const tools = createTutorTools({
     topicTitle: params.access.topic.title,
     studentContext: "Student learning " + params.access.topic.title,
-    compiledPolicy: prepared.runtimeModel.compiledPolicy,
   });
 
   const sanitizedMessages = toUIMessages(
