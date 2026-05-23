@@ -218,7 +218,7 @@ export function useStudentLearningWorkspace({
     () =>
       effectiveSelectedTopicId
         ? new DefaultChatTransport({
-            api: `/api/learning/sessions/${effectiveSelectedTopicId}/chat`,
+            api: `/api/learning/sessions/${tutoringSessionQuery.data?.data.sessionId || effectiveSelectedTopicId}/chat`,
             body: {
               sessionId: tutoringSessionQuery.data?.data.sessionId,
               language: selectedStudyLanguage,
@@ -243,6 +243,7 @@ export function useStudentLearningWorkspace({
     sendMessage: sendTutoringChatMessage,
     setMessages: setTutoringChatMessages,
     status: tutoringChatStatus,
+    addToolResult: addTutoringToolResult,
   } = useChat({
     id: `learning-tutoring-${effectiveSelectedTopicId ?? "none"}-${selectedStudyLanguage}`,
     messages: initialTutoringMessages,
@@ -467,5 +468,6 @@ export function useStudentLearningWorkspace({
     invitations,
     acceptInvitationMutation,
     rejectInvitationMutation,
+    addTutoringToolResult,
   };
 }

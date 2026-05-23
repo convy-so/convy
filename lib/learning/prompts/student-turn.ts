@@ -9,30 +9,20 @@ function renderList(values: string[]) {
   return values.length ? values.map((value) => `- ${value}`).join("\n") : "- none";
 }
 
-function renderFewShotExamples(
-  label: string,
-  examples: Array<{
-    title: string;
-    focusArea?: string;
-    studentMessage: string;
-    tutorResponse: string;
-    rationale?: string;
-  }>,
-) {
+function renderFewShotExamples(label: string, examples: string[]) {
   if (!examples.length) {
     return `${label}:\n- none`;
   }
 
   return `${label}:\n${examples
-    .map((example) =>
-      [
-        `- ${example.title}${example.focusArea ? ` (${example.focusArea})` : ""}`,
-        `  Student: ${example.studentMessage}`,
-        `  Tutor: ${example.tutorResponse}`,
-        `  Why: ${example.rationale || "No rationale provided."}`,
-      ].join("\n"),
+    .map(
+      (example, index) =>
+        `- Example ${index + 1}:\n${example
+          .split("\n")
+          .map((line) => `  ${line}`)
+          .join("\n")}`,
     )
-    .join("\n")}`;
+    .join("\n\n")}`;
 }
 
 export function buildStudentTurnSystemPrompt(params: {
@@ -78,34 +68,46 @@ ${renderList(params.contentScope.retrievedContext)}
 Published expert framework:
 - Framework: ${params.runtimeModel.framework.name}
 - Framework description: ${params.runtimeModel.framework.description}
-${renderFewShotExamples(
-    "Framework reference examples",
-    params.runtimeModel.framework.fewShotExamples.slice(0, 3),
-  )}
+${
+  params.runtimeModel.framework.markdownContent
+    ? `- Framework Guidelines & Instructions:\n${params.runtimeModel.framework.markdownContent}`
+    : renderFewShotExamples(
+        "Framework reference examples",
+        params.runtimeModel.framework.fewShotExamples.slice(0, 3),
+      )
+}
 
 Crystallized pedagogical heuristics:
 ${renderList(
-    params.runtimeModel.heuristics.map(
-      (heuristic) =>
-        `${heuristic.title}: when ${heuristic.trigger}, ${heuristic.action}`,
-    ),
-  )}
+  params.runtimeModel.heuristics.map(
+    (heuristic) =>
+      `${heuristic.title}: when ${heuristic.trigger}, ${heuristic.action}`,
+  ),
+)}
 
-Student model:
+Student model (Dynamic Tracking):
+- Cognitive Model (Open-Ended Conceptual Mastery & State):
+${JSON.stringify(params.studentModel.cognitiveModel ?? {}, null, 2)}
+- Personalization Profiles (Open-Ended Interests & Context):
+${JSON.stringify(params.studentModel.personalization ?? {}, null, 2)}
+
+Student model (Structured Calibration - Fallback):
 - Motivations:
-${renderList(params.studentModel.motivationalContext.deeperMotivations)}
+${renderList(params.studentModel.motivationalContext?.deeperMotivations ?? [])}
 - Relevance hooks:
-${renderList(params.studentModel.motivationalContext.relevanceHooks)}
+${renderList(params.studentModel.motivationalContext?.relevanceHooks ?? [])}
 - Cognitive entry points:
-${renderList(params.studentModel.cognitiveStyleCalibration.preferredEntryPoints)}
-- Productive struggle band: ${params.studentModel.productiveStruggleCalibration.targetBand}
+${renderList(params.studentModel.cognitiveStyleCalibration?.preferredEntryPoints ?? [])}
+- Productive struggle band: ${params.studentModel.productiveStruggleCalibration?.targetBand ?? "balanced"}
 - Longitudinal signals:
-${renderList(params.studentModel.longitudinalDevelopment.betterQuestionSignals)}
+${renderList(params.studentModel.longitudinalDevelopment?.betterQuestionSignals ?? [])}
 
 Teaching rules:
 - Use the \`search_course_materials\` tool to find accurate evidence, definitions, and notation from the uploaded teacher content. You should always prefer searching to guessing.
 - Stay inside the uploaded material scope for concepts and claims.
 - Use the framework description, heuristics, and reference examples to decide your next move.
+- You may occasionally assess the student's understanding by asking a quiz question using the \`administer_quiz\` tool. If the subject involves math or diagrams, set \`acceptsImageUpload: true\` so they can upload a picture of their notebook.
+- Once the student answers a quiz (via text or uploaded image), use the \`grade_student_work\` tool to formally record their score and provide feedback.
 - Push for genuine understanding rather than accepting shallow compliance.
 - Keep the student in productive struggle: challenging but not discouraging.
 - Prefer one strong move per turn.

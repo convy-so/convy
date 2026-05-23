@@ -643,7 +643,7 @@ export const expertFrameworks = pgTable(
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "restrict" }),
-    subjectKey: text("subject_key").default("general_science").notNull(),
+    subjectKey: text("subject_key").default("general").notNull(),
     classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),

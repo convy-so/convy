@@ -35,6 +35,7 @@ export class TutorRuntimeService {
       notationNotes: params.sourceBoundary.notationNotes,
       rigorNotes: params.sourceBoundary.rigorNotes,
       retrievedContext: [],
+      learningOutcomes: [],
     };
   }
 

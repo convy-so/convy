@@ -45,7 +45,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
         userId: params.sessionUserId,
         existingSnapshot: params.prepared.latestStudentSnapshot,
         contentScope: {
-          ...params.prepared.baselineScope,
+          ...params.prepared.contentScope,
           retrievedContext: getRetrievedContext(params.result.steps),
         },
         conversationExcerpt: [
@@ -53,6 +53,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
           { role: "user" as const, content: params.latestUserText },
           { role: "assistant" as const, content: assistantText },
         ],
+        runtimeModel: params.prepared.runtimeModel,
       })
     : null;
 
@@ -110,7 +111,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
       runtimeModelVersion: params.prepared.runtimeModel.version,
       frameworkVersion: params.prepared.runtimeModel.frameworkVersionId,
       studentModelSnapshotId: shouldUpdateStudentModel ? snapshot?.id : params.prepared.latestStudentSnapshotRecord?.id,
-      materialIds: params.prepared.baselineScope.materialIds,
+      materialIds: params.prepared.contentScope.materialIds,
 
       conflictState: params.prepared.runtimeModel.conflictIds.length > 0 ? "open" : "clear",
       autoCompleted: autoComplete,
