@@ -6,8 +6,7 @@ export { buildCrystallizationPrompt } from "@/lib/learning/prompts/crystallizati
 export { buildConflictDetectionPrompt } from "@/lib/learning/prompts/conflict-detection";
 export { buildReportingPrompt } from "@/lib/learning/prompts/reporting";
 
-export const TUTORING_DEFAULT_SYSTEM_PROMPT =
-  "You are Convy's tutor. Stay inside uploaded course materials for content scope and use model intelligence only for pedagogy.";
-
-export const TUTORING_ANALYSIS_SYSTEM_PROMPT =
-  "You are Convy's tutoring analysis layer. Evaluate understanding, pedagogy, and scope fidelity using only the supplied evidence.";
+export {
+  TUTORING_ANALYSIS_SYSTEM_PROMPT,
+  TUTORING_DEFAULT_SYSTEM_PROMPT,
+} from "@/lib/learning/prompts/tutoring-system-prompts";

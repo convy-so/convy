@@ -1,6 +1,15 @@
-import { google } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
 import "@/lib/ai/prompt-specs";
+import {
+  analysisModel,
+  defaultModel,
+  flashLiteModel,
+  flashModel,
+  gpt41MiniModel,
+  GEMINI_FLASH_ID,
+  GEMINI_FLASH_LITE_ID,
+  GPT_4_1_MINI_ID,
+  google,
+} from "@/lib/ai/language-models";
 import "@/lib/ai/retrieval-adapters";
 import {
   generateText,
@@ -14,7 +23,6 @@ import {
   createAgentUIStreamResponse,
   type ToolLoopAgentOnFinishCallback,
 } from "ai";
-import { wrapAISDK } from "braintrust";
 import { logUsage, type UsageLogInput } from "./billing/logger";
 
 import type { ContextBundle, PromptSpec } from "./ai-core";
@@ -66,18 +74,17 @@ export async function normalizeMessages(
   );
 }
 
-export const GEMINI_FLASH_LITE_ID = "gemini-2.5-flash-lite";
-export const GEMINI_FLASH_ID = "gemini-2.5-flash";
-export const GPT_4_1_MINI_ID = "gpt-4.1-mini";
-
-export const flashLiteModel = wrapAISDK(google(GEMINI_FLASH_LITE_ID));
-export const flashModel = wrapAISDK(google(GEMINI_FLASH_ID));
-export const gpt41MiniModel = wrapAISDK(openai(GPT_4_1_MINI_ID));
-
-// Use flash for analysis (high-volume background calls)
-export const analysisModel = flashModel;
-
-export const defaultModel = gpt41MiniModel;
+export {
+  analysisModel,
+  defaultModel,
+  flashLiteModel,
+  flashModel,
+  gpt41MiniModel,
+  GEMINI_FLASH_ID,
+  GEMINI_FLASH_LITE_ID,
+  GPT_4_1_MINI_ID,
+  google,
+};
 
 function getProviderName(model: LanguageModel) {
   const modelId = getModelId(model);
@@ -307,4 +314,3 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
 import { extractAIGeneratedResponse } from "./ai-utils";
 
 export { extractAIGeneratedResponse };
-export { google };

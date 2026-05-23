@@ -1,30 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
-  AlertTriangle,
   ArrowUpCircle,
-  CheckCircle2,
   ChevronLeft,
-  CircleDot,
   History,
   Loader2,
   PencilLine,
-  Plus,
-  Radio,
-  Save,
-  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
+import { FrameworkEditorWizard } from "@/components/expert/framework-editor-wizard";
 import { Link } from "@/i18n/routing";
-import { createDefaultDeepFramework } from "@/lib/learning/framework-presets";
+import { createEmptyExpertFramework } from "@/lib/learning/framework-presets";
+import { normalizeFunctionalityGuidance } from "@/lib/learning/tutor-capabilities";
 import {
   expertFrameworkSchema,
   type ExpertFramework,
-  frameworkRuntimeMetadataSchema,
-  type FrameworkCompileIssue,
-  type FrameworkRuntimeMetadata,
 } from "@/lib/learning/types";
 
 type FrameworkVersion = {
@@ -32,6 +24,7 @@ type FrameworkVersion = {
   frameworkId: string;
   version: number;
   status: string;
+  seedSource?: string | null;
   notes: string | null;
   framework: Record<string, unknown>;
   createdAt: string;
@@ -50,11 +43,14 @@ type FrameworkDetail = {
 };
 
 type StudioPanel = "editor" | "versions";
-const FRAMEWORK_RUNTIME_METADATA_KEY = "__convyFrameworkRuntime";
 
-function parseInitialArtifact(raw: Record<string, unknown> | undefined): ExpertFramework {
-  const parsed = expertFrameworkSchema.safeParse(raw ?? createDefaultDeepFramework());
-  return parsed.success ? parsed.data : createDefaultDeepFramework();
+function parseInitialArtifact(
+  raw: Record<string, unknown> | undefined,
+  frameworkName: string,
+): ExpertFramework {
+  const fallback = createEmptyExpertFramework({ name: frameworkName });
+  const parsed = expertFrameworkSchema.safeParse(raw ?? fallback);
+  return parsed.success ? parsed.data : fallback;
 }
 
 function normalizeDraftForSave(framework: ExpertFramework): ExpertFramework {
@@ -62,6 +58,9 @@ function normalizeDraftForSave(framework: ExpertFramework): ExpertFramework {
     ...framework,
     name: framework.name.trim(),
     description: framework.description.trim(),
+    functionalityGuidance: normalizeFunctionalityGuidance(
+      framework.functionalityGuidance,
+    ),
     markdownContent: framework.markdownContent?.trim() ?? "",
     fewShotExamples: framework.fewShotExamples
       .map((example) => example.trim())
@@ -76,66 +75,6 @@ function formatVersionStatus(status: string) {
   return status;
 }
 
-function readFrameworkRuntimeMetadata(
-  raw: Record<string, unknown> | undefined,
-): FrameworkRuntimeMetadata | null {
-  const metadata = raw?.metadata;
-  if (!metadata || typeof metadata !== "object") return null;
-
-  const runtimeMetadata = (metadata as Record<string, unknown>)[
-    FRAMEWORK_RUNTIME_METADATA_KEY
-  ];
-  const parsed = frameworkRuntimeMetadataSchema.safeParse(runtimeMetadata);
-  return parsed.success ? parsed.data : null;
-}
-
-function countCompileIssues(
-  issues: FrameworkCompileIssue[],
-  severity: FrameworkCompileIssue["severity"],
-) {
-  return issues.filter((issue) => issue.severity === severity).length;
-}
-
-function formatCompileStatus(status: FrameworkRuntimeMetadata["compileStatus"]) {
-  if (status === "ready") return "Ready";
-  if (status === "failed") return "Needs fixes";
-  return "Needs review";
-}
-
-function getCompileStatusStyles(status: FrameworkRuntimeMetadata["compileStatus"]) {
-  if (status === "ready") {
-    return {
-      badge:
-        "border-emerald-200 bg-emerald-50 text-emerald-800",
-      panel:
-        "border-emerald-200 bg-emerald-50/60",
-      icon: "text-emerald-600",
-    };
-  }
-
-  if (status === "failed") {
-    return {
-      badge:
-        "border-rose-200 bg-rose-50 text-rose-800",
-      panel:
-        "border-rose-200 bg-rose-50/60",
-      icon: "text-rose-600",
-    };
-  }
-
-  return {
-    badge:
-      "border-amber-200 bg-amber-50 text-amber-800",
-    panel:
-      "border-amber-200 bg-amber-50/60",
-    icon: "text-amber-600",
-  };
-}
-
-function canPublishVersion(metadata: FrameworkRuntimeMetadata | null) {
-  return metadata?.compileStatus === "ready" && Boolean(metadata.compiledPolicy);
-}
-
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     credentials: "include",
@@ -145,11 +84,17 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
-  const payload = (await response.json()) as { error?: string } & T;
+  const payload = (await response.json()) as
+    | ({ success: false; error?: { code?: string; message?: string; details?: Record<string, unknown> } })
+    | ({ success?: true } & T);
   if (!response.ok) {
-    throw new Error(payload.error ?? "Request failed");
+    throw new Error(
+      "error" in payload && payload.error?.message
+        ? payload.error.message
+        : "Request failed",
+    );
   }
-  return payload;
+  return payload as T;
 }
 
 export function ExpertFrameworkVersionStudio({
@@ -159,7 +104,10 @@ export function ExpertFrameworkVersionStudio({
   framework: FrameworkDetail;
   initialVersions: FrameworkVersion[];
 }) {
-  const initialArtifact = parseInitialArtifact(initialVersions[0]?.framework);
+  const initialArtifact = parseInitialArtifact(
+    initialVersions[0]?.framework,
+    framework.name,
+  );
   const [activePanel, setActivePanel] = useState<StudioPanel>("editor");
   const [versions, setVersions] = useState(initialVersions);
   const [activeVersionId, setActiveVersionId] = useState(framework.activeVersionId);
@@ -167,23 +115,6 @@ export function ExpertFrameworkVersionStudio({
   const [notes, setNotes] = useState("");
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isActivatingVersionId, setIsActivatingVersionId] = useState<string | null>(null);
-
-  const activeVersion = useMemo(
-    () => versions.find((version) => version.id === activeVersionId) ?? null,
-    [activeVersionId, versions],
-  );
-  const latestSavedVersion = versions[0] ?? null;
-  const latestSavedRuntimeMetadata = latestSavedVersion
-    ? readFrameworkRuntimeMetadata(latestSavedVersion.framework)
-    : null;
-  const latestSavedErrors = latestSavedRuntimeMetadata
-    ? countCompileIssues(latestSavedRuntimeMetadata.issues, "error")
-    : 0;
-  const latestSavedWarnings = latestSavedRuntimeMetadata
-    ? countCompileIssues(latestSavedRuntimeMetadata.issues, "warning")
-    : 0;
-
-  const exampleCount = draftFramework.fewShotExamples.filter((example) => example.trim()).length;
 
   const handleCreateVersion = async () => {
     try {
@@ -208,7 +139,9 @@ export function ExpertFrameworkVersionStudio({
       );
 
       setVersions((current) => [result.data, ...current]);
-      setDraftFramework(parseInitialArtifact(result.data.framework));
+      setDraftFramework(
+        parseInitialArtifact(result.data.framework, framework.name),
+      );
       setNotes("");
       toast.success("Draft version saved");
     } catch (error) {
@@ -233,7 +166,7 @@ export function ExpertFrameworkVersionStudio({
         })),
       );
       setActiveVersionId(versionId);
-      toast.success("Version is now live for tutoring");
+      toast.success("Version published for tutoring");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to publish version");
     } finally {
@@ -262,30 +195,14 @@ export function ExpertFrameworkVersionStudio({
               Framework studio
             </h1>
             <p className="max-w-2xl text-sm text-slate-500">
-              Edit the tutoring framework in one place, save versions, then publish the one
-              that should run live.
+              Build your framework step by step, save a draft when ready, then publish from
+              Versions.
             </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {activeVersion ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-                  <Radio className="h-3 w-3 fill-emerald-600 text-emerald-600" />
-                  Live: Version {activeVersion.version}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-                  <CircleDot className="h-3 w-3" />
-                  No live version yet
-                </span>
-              )}
-              <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                {exampleCount} {exampleCount === 1 ? "example" : "examples"} in workspace
-              </span>
-              {framework.anchorTopicTitle ? (
-                <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                  Anchor: {framework.anchorTopicTitle}
-                </span>
-              ) : null}
-            </div>
+            {framework.anchorTopicTitle ? (
+              <p className="text-sm text-slate-500">
+                Anchor topic: {framework.anchorTopicTitle}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -320,304 +237,24 @@ export function ExpertFrameworkVersionStudio({
             </button>
           </nav>
 
-          {activePanel === "editor" ? (
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-              <input
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Version note (optional)"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 sm:min-w-[220px]"
-              />
-              <button
-                type="button"
-                onClick={handleCreateVersion}
-                disabled={isSavingDraft}
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50 hover:bg-slate-800"
-              >
-                {isSavingDraft ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save draft
-              </button>
-            </div>
-          ) : null}
         </div>
       </header>
 
       {activePanel === "editor" ? (
         <div className="pt-6">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <section className="border-b border-slate-100 px-6 py-6 sm:px-8">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="space-y-2">
-                  <h2 className="text-base font-bold text-slate-950">Runtime diagnostics</h2>
-                  <p className="max-w-2xl text-sm text-slate-500">
-                    The platform validates the last saved draft and compiles it into the
-                    internal tutoring policy used at runtime. Unsaved edits are not checked
-                    until you save another draft.
-                  </p>
-                </div>
-                {latestSavedRuntimeMetadata ? (
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${getCompileStatusStyles(latestSavedRuntimeMetadata.compileStatus).badge}`}
-                  >
-                    {latestSavedRuntimeMetadata.compileStatus === "ready" ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    )}
-                    {formatCompileStatus(latestSavedRuntimeMetadata.compileStatus)}
-                  </span>
-                ) : (
-                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                    Save a draft to validate
-                  </span>
-                )}
-              </div>
-
-              {latestSavedRuntimeMetadata ? (
-                <div
-                  className={`mt-5 rounded-2xl border px-4 py-4 ${getCompileStatusStyles(latestSavedRuntimeMetadata.compileStatus).panel}`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-slate-900">
-                        Latest saved draft: Version {latestSavedVersion?.version}
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        {latestSavedRuntimeMetadata.compileStatus === "ready"
-                          ? "This version is ready to publish and can power live tutoring."
-                          : "This version is not yet publish-ready. Fix the issues below, then save another draft."}
-                      </p>
-                      {latestSavedRuntimeMetadata.compiledAt ? (
-                        <p className="text-xs text-slate-500">
-                          Checked{" "}
-                          {new Date(latestSavedRuntimeMetadata.compiledAt).toLocaleString(
-                            undefined,
-                            {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            },
-                          )}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                      <span className="rounded-full bg-white/80 px-2.5 py-1 text-slate-700">
-                        {latestSavedErrors} errors
-                      </span>
-                      <span className="rounded-full bg-white/80 px-2.5 py-1 text-slate-700">
-                        {latestSavedWarnings} warnings
-                      </span>
-                    </div>
-                  </div>
-
-                  {latestSavedRuntimeMetadata.issues.length > 0 ? (
-                    <div className="mt-4 space-y-2">
-                      {latestSavedRuntimeMetadata.issues.map((issue, index) => (
-                        <div
-                          key={`${issue.code}-${index}`}
-                          className="rounded-xl border border-white/70 bg-white/80 px-3 py-3"
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
-                                issue.severity === "error"
-                                  ? "bg-rose-100 text-rose-700"
-                                  : "bg-amber-100 text-amber-700"
-                              }`}
-                            >
-                              {issue.severity}
-                            </span>
-                            <span className="text-sm font-semibold text-slate-900">
-                              {issue.message}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-4 text-sm text-slate-600">
-                      No compiler issues were detected for the latest saved draft.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                  Save a draft to see whether the framework is publish-ready, what the tutor
-                  can enforce from it, and which issues still need fixing.
-                </div>
-              )}
-            </section>
-
-            <section className="border-b border-slate-100 px-6 py-6 sm:px-8">
-              <div className="mb-5">
-                <h2 className="text-base font-bold text-slate-950">Framework</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Name and description are injected into the live tutor when you publish a
-                  version.
-                </p>
-              </div>
-
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Name
-                  </label>
-                  <input
-                    value={draftFramework.name}
-                    onChange={(event) =>
-                      setDraftFramework((current) => ({
-                        ...current,
-                        name: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Description
-                  </label>
-                  <textarea
-                    value={draftFramework.description}
-                    onChange={(event) =>
-                      setDraftFramework((current) => ({
-                        ...current,
-                        description: event.target.value,
-                      }))
-                    }
-                    rows={5}
-                    placeholder="Describe how the teaching flow should feel in practice."
-                    className="min-h-[140px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Framework Guidelines & Instructions (Markdown)
-                  </label>
-                  <textarea
-                    value={draftFramework.markdownContent}
-                    onChange={(event) =>
-                      setDraftFramework((current) => ({
-                        ...current,
-                        markdownContent: event.target.value,
-                      }))
-                    }
-                    rows={12}
-                    placeholder="Enter the full mathematical teaching framework in Markdown format. Outline diagnostic rungs, conceptual progression, and pedagogical rules."
-                    className="min-h-[280px] w-full font-mono rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section className="px-6 py-6 sm:px-8">
-              <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-bold text-slate-950">Teaching examples</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Free-form reference examples for the whole framework. Empty blocks are
-                    skipped when you save.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDraftFramework((current) => ({
-                      ...current,
-                      fewShotExamples: [...current.fewShotExamples, ""],
-                    }))
-                  }
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add example
-                </button>
-              </div>
-
-              {draftFramework.fewShotExamples.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDraftFramework((current) => ({
-                      ...current,
-                      fewShotExamples: [""],
-                    }))
-                  }
-                  className="flex w-full flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center transition-colors hover:border-slate-300 hover:bg-slate-50"
-                >
-                  <Plus className="mb-3 h-5 w-5 text-slate-400" />
-                  <span className="text-sm font-semibold text-slate-700">
-                    Add your first example
-                  </span>
-                  <span className="mt-1 max-w-md text-sm text-slate-500">
-                    Use any format you like — student moments, ideal tutor moves, or notes.
-                  </span>
-                </button>
-              ) : (
-                <div className="space-y-4">
-                  {draftFramework.fewShotExamples.map((example, index) => (
-                    <div
-                      key={index}
-                      className="group rounded-xl border border-slate-200 bg-slate-50/50 p-4"
-                    >
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-                          Example {index + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDraftFramework((current) => ({
-                              ...current,
-                              fewShotExamples: current.fewShotExamples.filter(
-                                (_, currentIndex) => currentIndex !== index,
-                              ),
-                            }))
-                          }
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 opacity-0 transition-all hover:bg-white hover:text-rose-600 group-hover:opacity-100"
-                          aria-label={`Remove example ${index + 1}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                      <textarea
-                        value={example}
-                        onChange={(event) =>
-                          setDraftFramework((current) => ({
-                            ...current,
-                            fewShotExamples: current.fewShotExamples.map(
-                              (currentExample, currentIndex) =>
-                                currentIndex === index
-                                  ? event.target.value
-                                  : currentExample,
-                            ),
-                          }))
-                        }
-                        rows={6}
-                        placeholder="Write the example in any format you prefer."
-                        className="min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          <p className="mt-4 text-sm text-slate-500">
-            Changes here are a working copy until you save a draft and publish a version from
-            the Versions tab.
-          </p>
+          <FrameworkEditorWizard
+            key={versions[0]?.id ?? "new"}
+            draftFramework={draftFramework}
+            setDraftFramework={setDraftFramework}
+            notes={notes}
+            setNotes={setNotes}
+            onSaveDraft={handleCreateVersion}
+            isSavingDraft={isSavingDraft}
+          />
         </div>
       ) : (
         <div className="pt-6">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-t border-slate-200">
             {versions.length === 0 ? (
               <div className="px-6 py-16 text-center sm:px-8">
                 <History className="mx-auto h-8 w-8 text-slate-300" />
@@ -641,7 +278,6 @@ export function ExpertFrameworkVersionStudio({
                     <tr className="border-b border-slate-100 bg-slate-50/80 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
                       <th className="px-6 py-3 sm:px-8">Version</th>
                       <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Compile</th>
                       <th className="px-4 py-3">Saved</th>
                       <th className="px-4 py-3">Notes</th>
                       <th className="px-6 py-3 text-right sm:px-8">Action</th>
@@ -649,61 +285,14 @@ export function ExpertFrameworkVersionStudio({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {versions.map((version) => {
-                      const isLive = activeVersionId === version.id;
-                      const runtimeMetadata = readFrameworkRuntimeMetadata(version.framework);
-                      const publishReady = canPublishVersion(runtimeMetadata);
-                      const errorCount = runtimeMetadata
-                        ? countCompileIssues(runtimeMetadata.issues, "error")
-                        : 0;
-                      const warningCount = runtimeMetadata
-                        ? countCompileIssues(runtimeMetadata.issues, "warning")
-                        : 0;
-                      const firstBlockingIssue = runtimeMetadata?.issues.find(
-                        (issue) => issue.severity === "error",
-                      );
+                      const isPublished = activeVersionId === version.id;
                       return (
-                        <tr
-                          key={version.id}
-                          className={isLive ? "bg-emerald-50/40" : "bg-white"}
-                        >
+                        <tr key={version.id}>
                           <td className="px-6 py-4 font-semibold text-slate-950 sm:px-8">
-                            <div className="flex items-center gap-2">
-                              Version {version.version}
-                              {isLive ? (
-                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                                  Live
-                                </span>
-                              ) : null}
-                            </div>
+                            Version {version.version}
                           </td>
                           <td className="px-4 py-4 text-slate-600">
                             {formatVersionStatus(version.status)}
-                          </td>
-                          <td className="px-4 py-4">
-                            {runtimeMetadata ? (
-                              <div className="space-y-1">
-                                <span
-                                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${getCompileStatusStyles(runtimeMetadata.compileStatus).badge}`}
-                                >
-                                  {runtimeMetadata.compileStatus === "ready" ? (
-                                    <CheckCircle2 className="h-3 w-3" />
-                                  ) : (
-                                    <AlertTriangle className="h-3 w-3" />
-                                  )}
-                                  {formatCompileStatus(runtimeMetadata.compileStatus)}
-                                </span>
-                                <p className="text-xs text-slate-500">
-                                  {errorCount} errors, {warningCount} warnings
-                                </p>
-                                {firstBlockingIssue ? (
-                                  <p className="max-w-xs text-xs text-rose-600">
-                                    {firstBlockingIssue.message}
-                                  </p>
-                                ) : null}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400">Not checked</span>
-                            )}
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-slate-600">
                             {new Date(version.createdAt).toLocaleString(undefined, {
@@ -722,24 +311,15 @@ export function ExpertFrameworkVersionStudio({
                             <button
                               type="button"
                               onClick={() => handleActivateVersion(version.id)}
-                              disabled={
-                                Boolean(isActivatingVersionId) ||
-                                isLive ||
-                                !publishReady
-                              }
+                              disabled={Boolean(isActivatingVersionId) || isPublished}
                               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 hover:bg-slate-50"
-                              title={
-                                publishReady
-                                  ? undefined
-                                  : "This version must compile successfully before it can be published."
-                              }
                             >
                               {isActivatingVersionId === version.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               ) : (
                                 <ArrowUpCircle className="h-3.5 w-3.5" />
                               )}
-                              {isLive ? "Published" : "Publish"}
+                              {isPublished ? "Published" : "Publish"}
                             </button>
                           </td>
                         </tr>
@@ -752,8 +332,8 @@ export function ExpertFrameworkVersionStudio({
           </div>
 
           <p className="mt-4 text-sm text-slate-500">
-            Publishing switches the live tutoring framework to that snapshot. Save new edits in
-            the Editor first if you need another draft.
+            Publishing makes that version active for tutoring. Save new edits in the Editor first
+            if you need another draft.
           </p>
         </div>
       )}

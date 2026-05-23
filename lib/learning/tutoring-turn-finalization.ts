@@ -9,16 +9,6 @@ import {
 
 import type { FinalizeTutoringTurnParams } from "@/lib/learning/tutoring-turn-types";
 
-function getRetrievedContext(steps: FinalizeTutoringTurnParams["result"]["steps"]) {
-  return steps
-    .flatMap((step) => step.toolResults)
-    .flatMap((result) =>
-      result.toolName === "search_course_materials"
-        ? ((result.output as { results?: Array<{ content: string }> }).results?.map((res) => res.content) ?? [])
-        : [],
-    );
-}
-
 function getLatestAssessmentResult(
   steps: FinalizeTutoringTurnParams["result"]["steps"],
 ) {
@@ -63,10 +53,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
         sourceId: params.tutorSessionId,
         userId: params.sessionUserId,
         existingSnapshot: params.prepared.latestStudentSnapshot,
-        contentScope: {
-          ...params.prepared.contentScope,
-          retrievedContext: getRetrievedContext(params.result.steps),
-        },
+        contentScope: params.prepared.contentScope,
         conversationExcerpt: [
           ...(params.previousAssistantText ? [{ role: "assistant" as const, content: params.previousAssistantText }] : []),
           { role: "user" as const, content: params.latestUserText },

@@ -51,7 +51,10 @@ export function ExpertSidebar() {
 
       <nav className="flex-1 p-4 space-y-1">
         {navigation.map((item) => {
-          const isActive = pathname === `/${locale}${item.href}` || pathname.endsWith(item.href);
+          const isActive =
+            pathname === `/${locale}${item.href}` ||
+            pathname.endsWith(item.href) ||
+            (item.href === "/expert/frameworks" && pathname.includes("/expert/frameworks"));
           return (
             <Link
               key={item.name}

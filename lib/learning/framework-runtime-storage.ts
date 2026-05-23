@@ -14,7 +14,7 @@ import {
   getCourseById,
   getCourseByKey,
 } from "@/lib/learning/course-service";
-import { createDefaultDeepFramework } from "@/lib/learning/framework-presets";
+import { createEmptyExpertFramework } from "@/lib/learning/framework-presets";
 import { listFrameworksWithTopicLite } from "@/lib/learning/framework-records";
 import type { ExpertTutorRuntimeModel } from "@/lib/learning/types";
 import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
@@ -25,91 +25,53 @@ async function findFrameworkForCourseId(courseId: string) {
   return frameworks.find((framework) => framework.courseId === courseId) ?? null;
 }
 
-async function findAnchorTopicForSubjectKey(subjectKey: string) {
-  return await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.subjectKey, subjectKey),
-    orderBy: [desc(learningTopics.updatedAt)],
-  });
-}
-
-export async function ensureSubjectFramework(params: {
-  subjectKey: string;
+export async function getSubjectFramework(params: {
   courseId?: string;
-  topicId?: string;
-  classroomId?: string | null;
+  subjectKey?: string;
 }) {
   const course =
     (params.courseId ? await getCourseById(params.courseId) : null) ??
-    (await getCourseByKey(params.subjectKey));
+    (params.subjectKey ? await getCourseByKey(params.subjectKey) : null);
 
+  if (!course) {
+    return null;
+  }
+
+  return findFrameworkForCourseId(course.id);
+}
+
+export async function getTopicFramework(params: { topicId: string }) {
+  const topic = await getDb().query.learningTopics.findFirst({
+    where: eq(learningTopics.id, params.topicId),
+  });
+
+  if (!topic) {
+    return null;
+  }
+
+  return findFrameworkForCourseId(topic.courseId);
+}
+
+export async function createExpertFrameworkForCourse(params: {
+  courseId: string;
+  subjectKey: string;
+  name: string;
+  description?: string;
+}) {
+  const existing = await findFrameworkForCourseId(params.courseId);
+  if (existing) {
+    throw new Error("FRAMEWORK_ALREADY_EXISTS");
+  }
+
+  const course = await getCourseById(params.courseId);
   if (!course) {
     throw new Error("Course not found");
   }
 
-  const existing = await findFrameworkForCourseId(course.id);
-  if (existing) {
-    return existing;
-  }
-
-  let anchorTopic = params.topicId
-    ? await getDb().query.learningTopics.findFirst({
-        where: eq(learningTopics.id, params.topicId),
-      })
-    : null;
-
-  if (anchorTopic && anchorTopic.subjectKey !== params.subjectKey) {
-    anchorTopic = null;
-  }
-
-  if (!anchorTopic) {
-    anchorTopic = await findAnchorTopicForSubjectKey(params.subjectKey);
-  }
-
-  if (!anchorTopic) {
-    anchorTopic = await getDb().query.learningTopics.findFirst({
-      where: eq(learningTopics.courseId, course.id),
-      orderBy: [desc(learningTopics.updatedAt)],
-    });
-  }
-
-  if (!anchorTopic) {
-    return await getDb().transaction(async (tx) => {
-      const [framework] = await tx
-        .insert(expertFrameworks)
-        .values({
-          id: nanoid(),
-          courseId: course.id,
-          topicId: null,
-          classroomId: params.classroomId ?? null,
-          subjectKey: course.key,
-          name: `${course.title} DEEP`,
-          description:
-            "Default seeded framework. Experts can edit, replace, or delete it.",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning();
-
-      const defaultFramework = createDefaultDeepFramework();
-      await tx
-        .insert(expertFrameworkVersions)
-        .values({
-          id: nanoid(),
-          frameworkId: framework.id,
-          version: 1,
-          status: "draft",
-          seedSource: "deep_default",
-          framework: defaultFramework,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-
-      return {
-        ...framework,
-        activeVersionId: null,
-      };
-    });
-  }
+  const artifact = createEmptyExpertFramework({
+    name: params.name,
+    description: params.description ?? "",
+  });
 
   return await getDb().transaction(async (tx) => {
     const [framework] = await tx
@@ -117,30 +79,26 @@ export async function ensureSubjectFramework(params: {
       .values({
         id: nanoid(),
         courseId: course.id,
-        topicId: anchorTopic.id,
-        classroomId: params.classroomId ?? anchorTopic.classroomId ?? null,
-        subjectKey: course.key,
-        name: "DEEP",
-        description:
-          "Default seeded framework. Experts can edit, replace, or delete it.",
+        topicId: null,
+        classroomId: null,
+        subjectKey: params.subjectKey,
+        name: params.name,
+        description: params.description ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
       .returning();
 
-    const defaultFramework = createDefaultDeepFramework();
-    await tx
-      .insert(expertFrameworkVersions)
-      .values({
-        id: nanoid(),
-        frameworkId: framework.id,
-        version: 1,
-        status: "draft",
-        seedSource: "deep_default",
-        framework: defaultFramework,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+    await tx.insert(expertFrameworkVersions).values({
+      id: nanoid(),
+      frameworkId: framework.id,
+      version: 1,
+      status: "draft",
+      seedSource: "expert_authored",
+      framework: artifact,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     return {
       ...framework,
@@ -149,32 +107,16 @@ export async function ensureSubjectFramework(params: {
   });
 }
 
-export async function ensureTopicFramework(params: {
-  topicId: string;
-  classroomId?: string | null;
-}) {
-  const topic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, params.topicId),
-  });
-
-  if (!topic) {
-    throw new Error("Topic not found");
+export async function getActiveFrameworkVersion(topicId: string) {
+  const framework = await getTopicFramework({ topicId });
+  if (!framework?.activeVersionId) {
+    return null;
   }
 
-  return await ensureSubjectFramework({
-    subjectKey: topic.subjectKey,
-    courseId: topic.courseId,
-    topicId: topic.id,
-    classroomId: params.classroomId ?? topic.classroomId ?? null,
-  });
-}
-
-export async function getActiveFrameworkVersion(topicId: string) {
-  const framework = await ensureTopicFramework({ topicId });
   return await getDb().query.expertFrameworkVersions.findFirst({
     where: and(
       eq(expertFrameworkVersions.frameworkId, framework.id),
-      eq(expertFrameworkVersions.id, framework.activeVersionId ?? ""),
+      eq(expertFrameworkVersions.id, framework.activeVersionId),
     ),
   });
 }

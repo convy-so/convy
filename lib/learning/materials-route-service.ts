@@ -20,6 +20,7 @@ import {
   deleteLearningMaterial,
   downloadLearningMaterial,
 } from "@/lib/storage";
+import { rebuildTopicGroundingPack } from "@/lib/learning/topic-grounding-pack-service";
 import { topicSourceBoundarySchema } from "@/lib/learning/types";
 import { publishClassroomRealtimeEvent } from "@/lib/realtime";
 import type { LearningMaterialProcessingJobData } from "@/lib/queue";
@@ -235,6 +236,16 @@ export async function indexMaterialAndSyncBoundary(params: {
     getDb().update(topicMaterials).set({ indexingStatus: "completed", indexingError: null, updatedAt: new Date() }).where(eq(topicMaterials.id, params.materialId)),
     getDb().update(learningTopics).set({ sourceBoundary: updatedBoundary, lastMaterialSyncAt: new Date(), updatedAt: new Date() }).where(eq(learningTopics.id, params.topicId)),
   ]);
+
+  try {
+    await rebuildTopicGroundingPack(params.topicId);
+  } catch (error) {
+    console.error("[learning-material-upload] topic grounding pack rebuild failed", {
+      topicId: params.topicId,
+      materialId: params.materialId,
+      error: getErrorMessage(error, "Topic grounding pack rebuild failed"),
+    });
+  }
 }
 
 async function deleteMaterialProcessingArtifacts(params: {

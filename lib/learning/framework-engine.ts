@@ -17,20 +17,7 @@ const frameworkDecisionSchema = z.object({
   diagnosticStatus: z
     .enum(["not_started", "in_progress", "complete"])
     .default("in_progress"),
-  recommendedMove: z
-    .enum([
-      "probe",
-      "hint",
-      "worked_example",
-      "structural_comparison",
-      "explain",
-      "assessment",
-      "transfer_challenge",
-      "reflection",
-      "corrective_check",
-      "encouragement",
-    ])
-    .default("probe"),
+  recommendedMove: z.string().min(1).default("probe"),
   assessmentPending: z.boolean().default(false),
   transferPending: z.boolean().default(false),
   reflectionPending: z.boolean().default(false),

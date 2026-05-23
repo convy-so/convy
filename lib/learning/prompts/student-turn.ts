@@ -1,3 +1,5 @@
+import { formatFunctionalityGuidanceForPrompt } from "@/lib/learning/tutor-capabilities";
+import { renderTopicGroundingPackForPrompt } from "@/lib/learning/topic-grounding-pack-render";
 import type {
   CompiledFrameworkPolicy,
   ContentScopeSnapshot,
@@ -50,6 +52,43 @@ function renderLevelSummary(policy: CompiledFrameworkPolicy | null) {
     .join("\n");
 }
 
+function renderCompiledPolicySection(
+  compiledPolicy: CompiledFrameworkPolicy | null,
+  frameworkState: FrameworkState,
+) {
+  if (!compiledPolicy) {
+    return `Framework runtime state:
+- Current phase: ${frameworkState.currentPhaseId ?? "none"}
+- Current level: ${frameworkState.currentLevelId ?? "none"}
+- Diagnostic status: ${frameworkState.diagnosticStatus}
+- Recommended next move: ${frameworkState.recommendedMove}
+- Assessment pending: ${frameworkState.assessmentPending ? "yes" : "no"}
+- Transfer pending: ${frameworkState.transferPending ? "yes" : "no"}
+- Reflection pending: ${frameworkState.reflectionPending ? "yes" : "no"}
+- Close requirements met: ${frameworkState.closeRequirementsMet ? "yes" : "no"}
+- No compiled framework policy is active for this course. Follow the expert framework text, few-shot examples, and heuristics directly.`;
+  }
+
+  return `Compiled runtime policy:
+- Summary: ${compiledPolicy.policySummary || "none"}
+- Current phase: ${frameworkState.currentPhaseId ?? compiledPolicy.defaultPhaseId ?? "none"}
+- Current level: ${frameworkState.currentLevelId ?? compiledPolicy.defaultLevelId ?? "none"}
+- Diagnostic status: ${frameworkState.diagnosticStatus}
+- Recommended next move: ${frameworkState.recommendedMove}
+- Assessment pending: ${frameworkState.assessmentPending ? "yes" : "no"}
+- Transfer pending: ${frameworkState.transferPending ? "yes" : "no"}
+- Reflection pending: ${frameworkState.reflectionPending ? "yes" : "no"}
+- Close requirements met: ${frameworkState.closeRequirementsMet ? "yes" : "no"}
+- Framework phases:
+${renderPhaseSummary(compiledPolicy)}
+- Framework levels:
+${renderLevelSummary(compiledPolicy)}
+- Tool policy: course material grounding=session pack (fixed at start), images=${compiledPolicy.toolPolicy.images}, videos=${compiledPolicy.toolPolicy.videos}, quiz=${compiledPolicy.toolPolicy.structuredQuiz}, grading=${compiledPolicy.toolPolicy.formalGrading}, notebook uploads=${compiledPolicy.toolPolicy.notebookUploads}
+- Completion policy: transfer=${compiledPolicy.completionPolicy.requireTransfer ? "required" : "optional"}, reflection=${compiledPolicy.completionPolicy.requireMetacognitiveReflection ? "required" : "optional"}, explicit understanding evidence=${compiledPolicy.completionPolicy.requireExplicitEvidenceOfUnderstanding ? "required" : "optional"}
+- Review taxonomy:
+${renderList(compiledPolicy.reviewTaxonomy)}`;
+}
+
 export function buildStudentTurnSystemPrompt(params: {
   contentScope: ContentScopeSnapshot;
   runtimeModel: ExpertTutorRuntimeModel;
@@ -58,6 +97,9 @@ export function buildStudentTurnSystemPrompt(params: {
   studyLanguage: string;
 }) {
   const compiledPolicy = params.runtimeModel.compiledPolicy;
+  const groundingPackBlock = params.contentScope.topicGroundingPack
+    ? renderTopicGroundingPackForPrompt(params.contentScope.topicGroundingPack)
+    : null;
 
   return `You are Convy's tutor.
 
@@ -87,12 +129,17 @@ ${renderList(params.contentScope.scopeNotes)}
 ${renderList(params.contentScope.notationNotes)}
 - Rigor notes:
 ${renderList(params.contentScope.rigorNotes)}
-- Retrieved material evidence:
-${renderList(params.contentScope.retrievedContext)}
+${
+  groundingPackBlock
+    ? `- Topic grounding pack (authoritative source — loaded for this session; do not name files or upload types):\n${groundingPackBlock}`
+    : `- Topic grounding pack: not compiled yet — stay within teacher summary and scope notes only.`
+}
 
 Published expert framework:
 - Framework: ${params.runtimeModel.framework.name}
 - Framework description: ${params.runtimeModel.framework.description}
+- Tutor capability guidance:
+${formatFunctionalityGuidanceForPrompt(params.runtimeModel.framework.functionalityGuidance) || "none"}
 ${
   params.runtimeModel.framework.markdownContent
     ? `- Framework Guidelines & Instructions:\n${params.runtimeModel.framework.markdownContent}`
@@ -102,24 +149,7 @@ ${
       )
 }
 
-Compiled runtime policy:
-- Summary: ${compiledPolicy?.policySummary || "none"}
-- Current phase: ${params.frameworkState.currentPhaseId ?? compiledPolicy?.defaultPhaseId ?? "none"}
-- Current level: ${params.frameworkState.currentLevelId ?? compiledPolicy?.defaultLevelId ?? "none"}
-- Diagnostic status: ${params.frameworkState.diagnosticStatus}
-- Recommended next move: ${params.frameworkState.recommendedMove}
-- Assessment pending: ${params.frameworkState.assessmentPending ? "yes" : "no"}
-- Transfer pending: ${params.frameworkState.transferPending ? "yes" : "no"}
-- Reflection pending: ${params.frameworkState.reflectionPending ? "yes" : "no"}
-- Close requirements met: ${params.frameworkState.closeRequirementsMet ? "yes" : "no"}
-- Framework phases:
-${renderPhaseSummary(compiledPolicy ?? null)}
-- Framework levels:
-${renderLevelSummary(compiledPolicy ?? null)}
-- Tool policy: search=${compiledPolicy?.toolPolicy.courseSearch ?? "required"}, images=${compiledPolicy?.toolPolicy.images ?? "forbidden"}, videos=${compiledPolicy?.toolPolicy.videos ?? "forbidden"}, quiz=${compiledPolicy?.toolPolicy.structuredQuiz ?? "allowed"}, grading=${compiledPolicy?.toolPolicy.formalGrading ?? "allowed"}, notebook uploads=${compiledPolicy?.toolPolicy.notebookUploads ?? "when_visual_or_symbolic"}
-- Completion policy: transfer=${compiledPolicy?.completionPolicy.requireTransfer ? "required" : "optional"}, reflection=${compiledPolicy?.completionPolicy.requireMetacognitiveReflection ? "required" : "optional"}, explicit understanding evidence=${compiledPolicy?.completionPolicy.requireExplicitEvidenceOfUnderstanding ? "required" : "optional"}
-- Review taxonomy:
-${renderList(compiledPolicy?.reviewTaxonomy ?? [])}
+${renderCompiledPolicySection(compiledPolicy ?? null, params.frameworkState)}
 
 Crystallized pedagogical heuristics:
 ${renderList(
@@ -147,13 +177,14 @@ ${renderList(params.studentModel.cognitiveStyleCalibration?.preferredEntryPoints
 ${renderList(params.studentModel.longitudinalDevelopment?.betterQuestionSignals ?? [])}
 
 Teaching rules:
-- You can retrieve teacher-approved course evidence, ask a structured quiz, accept notebook/photo evidence when appropriate, and return a formal graded evaluation when the framework calls for it.
-- Use course evidence before making factual or notation-sensitive claims. Prefer retrieval to guessing.
-- Stay inside the uploaded material scope for concepts and claims.
-- Follow the compiled framework policy, the expert framework text, and the heuristics together. The compiled policy takes precedence for progression and completion.
+- The topic grounding pack above is already loaded for this session. Use it for facts, notation, and formulas. Do not invent formulas or definitions that are not listed unless you are clearly teaching general pedagogy without factual claims.
+- Never mention PDFs, slides, filenames, or how materials were uploaded.
+- You can ask a structured quiz, accept notebook/photo evidence when appropriate, and return a formal graded evaluation when the framework calls for it.
+- Stay inside the topic grounding pack and scope notes for concepts and claims.
+- Follow the expert framework text, capability guidance, and heuristics together. If a compiled policy is present, it takes precedence for progression and completion.
 - Respect the current framework phase and level unless the student's evidence justifies a move.
-- If diagnosis-first is required, do not skip it.
-- If the framework requires assessment, transfer, or reflection, do not close the session without them.
+- If diagnosis-first is required by the framework or the active compiled policy, do not skip it.
+- If the framework or compiled policy requires assessment, transfer, or reflection, do not close the session without them.
 - Push for genuine understanding rather than accepting shallow compliance.
 - Keep the student in productive struggle: challenging but not discouraging.
 - Prefer one strong move per turn.

@@ -3,12 +3,14 @@ import { contentScopeService } from "@/lib/learning/content-scope-service";
 import { expertRuntimeModelService } from "@/lib/learning/expert-runtime-model-service";
 import { studentModelService } from "@/lib/learning/student-model-service";
 import { tutoringPromptService } from "@/lib/learning/tutoring-prompt-service";
+import { getTopicWithMaterials } from "@/lib/learning/storage";
 import {
   createDefaultLearningSessionState,
   type ExpertTutorRuntimeModel,
   frameworkStateSchema,
   learningSessionStateSchema,
   studentModelSnapshotSchema,
+  type ContentScopeSnapshot,
   type LearningSessionState,
   type StudentModelSnapshot,
   type TopicSourceBoundary,
@@ -38,25 +40,44 @@ function createInitialFrameworkState(runtimeModel: ExpertTutorRuntimeModel) {
   });
 }
 
+function isContentScopeCurrent(params: {
+  snapshot: ContentScopeSnapshot | null | undefined;
+  topicId: string;
+  packVersion: number;
+}) {
+  return (
+    Boolean(params.snapshot) &&
+    params.snapshot?.topicId === params.topicId &&
+    params.packVersion > 0 &&
+    params.snapshot?.groundingPackVersion === params.packVersion
+  );
+}
+
 export class TutorRuntimeService {
-  private createAgentBaselineScope(params: {
+  private async resolveContentScope(params: {
     topicId: string;
-    topicTitle: string;
     sourceBoundary: TopicSourceBoundary;
     studyLanguage: string;
+    existingSnapshot?: ContentScopeSnapshot | null;
   }) {
-    return {
+    const topic = await getTopicWithMaterials(params.topicId);
+    const packVersion = topic?.topicGroundingPack?.version ?? 0;
+
+    if (
+      isContentScopeCurrent({
+        snapshot: params.existingSnapshot,
+        topicId: params.topicId,
+        packVersion,
+      })
+    ) {
+      return params.existingSnapshot!;
+    }
+
+    return await contentScopeService.buildScopeFromPack({
       topicId: params.topicId,
-      topicTitle: params.topicTitle,
+      sourceBoundary: params.sourceBoundary,
       contentLocale: params.studyLanguage,
-      teacherSummary: params.sourceBoundary.teacherSummary,
-      materialIds: params.sourceBoundary.allowedMaterialIds,
-      scopeNotes: params.sourceBoundary.scopeNotes,
-      notationNotes: params.sourceBoundary.notationNotes,
-      rigorNotes: params.sourceBoundary.rigorNotes,
-      retrievedContext: [],
-      learningOutcomes: [],
-    };
+    });
   }
 
   private async loadRuntimeAndStudentContext(params: {
@@ -124,10 +145,9 @@ export class TutorRuntimeService {
       classroomStudentId: params.classroomStudentId,
       studentUserId: params.studentUserId,
     });
-    const contentScope = await contentScopeService.buildScope({
+    const contentScope = await contentScopeService.buildScopeFromPack({
       topicId: params.topicId,
       sourceBoundary: params.sourceBoundary,
-      query: params.topicTitle,
       contentLocale: params.studyLanguage,
     });
 
@@ -142,6 +162,7 @@ export class TutorRuntimeService {
       contentScopeSnapshot: contentScope,
       tutorNotes: [
         `Framework seeded from ${runtimeModel.framework.name}.`,
+        `Topic grounding pack v${contentScope.groundingPackVersion} loaded for session.`,
         `Student model version ${latestSnapshot.version} is active.`,
         runtimeModel.compiledPolicy?.policySummary
           ? `Framework policy: ${runtimeModel.compiledPolicy.policySummary}`
@@ -174,12 +195,14 @@ export class TutorRuntimeService {
       classroomStudentId: params.classroomStudentId,
       studentUserId: params.studentUserId,
     });
-    const contentScope = await contentScopeService.buildScope({
+
+    const contentScope = await this.resolveContentScope({
       topicId: params.topicId,
       sourceBoundary: params.sourceBoundary,
-      query: params.latestStudentMessage,
-      contentLocale: params.studyLanguage,
+      studyLanguage: params.studyLanguage,
+      existingSnapshot: params.state.contentScopeSnapshot,
     });
+
     const frameworkState = await this.decideFrameworkState({
       runtimeModel,
       state: params.state,
@@ -232,63 +255,7 @@ export class TutorRuntimeService {
     latestStudentMessage: string;
     latestTutorMessage?: string | null;
   }) {
-    const {
-      runtimeModel,
-      studentModel,
-      latestSnapshotRecord,
-      latestSnapshot,
-    } = await this.loadRuntimeAndStudentContext({
-      topicId: params.topicId,
-      classroomId: params.classroomId,
-      classroomStudentId: params.classroomStudentId,
-      studentUserId: params.studentUserId,
-    });
-
-    const baselineScope = this.createAgentBaselineScope({
-      topicId: params.topicId,
-      topicTitle: params.topicTitle,
-      sourceBoundary: params.sourceBoundary,
-      studyLanguage: params.studyLanguage,
-    });
-
-    const frameworkState = await this.decideFrameworkState({
-      runtimeModel,
-      state: params.state,
-      latestSnapshot,
-      latestStudentMessage: params.latestStudentMessage,
-      latestTutorMessage: params.latestTutorMessage,
-      sessionId: params.sessionId,
-      studentUserId: params.studentUserId,
-    });
-
-    const systemPrompt = tutoringPromptService.buildStudentTurnPrompt({
-      contentScope: baselineScope,
-      runtimeModel,
-      studentModel: latestSnapshot,
-      frameworkState,
-      studyLanguage: params.studyLanguage,
-    });
-
-    const nextState = learningSessionStateSchema.parse({
-      ...params.state,
-      runtimeModelId: runtimeModel.id,
-      runtimeModelVersion: runtimeModel.version,
-      studentModelId: studentModel.id,
-      studentModelSnapshotId: latestSnapshotRecord?.id ?? null,
-      frameworkState,
-      contentScopeSnapshot: baselineScope,
-    });
-
-    return {
-      runtimeModel,
-      studentModel,
-      latestStudentSnapshot: latestSnapshot,
-      latestStudentSnapshotRecord: latestSnapshotRecord,
-      baselineScope,
-      frameworkState,
-      systemPrompt,
-      nextState,
-    };
+    return this.prepareTurn(params);
   }
 }
 

@@ -42,6 +42,7 @@ export default async function ExpertFrameworkVersionsPage({
         frameworkId: version.frameworkId,
         version: version.version,
         status: version.status,
+        seedSource: version.seedSource,
         notes: version.notes,
         framework: version.framework as Record<string, unknown>,
         createdAt: version.createdAt.toISOString(),

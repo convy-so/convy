@@ -5,7 +5,7 @@ import {
 import {
   TUTORING_ANALYSIS_SYSTEM_PROMPT,
   TUTORING_DEFAULT_SYSTEM_PROMPT,
-} from "@/lib/learning/prompting";
+} from "@/lib/learning/prompts/tutoring-system-prompts";
 
 const promptSpecs = {
   tutoringDefault: promptSpecRegistry.register({

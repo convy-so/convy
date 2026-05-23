@@ -11,10 +11,10 @@ import {
   expertFrameworkVersions,
   expertRuntimeModels,
 } from "@/db/schema";
-import { compileFrameworkArtifact } from "@/lib/learning/framework-compiler";
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { getExpertAccessibleFramework } from "@/lib/learning/expert-access";
-import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
+import { isAutoSeededPublishedPlaceholder } from "@/lib/learning/framework-live-version";
+import { expertTutorRuntimeModelSchema, type ExpertFramework } from "@/lib/learning/types";
 import { apiError } from "@/lib/api/error-contract";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
@@ -45,19 +45,23 @@ export async function POST(
       return apiError("NOT_FOUND", "Framework or version not found");
     }
 
-    const compiled = await compileFrameworkArtifact(version.framework);
+    const artifact = version.framework as ExpertFramework;
     if (
-      compiled.metadata.compileStatus !== "ready" ||
-      !compiled.metadata.compiledPolicy
+      isAutoSeededPublishedPlaceholder({
+        seedSource: version.seedSource,
+        framework: artifact,
+      })
     ) {
-      const blockingIssues = compiled.metadata.issues
-        .filter((issue) => issue.severity === "error")
-        .map((issue) => issue.message);
-
       return apiError(
         "VALIDATION_ERROR",
-        blockingIssues[0] ??
-          "This framework version is not ready to publish. Tighten the framework instructions and try again.",
+        "Add framework instructions and save a draft before publishing. The auto-seeded placeholder cannot go live.",
+      );
+    }
+
+    if (!artifact.markdownContent?.trim()) {
+      return apiError(
+        "VALIDATION_ERROR",
+        "Add framework instructions in the Markdown field before publishing.",
       );
     }
 
@@ -66,7 +70,6 @@ export async function POST(
         .update(expertFrameworkVersions)
         .set({
           status: "published",
-          framework: compiled.framework,
           publishedAt: new Date(),
           publishedByUserId: session.user.id,
           updatedAt: new Date(),
@@ -111,8 +114,8 @@ export async function POST(
         id: crypto.randomUUID(),
         version: nextVersion,
         frameworkVersionId: version.id,
-        framework: compiled.framework,
-        compiledPolicy: compiled.metadata.compiledPolicy,
+        framework: version.framework,
+        compiledPolicy: null,
         heuristics: crystallizations
           .filter((item) => !blockedCrystallizations.has(item.id))
           .map((item) => item.heuristic),
