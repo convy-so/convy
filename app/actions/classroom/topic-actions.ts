@@ -22,6 +22,7 @@ import {
   getOrGenerateTopicReadiness,
   isReadinessQuotaError,
 } from "@/lib/learning/readiness";
+import { expertRuntimeModelService } from "@/lib/learning/expert-runtime-model-service";
 import { isMaterialAnalysisFailed } from "@/lib/learning/materials-route-service";
 import { ActionError, ActionResult, validateInput, withErrorHandling } from "@/lib/action-wrapper";
 
@@ -344,6 +345,19 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
           "VALIDATION_ERROR",
           400,
         );
+      }
+
+      try {
+        await expertRuntimeModelService.getRuntimeModel({
+          topicId: body.topicId,
+          classroomId: topic.classroomId,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Publish a course framework before activating tutoring for this topic.";
+        throw new ActionError(message, "VALIDATION_ERROR", 400);
       }
     }
 

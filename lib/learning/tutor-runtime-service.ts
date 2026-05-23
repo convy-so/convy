@@ -5,6 +5,8 @@ import { studentModelService } from "@/lib/learning/student-model-service";
 import { tutoringPromptService } from "@/lib/learning/tutoring-prompt-service";
 import {
   createDefaultLearningSessionState,
+  type ExpertTutorRuntimeModel,
+  frameworkStateSchema,
   learningSessionStateSchema,
   studentModelSnapshotSchema,
   type LearningSessionState,
@@ -15,6 +17,24 @@ import {
 function createEmptyStudentSnapshot(): StudentModelSnapshot {
   return studentModelSnapshotSchema.parse({
     updatedAt: new Date().toISOString(),
+  });
+}
+
+function createInitialFrameworkState(runtimeModel: ExpertTutorRuntimeModel) {
+  return frameworkStateSchema.parse({
+    currentPhaseId: runtimeModel.compiledPolicy?.defaultPhaseId ?? null,
+    currentLevelId: runtimeModel.compiledPolicy?.defaultLevelId ?? null,
+    diagnosticStatus: runtimeModel.compiledPolicy?.turnPolicy.diagnosisFirst
+      ? "not_started"
+      : "in_progress",
+    recommendedMove: "probe",
+    transferPending:
+      runtimeModel.compiledPolicy?.completionPolicy.requireTransfer ?? false,
+    reflectionPending:
+      runtimeModel.compiledPolicy?.completionPolicy.requireMetacognitiveReflection ??
+      false,
+    lastTransitionAt: new Date().toISOString(),
+    lastTransitionReason: "Initialized from published runtime model",
   });
 }
 
@@ -118,16 +138,15 @@ export class TutorRuntimeService {
       runtimeModelVersion: runtimeModel.version,
       studentModelId: studentModel.id,
       studentModelSnapshotId: latestSnapshotRecord?.id ?? null,
-      frameworkState: {
-
-        lastTransitionAt: new Date().toISOString(),
-        lastTransitionReason: "Initialized from published runtime model",
-      },
+      frameworkState: createInitialFrameworkState(runtimeModel),
       contentScopeSnapshot: contentScope,
       tutorNotes: [
         `Framework seeded from ${runtimeModel.framework.name}.`,
         `Student model version ${latestSnapshot.version} is active.`,
-      ],
+        runtimeModel.compiledPolicy?.policySummary
+          ? `Framework policy: ${runtimeModel.compiledPolicy.policySummary}`
+          : null,
+      ].filter((note): note is string => Boolean(note)),
     });
   }
 

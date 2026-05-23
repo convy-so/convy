@@ -13,6 +13,9 @@ export function buildStudentModelUpdatePrompt(params: {
   const frameworkGuidelines = params.runtimeModel?.framework?.markdownContent
     ? `\nFollow the guidelines, conceptual rungs, and instructions laid out in the tutoring framework below to identify and update conceptual progression:\n${params.runtimeModel.framework.markdownContent}\n`
     : "";
+  const compiledPolicy = params.runtimeModel?.compiledPolicy
+    ? `\nCompiled framework policy summary:\n${JSON.stringify(params.runtimeModel.compiledPolicy, null, 2)}\n`
+    : "";
 
   return `Update the student's personalization model from this tutoring evidence.
 
@@ -21,6 +24,7 @@ Your job is to update two dynamic tracking fields:
 2. "personalization": A dictionary tracking student-specific interests, motivations, relevance hooks, productive struggle preferences, or aspirations discovered during the session.
 
 ${frameworkGuidelines}
+${compiledPolicy}
 
 Rules:
 - CRITICAL key constraint: When writing keys to the "cognitiveModel" dictionary, you MUST strictly use the exact IDs of the learning outcomes provided in the "learningOutcomes" list under the Course scope (if any are present). Do NOT invent new keys, and do NOT use arbitrary variations of concept names. Each key in "cognitiveModel" MUST match one of the allowed learning outcome IDs.

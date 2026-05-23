@@ -91,32 +91,22 @@ export async function ensureSubjectFramework(params: {
         .returning();
 
       const defaultFramework = createDefaultDeepFramework();
-      const [version] = await tx
+      await tx
         .insert(expertFrameworkVersions)
         .values({
           id: nanoid(),
           frameworkId: framework.id,
           version: 1,
-          status: "published",
+          status: "draft",
           seedSource: "deep_default",
           framework: defaultFramework,
-          publishedAt: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
-        })
-        .returning();
-
-      await tx
-        .update(expertFrameworks)
-        .set({
-          activeVersionId: version.id,
-          updatedAt: new Date(),
-        })
-        .where(eq(expertFrameworks.id, framework.id));
+        });
 
       return {
         ...framework,
-        activeVersionId: version.id,
+        activeVersionId: null,
       };
     });
   }
@@ -139,32 +129,22 @@ export async function ensureSubjectFramework(params: {
       .returning();
 
     const defaultFramework = createDefaultDeepFramework();
-    const [version] = await tx
+    await tx
       .insert(expertFrameworkVersions)
       .values({
         id: nanoid(),
         frameworkId: framework.id,
         version: 1,
-        status: "published",
+        status: "draft",
         seedSource: "deep_default",
         framework: defaultFramework,
-        publishedAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .returning();
-
-    await tx
-      .update(expertFrameworks)
-      .set({
-        activeVersionId: version.id,
-        updatedAt: new Date(),
-      })
-      .where(eq(expertFrameworks.id, framework.id));
+      });
 
     return {
       ...framework,
-      activeVersionId: version.id,
+      activeVersionId: null,
     };
   });
 }

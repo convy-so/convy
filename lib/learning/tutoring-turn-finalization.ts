@@ -19,10 +19,29 @@ function getRetrievedContext(steps: FinalizeTutoringTurnParams["result"]["steps"
     );
 }
 
+function getLatestAssessmentResult(
+  steps: FinalizeTutoringTurnParams["result"]["steps"],
+) {
+  const toolOutputs = steps
+    .flatMap((step) => step.toolResults)
+    .filter((result) => result.toolName === "grade_student_work")
+    .map((result) => result.output)
+    .filter(
+      (output): output is {
+        score?: number;
+        feedback?: string;
+        masteryLevel?: string;
+      } => typeof output === "object" && output !== null,
+    );
+
+  return toolOutputs.at(-1) ?? null;
+}
+
 export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   const lastStep = params.result.steps.at(-1);
   const assistantText = lastStep?.text?.trim();
   if (!assistantText) return;
+  const latestAssessment = getLatestAssessmentResult(params.result.steps);
 
   const autoComplete = shouldAutoCompleteTutoringSession({
     runtimeModel: params.prepared.runtimeModel,
@@ -60,6 +79,21 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   const refreshedAt = new Date().toISOString();
   const nextState = {
     ...params.prepared.nextState,
+    frameworkState: {
+      ...params.prepared.nextState.frameworkState,
+      assessmentPending: latestAssessment
+        ? false
+        : params.prepared.nextState.frameworkState.assessmentPending,
+      frameworkSignals: latestAssessment
+        ? [
+            ...params.prepared.nextState.frameworkState.frameworkSignals,
+            `Assessment score: ${latestAssessment.score ?? "unknown"}`,
+            latestAssessment.masteryLevel
+              ? `Assessment mastery: ${latestAssessment.masteryLevel}`
+              : null,
+          ].filter((signal): signal is string => Boolean(signal))
+        : params.prepared.nextState.frameworkState.frameworkSignals,
+    },
     studentModelSnapshotId: shouldUpdateStudentModel
       ? snapshot?.id ?? null
       : params.prepared.latestStudentSnapshotRecord?.id ?? null,

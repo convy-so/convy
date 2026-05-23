@@ -11,6 +11,7 @@ import {
   expertFrameworkVersions,
   expertRuntimeModels,
 } from "@/db/schema";
+import { compileFrameworkArtifact } from "@/lib/learning/framework-compiler";
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { getExpertAccessibleFramework } from "@/lib/learning/expert-access";
 import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
@@ -44,11 +45,28 @@ export async function POST(
       return apiError("NOT_FOUND", "Framework or version not found");
     }
 
+    const compiled = await compileFrameworkArtifact(version.framework);
+    if (
+      compiled.metadata.compileStatus !== "ready" ||
+      !compiled.metadata.compiledPolicy
+    ) {
+      const blockingIssues = compiled.metadata.issues
+        .filter((issue) => issue.severity === "error")
+        .map((issue) => issue.message);
+
+      return apiError(
+        "VALIDATION_ERROR",
+        blockingIssues[0] ??
+          "This framework version is not ready to publish. Tighten the framework instructions and try again.",
+      );
+    }
+
     const publishedRuntime = await getDb().transaction(async (tx) => {
       await tx
         .update(expertFrameworkVersions)
         .set({
           status: "published",
+          framework: compiled.framework,
           publishedAt: new Date(),
           publishedByUserId: session.user.id,
           updatedAt: new Date(),
@@ -93,7 +111,8 @@ export async function POST(
         id: crypto.randomUUID(),
         version: nextVersion,
         frameworkVersionId: version.id,
-        framework: version.framework,
+        framework: compiled.framework,
+        compiledPolicy: compiled.metadata.compiledPolicy,
         heuristics: crystallizations
           .filter((item) => !blockedCrystallizations.has(item.id))
           .map((item) => item.heuristic),
