@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { topicMaterials } from "@/db/schema";
+import { learningEvidenceEmbeddings, topicMaterials } from "@/db/schema";
 import { isMaterialAnalysisFailed } from "@/lib/learning/materials-route-service";
+import { rebuildTopicGroundingPack } from "@/lib/learning/topic-grounding-pack-service";
 import { deleteLearningMaterial } from "@/lib/storage";
 
 async function main() {
@@ -21,7 +22,11 @@ async function main() {
     count: failedMaterials.length,
   });
 
+  const affectedTopicIds = new Set<string>();
+
   for (const material of failedMaterials) {
+    affectedTopicIds.add(material.topicId);
+
     if (material.storagePath) {
       try {
         await deleteLearningMaterial(material.storagePath);
@@ -35,6 +40,15 @@ async function main() {
     }
 
     await getDb()
+      .delete(learningEvidenceEmbeddings)
+      .where(
+        and(
+          eq(learningEvidenceEmbeddings.sourceType, "material"),
+          eq(learningEvidenceEmbeddings.sourceId, material.id),
+        ),
+      );
+
+    await getDb()
       .delete(topicMaterials)
       .where(eq(topicMaterials.id, material.id));
 
@@ -42,6 +56,13 @@ async function main() {
       materialId: material.id,
       topicId: material.topicId,
       title: material.title,
+    });
+  }
+
+  for (const topicId of affectedTopicIds) {
+    await rebuildTopicGroundingPack(topicId);
+    console.info("[cleanup-failed-learning-materials] rebuilt pack", {
+      topicId,
     });
   }
 }
