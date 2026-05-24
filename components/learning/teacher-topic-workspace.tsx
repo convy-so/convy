@@ -2,11 +2,21 @@
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, FileText, Loader2, Sparkles, UploadCloud, Users } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  FileText,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+  UploadCloud,
+  Users,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 import { normalizeLearningOutcomesAction, updateLearningTopicDetailsAction } from "@/app/actions/classroom";
 import { Link } from "@/i18n/routing";
+import { retryTopicMaterialUploadAttempt } from "@/lib/api/learning";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import { appLocaleLabels } from "@/lib/i18n/config";
 import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
@@ -41,9 +51,13 @@ type TopicMaterial = {
 
 type MaterialUploadAttempt = {
   id: string;
+  previousAttemptId?: string | null;
   fileName: string;
   status: "queued" | "processing" | "succeeded" | "failed";
-  stage: "upload" | "extraction" | "review" | "indexing";
+  stage: "upload" | "extraction" | "analysis" | "indexing" | "pack_build";
+  storagePath?: string | null;
+  userMessage?: string | null;
+  retryable?: boolean | null;
   failureMessage?: string | null;
   materialId?: string | null;
 };
@@ -156,10 +170,17 @@ function getMaterialReviewState(material: TopicMaterial) {
 }
 
 function formatAttemptStatus(attempt: MaterialUploadAttempt) {
-  if (attempt.status === "failed") return `Failed during ${attempt.stage}`;
+  const stageLabel =
+    attempt.stage === "pack_build"
+      ? "pack build"
+      : attempt.stage === "analysis"
+        ? "analysis"
+        : attempt.stage;
+
+  if (attempt.status === "failed") return `Failed during ${stageLabel}`;
   if (attempt.status === "succeeded") return "Processed";
-  if (attempt.status === "queued") return "Queued";
-  return `Processing: ${attempt.stage}`;
+  if (attempt.status === "queued") return `Queued for ${stageLabel}`;
+  return `Processing: ${stageLabel}`;
 }
 
 export function TeacherTopicWorkspace({
@@ -242,6 +263,7 @@ export function TeacherTopicWorkspace({
   const [outcomeReviewNotes, setOutcomeReviewNotes] = useState<string[]>([]);
   const [isGeneratingOutcomes, setIsGeneratingOutcomes] = useState(false);
   const [isSavingOutcomes, setIsSavingOutcomes] = useState(false);
+  const [retryingAttemptId, setRetryingAttemptId] = useState<string | null>(null);
   const learningOutcomes = parseOutcomeNotes(rawOutcomeNotes).filter(
     (outcome) => outcome.title.trim() && outcome.description.trim(),
   );
@@ -295,6 +317,49 @@ export function TeacherTopicWorkspace({
     await queryClient.invalidateQueries({
       queryKey: queryKeys.learning.topics(selectedDirectoryClassroom.id),
     });
+  };
+
+  const refreshMaterialState = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.learning.materials(selectedTopic.id),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.learning.materialUploadAttempts(selectedTopic.id),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.learning.readiness(selectedTopic.id),
+      }),
+    ]);
+  };
+
+  const handleRetryAttempt = async (attemptId: string) => {
+    setRetryingAttemptId(attemptId);
+
+    try {
+      const result = await retryTopicMaterialUploadAttempt({
+        topicId: selectedTopic.id,
+        attemptId,
+      });
+
+      await refreshMaterialState();
+
+      if (result.data.attempt.status === "queued") {
+        toast.success("Material retry queued");
+      } else {
+        toast.error(
+          result.data.attempt.userMessage ??
+            result.data.attempt.failureMessage ??
+            "This file could not be re-queued.",
+        );
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to retry this upload",
+      );
+    } finally {
+      setRetryingAttemptId(null);
+    }
   };
 
   const handleSaveSessionTitle = async () => {
@@ -771,10 +836,30 @@ export function TeacherTopicWorkspace({
                             </div>
                           </div>
                           {attempt.status === "failed" ? (
-                            <div className="max-w-md text-xs leading-5 text-amber-800">
-                              {attempt.failureMessage ||
-                                "This file could not be processed."}{" "}
-                              Re-upload this file to try again.
+                            <div className="flex max-w-md items-start gap-3 text-xs leading-5 text-amber-800">
+                              <div className="min-w-0">
+                                {attempt.userMessage ||
+                                  attempt.failureMessage ||
+                                  "This file could not be processed."}{" "}
+                                {attempt.retryable && attempt.storagePath
+                                  ? "Retry this file from the saved upload."
+                                  : "Re-upload this file to try again."}
+                              </div>
+                              {attempt.retryable && attempt.storagePath ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRetryAttempt(attempt.id)}
+                                  disabled={retryingAttemptId === attempt.id}
+                                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 font-medium text-amber-900 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {retryingAttemptId === attempt.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                  )}
+                                  Retry
+                                </button>
+                              ) : null}
                             </div>
                           ) : (
                             <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
