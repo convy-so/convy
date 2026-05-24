@@ -316,7 +316,7 @@ export const topicMaterialUploadAttempts = pgTable(
     ),
     check(
       "topic_material_upload_attempts_stage_check",
-      sql`${table.stage} in ('upload', 'extraction', 'analysis', 'indexing', 'pack_build')`,
+      sql`${table.stage} in ('upload', 'extraction', 'review', 'analysis', 'indexing', 'pack_build')`,
     ),
   ],
 );
