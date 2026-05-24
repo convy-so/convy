@@ -8,8 +8,9 @@ import { getDb } from "@/db";
 import { topicMaterials } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
-import { deleteLearningMaterial, uploadLearningMaterial } from "@/lib/storage";
+import { uploadLearningMaterial } from "@/lib/storage";
 import {
+  buildUploadAttemptFailure,
   createLearningMaterialUploadAttempt,
   getTeacherTopicOrNull,
   isMaterialAnalysisFailed,
@@ -28,12 +29,9 @@ function getFileMetadata(formData: FormData, key: string, index: number) {
   );
 }
 
-function getUploadErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Failed to queue material upload";
-}
-
 function serializeUploadAttempt(attempt: {
   id: string;
+  previousAttemptId?: string | null;
   batchId: string;
   topicId: string;
   uploadedByUserId: string;
@@ -42,8 +40,16 @@ function serializeUploadAttempt(attempt: {
   description?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
   status: string;
   stage: string;
+  userMessage?: string | null;
+  retryable?: boolean | null;
+  queuedAt?: Date | null;
+  processingStartedAt?: Date | null;
+  failedAt?: Date | null;
+  completedAt?: Date | null;
   failureMessage?: string | null;
   materialId?: string | null;
   createdAt: Date;
@@ -51,6 +57,7 @@ function serializeUploadAttempt(attempt: {
 }) {
   return {
     id: attempt.id,
+    previousAttemptId: attempt.previousAttemptId ?? null,
     batchId: attempt.batchId,
     topicId: attempt.topicId,
     uploadedByUserId: attempt.uploadedByUserId,
@@ -59,8 +66,16 @@ function serializeUploadAttempt(attempt: {
     description: attempt.description ?? null,
     mimeType: attempt.mimeType ?? null,
     sizeBytes: attempt.sizeBytes ?? null,
+    storageBucket: attempt.storageBucket ?? null,
+    storagePath: attempt.storagePath ?? null,
     status: attempt.status,
     stage: attempt.stage,
+    userMessage: attempt.userMessage ?? null,
+    retryable: attempt.retryable ?? null,
+    queuedAt: attempt.queuedAt ?? null,
+    processingStartedAt: attempt.processingStartedAt ?? null,
+    failedAt: attempt.failedAt ?? null,
+    completedAt: attempt.completedAt ?? null,
     failureMessage: attempt.failureMessage ?? null,
     materialId: attempt.materialId ?? null,
     createdAt: attempt.createdAt,
@@ -135,8 +150,23 @@ export async function POST(
       const attemptId = nanoid();
       const title = getFileMetadata(formData, "title", index);
       const description = getFileMetadata(formData, "description", index);
+      let uploadedBucket: string | null = null;
       let uploadedPath: string | null = null;
-      let createdQueuedAttempt = false;
+      let mimeType: string | null = file.type || null;
+      let attempt = await createLearningMaterialUploadAttempt({
+        id: attemptId,
+        batchId,
+        topicId,
+        uploadedByUserId: session.user.id,
+        fileName: file.name,
+        title,
+        description,
+        mimeType,
+        sizeBytes: file.size,
+        status: "processing",
+        stage: "upload",
+        processingStartedAt: new Date(),
+      });
 
       try {
         console.info("[learning-material-upload] file received", {
@@ -151,7 +181,7 @@ export async function POST(
         assertLearningMaterialFile(file);
         const buffer = Buffer.from(await file.arrayBuffer());
         const detected = await fileTypeFromBuffer(buffer);
-        const mimeType = normalizeDetectedLearningMaterialMime({
+        mimeType = normalizeDetectedLearningMaterialMime({
           filename: file.name,
           fileType: file.type,
           detectedMime: detected?.mime,
@@ -165,23 +195,26 @@ export async function POST(
           mimeType,
           file.name,
         );
+        uploadedBucket = uploaded.bucket;
         uploadedPath = uploaded.path;
-        const attempt = await createLearningMaterialUploadAttempt({
-          id: attemptId,
-          batchId,
-          topicId,
-          uploadedByUserId: session.user.id,
-          fileName: file.name,
-          title,
-          description,
-          mimeType,
-          sizeBytes: file.size,
-          storageBucket: uploaded.bucket,
-          storagePath: uploaded.path,
-          status: "queued",
-          stage: "upload",
-        });
-        createdQueuedAttempt = true;
+        attempt =
+          (await updateLearningMaterialUploadAttempt({
+            attemptId,
+            classroomId: topic.classroomId,
+            topicId,
+            batchId,
+            mimeType,
+            sizeBytes: file.size,
+            storageBucket: uploaded.bucket,
+            storagePath: uploaded.path,
+            userMessage: null,
+            internalError: null,
+            errorCode: null,
+            retryable: null,
+            failedAt: null,
+            completedAt: null,
+            failureMessage: null,
+          })) ?? attempt;
 
         await enqueueLearningMaterialProcessing({
           attemptId,
@@ -196,38 +229,51 @@ export async function POST(
           description: description || null,
         });
 
+        attempt =
+          (await updateLearningMaterialUploadAttempt({
+            attemptId,
+            classroomId: topic.classroomId,
+            topicId,
+            batchId,
+            status: "queued",
+            stage: "extraction",
+            mimeType,
+            sizeBytes: file.size,
+            storageBucket: uploaded.bucket,
+            storagePath: uploaded.path,
+            queuedAt: new Date(),
+            userMessage: null,
+            internalError: null,
+            errorCode: null,
+            retryable: null,
+            failedAt: null,
+            completedAt: null,
+            failureMessage: null,
+          })) ?? attempt;
+
         attempts.push(attempt);
       } catch (error) {
-        if (uploadedPath) {
-          try {
-            await deleteLearningMaterial(uploadedPath);
-          } catch {}
-        }
-
-        const attempt = createdQueuedAttempt
-          ? await updateLearningMaterialUploadAttempt({
-              attemptId,
-              classroomId: topic.classroomId,
-              topicId,
-              batchId,
-              status: "failed",
-              stage: "upload",
-              failureMessage: getUploadErrorMessage(error),
-            })
-          : await createLearningMaterialUploadAttempt({
-              id: attemptId,
-              batchId,
-              topicId,
-              uploadedByUserId: session.user.id,
-              fileName: file.name,
-              title,
-              description,
-              mimeType: file.type || null,
-              sizeBytes: file.size,
-              status: "failed",
-              stage: "upload",
-              failureMessage: getUploadErrorMessage(error),
-            });
+        const failure = buildUploadAttemptFailure("upload", error);
+        attempt =
+          (await updateLearningMaterialUploadAttempt({
+            attemptId,
+            classroomId: topic.classroomId,
+            topicId,
+            batchId,
+            status: "failed",
+            stage: "upload",
+            mimeType,
+            sizeBytes: file.size,
+            storageBucket: uploadedBucket,
+            storagePath: uploadedPath,
+            userMessage: failure.userMessage,
+            internalError: failure.internalError,
+            errorCode: failure.errorCode,
+            retryable: failure.retryable,
+            failedAt: failure.failedAt,
+            completedAt: null,
+            failureMessage: failure.failureMessage,
+          })) ?? attempt;
         if (attempt) attempts.push(attempt);
       }
     }

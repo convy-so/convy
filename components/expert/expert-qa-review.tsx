@@ -232,16 +232,16 @@ export function ExpertQaReview() {
                   <div className={cn("font-semibold text-sm", selectedQueueItem?.key === item.key ? "text-white" : "text-slate-950")}>
                     {item.studentName ?? "Unknown student"}
                   </div>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ring-1 ring-inset", priorityStyles[item.priority], selectedQueueItem?.key === item.key && "bg-white/10 ring-white/20 text-white")}>
+                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-bold uppercase ring-1 ring-inset", priorityStyles[item.priority], selectedQueueItem?.key === item.key && "bg-white/10 ring-white/20 text-white")}>
                     {item.priority}
                   </span>
                 </div>
                 <div className={cn("mt-1 text-xs font-medium", selectedQueueItem?.key === item.key ? "text-slate-300" : "text-slate-600")}>
                   {item.topicTitle ?? "Unknown topic"}
                 </div>
-                <div className={cn("mt-3 flex flex-wrap gap-1.5")}>
-                  {item.reasons.slice(0, 2).map(r => (
-                    <span key={r} className={cn("text-[10px] px-2 py-1 rounded-md", selectedQueueItem?.key === item.key ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                <div className="flex items-center gap-1.5 mt-2">
+                  {item.reasons.map((r) => (
+                    <span key={r} className={cn("text-xs px-2 py-1 rounded-md", selectedQueueItem?.key === item.key ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
                       {r}
                     </span>
                   ))}
@@ -455,7 +455,7 @@ export function ExpertQaReview() {
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
                         <span>Supporting Evidence</span>
-                        <span className="text-[10px] font-medium normal-case text-slate-400 flex items-center gap-1">
+                        <span className="text-xs font-medium normal-case text-slate-400 flex items-center gap-1">
                           <Quote className="h-3 w-3" /> Hover transcript to quote
                         </span>
                       </label>
@@ -474,7 +474,7 @@ export function ExpertQaReview() {
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                       Review History
                     </h4>
-                    <span className="text-[10px] font-semibold uppercase text-slate-400">
+                    <span className="text-xs font-semibold uppercase text-slate-400">
                       session/topic
                     </span>
                   </div>
@@ -494,7 +494,7 @@ export function ExpertQaReview() {
                             <div className="text-xs font-semibold uppercase text-slate-500">
                               {item.reviewType}
                             </div>
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold uppercase text-slate-600">
                               {item.status}
                             </span>
                           </div>

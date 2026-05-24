@@ -16,6 +16,7 @@ import {
   topicGroundingSectionSchema,
   topicSourceBoundarySchema,
   type ContentScopeSnapshot,
+  type LearningOutcomeDefinition,
   type TopicGroundingPack,
   type TopicSourceBoundary,
 } from "@/lib/learning/types";
@@ -254,7 +255,7 @@ export function buildContentScopeFromPack(params: {
   topicTitle: string;
   contentLocale: string;
   sourceBoundary: TopicSourceBoundary;
-  learningOutcomes: Array<{ title: string; description: string }>;
+  learningOutcomes: LearningOutcomeDefinition[];
   pack: TopicGroundingPack | null;
   materialIds: string[];
 }): ContentScopeSnapshot {

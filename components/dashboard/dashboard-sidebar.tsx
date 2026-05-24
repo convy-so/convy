@@ -18,6 +18,7 @@ import {
   Inbox,
   TrendingUp,
   BookOpen,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,9 @@ export function DashboardSidebar({
   const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const selectedClassroomId = searchParams.get("classroomId");
+  
+  const pathnameClassroomIdMatch = pathname.match(/\/student\/classes\/([^/]+)/);
+  const activeClassroomId = selectedClassroomId || (pathnameClassroomIdMatch ? pathnameClassroomIdMatch[1] : null);
 
   const learningMeQuery = useQuery({
     queryKey: queryKeys.learning.me,
@@ -94,12 +98,20 @@ export function DashboardSidebar({
     }
 
     if (isStudent) {
-      return [
+      const studentNav = [
         { name: t("Dashboard"), href: "/student/dashboard", icon: LayoutDashboard, exact: true },
         { name: "My Classes", href: "/student/classes", icon: GraduationCap },
-        { name: "My Progress", href: studentProgressHref, icon: TrendingUp },
-        { name: "Learning Sessions", href: studentSessionsHref, icon: BookOpen },
       ];
+      
+      if (activeClassroomId) {
+        studentNav.push({
+          name: "Interests Profile",
+          href: `/student/classes/${activeClassroomId}/onboarding`,
+          icon: Settings2,
+        });
+      }
+      
+      return studentNav;
     }
 
     return [
@@ -239,58 +251,6 @@ export function DashboardSidebar({
             })}
           </nav>
 
-          {/* Student: course-style class picker (horizontal path, Duolingo-like) */}
-          {isStudent && memberships.length > 0 && (
-            <div className="mt-6 px-3">
-              <div className="mb-2 flex items-center justify-between px-1">
-                <p className="text-[13px] font-extrabold text-[#3c3c3c]">My courses</p>
-                <span className="rounded-lg bg-[#e5e5e5] px-2 py-0.5 text-[11px] font-bold tabular-nums text-[#52656d]">
-                  {memberships.length}
-                </span>
-              </div>
-              <p className="mb-3 px-1 text-[11px] font-medium leading-snug text-[#777777]">
-                Tap a course to jump into that classroom.
-              </p>
-              <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pl-1 pr-1 pt-0.5 [scrollbar-width:thin]">
-                {memberships.map((membership) => {
-                  const classroomNavActive =
-                    isNavHrefActive(pathname, "/student/dashboard", { exact: true }) &&
-                    searchParams.get("classroomId") === membership.classroom.id;
-                  return (
-                    <Link
-                      key={membership.classroom.id}
-                      href={`/student/dashboard?classroomId=${membership.classroom.id}`}
-                      className={cn(
-                        "w-[152px] shrink-0 snap-start rounded-xl border bg-white p-3 transition-colors",
-                        classroomNavActive
-                          ? "border-gray-900 bg-gray-50"
-                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50/60",
-                      )}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <div
-                        className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-[11px] font-bold uppercase tracking-tight text-gray-700"
-                        aria-hidden
-                      >
-                        {classroomInitials(membership.classroom.title)}
-                      </div>
-                      <p
-                        className={cn(
-                          "line-clamp-2 min-h-[2.25rem] text-center text-[12px] font-bold leading-tight",
-                          classroomNavActive ? "text-[#3c3c3c]" : "text-[#3c3c3c]",
-                        )}
-                      >
-                        {membership.classroom.title}
-                      </p>
-                      <p className="mt-1 truncate text-center text-[10px] font-semibold text-[#afafaf]">
-                        {membership.classroom.gradeLabel}
-                      </p>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Bottom Section */}

@@ -1,4 +1,5 @@
 import {
+  AnyPgColumn,
   boolean,
   check,
   index,
@@ -256,6 +257,12 @@ export const topicMaterialUploadAttempts = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
+    previousAttemptId: text("previous_attempt_id").references(
+      (): AnyPgColumn => topicMaterialUploadAttempts.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     batchId: text("batch_id").notNull(),
     topicId: text("topic_id")
       .notNull()
@@ -272,6 +279,26 @@ export const topicMaterialUploadAttempts = pgTable(
     storagePath: text("storage_path"),
     status: text("status").default("queued").notNull(),
     stage: text("stage").default("upload").notNull(),
+    userMessage: text("user_message"),
+    internalError: text("internal_error"),
+    errorCode: text("error_code"),
+    retryable: boolean("retryable"),
+    queuedAt: timestamp("queued_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    processingStartedAt: timestamp("processing_started_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    failedAt: timestamp("failed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     failureMessage: text("failure_message"),
     materialId: text("material_id").references(() => topicMaterials.id, {
       onDelete: "set null",
@@ -281,13 +308,15 @@ export const topicMaterialUploadAttempts = pgTable(
     index("topic_material_upload_attempts_topic_id_idx").on(table.topicId),
     index("topic_material_upload_attempts_batch_id_idx").on(table.batchId),
     index("topic_material_upload_attempts_status_idx").on(table.status),
+    index("topic_material_upload_attempts_previous_attempt_id_idx").on(table.previousAttemptId),
+    index("topic_material_upload_attempts_failed_at_idx").on(table.failedAt),
     check(
       "topic_material_upload_attempts_status_check",
       sql`${table.status} in ('queued', 'processing', 'succeeded', 'failed')`,
     ),
     check(
       "topic_material_upload_attempts_stage_check",
-      sql`${table.stage} in ('upload', 'extraction', 'review', 'indexing')`,
+      sql`${table.stage} in ('upload', 'extraction', 'analysis', 'indexing', 'pack_build')`,
     ),
   ],
 );
@@ -391,70 +420,6 @@ export const studentAccessTokens = pgTable(
     index("student_access_tokens_user_id_idx").on(table.userId),
     index("student_access_tokens_token_hash_idx").on(table.tokenHash),
     uniqueIndex("student_access_tokens_token_hash_unique").on(table.tokenHash),
-  ],
-);
-
-export const learningMaterialEmbeddings = pgTable(
-  "learning_material_embeddings",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    topicId: text("topic_id")
-      .notNull()
-      .references(() => learningTopics.id, { onDelete: "cascade" }),
-    classroomId: text("classroom_id").references(() => classrooms.id, {
-      onDelete: "cascade",
-    }),
-    materialId: text("material_id")
-      .notNull()
-      .references(() => topicMaterials.id, { onDelete: "cascade" }),
-    chunkIndex: integer("chunk_index").notNull(),
-    subjectKey: text("subject_key"),
-    gradeBand: text("grade_band"),
-    contentLocale: text("content_locale").default("en").notNull(),
-    materialKind: text("material_kind"),
-    materialTitle: text("material_title"),
-    embeddingModel: text("embedding_model"),
-    embeddingVersion: text("embedding_version"),
-    chunkingVersion: text("chunking_version"),
-    contentHash: text("content_hash"),
-    sourceUpdatedAt: timestamp("source_updated_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-    tokenCount: integer("token_count"),
-    rawContent: text("raw_content").notNull().default(""),
-    retrievalContent: text("retrieval_content").notNull().default(""),
-    content: text("content").notNull(),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    embedding: vector("embedding", { dimensions: 1024 }),
-  },
-  (table) => [
-    index("learning_material_embeddings_classroom_id_idx").on(table.classroomId),
-    index("learning_material_embeddings_topic_id_idx").on(table.topicId),
-    index("learning_material_embeddings_material_id_idx").on(table.materialId),
-    index("learning_material_embeddings_subject_key_idx").on(table.subjectKey),
-    index("learning_material_embeddings_locale_idx").on(table.contentLocale),
-    index("learning_material_embeddings_embedding_idx").using(
-      "hnsw",
-      table.embedding.op("vector_cosine_ops"),
-    ),
-    uniqueIndex("learning_material_embeddings_material_chunk_unique").on(
-      table.materialId,
-      table.chunkIndex,
-    ),
-    index("learning_material_embeddings_retrieval_en_idx").using(
-      "gin",
-      sql`to_tsvector('english', ${table.retrievalContent})`,
-    ),
-    index("learning_material_embeddings_retrieval_de_idx").using(
-      "gin",
-      sql`to_tsvector('german', ${table.retrievalContent})`,
-    ),
-    index("learning_material_embeddings_retrieval_fr_idx").using(
-      "gin",
-      sql`to_tsvector('french', ${table.retrievalContent})`,
-    ),
   ],
 );
 
@@ -662,7 +627,7 @@ export const expertFrameworks = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     activeVersionId: text("active_version_id").references(
-      () => expertFrameworkVersions.id,
+      (): AnyPgColumn => expertFrameworkVersions.id,
       { onDelete: "set null" },
     ),
     archivedAt: timestamp("archived_at", {
@@ -1120,10 +1085,6 @@ export const teachingMediaUsageEvents = pgTable(
   ],
 );
 
-export const teachingSessions = learningTopics;
-export const sessionMaterials = topicMaterials;
-export const sessionMaterialUploadAttempts = topicMaterialUploadAttempts;
-export const tutoringSessions = learningSessions;
 
 export const classroomsRelations = relations(classrooms, ({ one, many }) => ({
   teacher: one(users, {
@@ -1203,7 +1164,6 @@ export const learningTopicsRelations = relations(
     }),
     materials: many(topicMaterials),
     materialUploadAttempts: many(topicMaterialUploadAttempts),
-    embeddings: many(learningMaterialEmbeddings),
     sessions: many(learningSessions),
     interactions: many(learningInteractions),
     reports: many(studentProgressReports),
@@ -1219,7 +1179,7 @@ export const learningTopicsRelations = relations(
   }),
 );
 
-export const topicMaterialsRelations = relations(topicMaterials, ({ one, many }) => ({
+export const topicMaterialsRelations = relations(topicMaterials, ({ one }) => ({
   topic: one(learningTopics, {
     fields: [topicMaterials.topicId],
     references: [learningTopics.id],
@@ -1229,7 +1189,6 @@ export const topicMaterialsRelations = relations(topicMaterials, ({ one, many })
     references: [users.id],
     relationName: "uploaded_topic_materials",
   }),
-  embeddings: many(learningMaterialEmbeddings),
 }));
 
 export const topicMaterialUploadAttemptsRelations = relations(
@@ -1289,20 +1248,6 @@ export const studentAccessTokensRelations = relations(
     user: one(users, {
       fields: [studentAccessTokens.userId],
       references: [users.id],
-    }),
-  }),
-);
-
-export const learningMaterialEmbeddingsRelations = relations(
-  learningMaterialEmbeddings,
-  ({ one }) => ({
-    topic: one(learningTopics, {
-      fields: [learningMaterialEmbeddings.topicId],
-      references: [learningTopics.id],
-    }),
-    material: one(topicMaterials, {
-      fields: [learningMaterialEmbeddings.materialId],
-      references: [topicMaterials.id],
     }),
   }),
 );

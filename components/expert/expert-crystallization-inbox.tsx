@@ -135,7 +135,7 @@ export function ExpertCrystallizationInbox({
                       Generated {new Date(draft.createdAt).toLocaleDateString()}
                     </span>
                     <span className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-bold uppercase ring-1 ring-inset",
+                      "px-2 py-0.5 rounded text-xs font-bold uppercase ring-1 ring-inset",
                       draft.relevanceScope === "general" 
                         ? "bg-blue-50 text-blue-700 ring-blue-600/20" 
                         : "bg-purple-50 text-purple-700 ring-purple-600/20"

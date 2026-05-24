@@ -15,10 +15,10 @@ import {
 import { getMessageText } from "@/lib/chat-message-text";
 import {
   answerTeacherStudentQuestion,
-  findLearningEvidenceContext,
   hydrateStudentLearningEvidence,
 } from "@/lib/learning/evidence";
 import { getStudentTutoringAccess } from "@/lib/learning/access";
+import { contentScopeService } from "@/lib/learning/content-scope-service";
 import {
   classifyOutOfSessionQuestion,
   generateOutOfSessionReply,
@@ -198,11 +198,16 @@ export async function askOutOfSessionQuestionAction(
       question: body.message,
     });
 
-    const retrieved = await findLearningEvidenceContext({
+    const contentScope = await contentScopeService.buildScopeFromPack({
       topicId: body.topicId,
-      query: body.message,
-      language: normalizeAppLocale(access.topic.contentLocale),
-      limit: 6,
+      sourceBoundary: access.topic.sourceBoundary ?? {
+        teacherSummary: "",
+        scopeNotes: [],
+        notationNotes: [],
+        rigorNotes: [],
+        allowedMaterialIds: [],
+      },
+      contentLocale: normalizeAppLocale(access.topic.contentLocale),
     });
 
     const response = await generateOutOfSessionReply({
@@ -212,7 +217,7 @@ export async function askOutOfSessionQuestionAction(
       gradeBand: access.topic.classroom.gradeBand as GradeBand,
       studentProfile: access.classroomStudent.interestProfile.profile,
       question: body.message,
-      retrievedContext: retrieved.map((item) => item.content),
+      retrievedContext: contentScope.retrievedContext,
       language: normalizeAppLocale(body.language ?? access.topic.contentLocale),
     });
 
@@ -236,7 +241,7 @@ export async function askOutOfSessionQuestionAction(
       content: response,
       metadata: {
         relevance: classification.classification,
-        retrievedContextCount: retrieved.length,
+        retrievedContextCount: contentScope.retrievedContext.length,
       },
     });
 

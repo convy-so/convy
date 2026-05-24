@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  RotateCcw,
   Save,
   Sparkles,
   UploadCloud,
@@ -22,6 +23,7 @@ import { Link } from "@/i18n/routing";
 import {
   fetchTopicMaterialUploadAttempts,
   fetchTopicMaterials,
+  retryTopicMaterialUploadAttempt,
   uploadTopicMaterial,
   type TopicMaterialUploadAttempt,
 } from "@/lib/api/learning";
@@ -101,10 +103,17 @@ function parseOutcomeNotes(raw: string): OutcomeDraft[] {
 }
 
 function formatAttemptStatus(attempt: TopicMaterialUploadAttempt) {
-  if (attempt.status === "failed") return `Failed during ${attempt.stage}`;
+  const stageLabel =
+    attempt.stage === "pack_build"
+      ? "pack build"
+      : attempt.stage === "analysis"
+        ? "analysis"
+        : attempt.stage;
+
+  if (attempt.status === "failed") return `Failed during ${stageLabel}`;
   if (attempt.status === "succeeded") return "Processed";
-  if (attempt.status === "queued") return "Queued";
-  return `Processing: ${attempt.stage}`;
+  if (attempt.status === "queued") return `Queued for ${stageLabel}`;
+  return `Processing: ${stageLabel}`;
 }
 
 export function TopicSetupPage({
@@ -155,6 +164,7 @@ export function TopicSetupPage({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [retryingAttemptId, setRetryingAttemptId] = useState<string | null>(null);
   const [isGeneratingOutcomes, setIsGeneratingOutcomes] = useState(false);
 
   const subjectName = useMemo(
@@ -224,6 +234,56 @@ export function TopicSetupPage({
 
     return () => window.clearInterval(interval);
   }, [topic.id, uploadAttempts]);
+
+  const handleRetryAttempt = async (attemptId: string) => {
+    setRetryingAttemptId(attemptId);
+
+    try {
+      const result = await retryTopicMaterialUploadAttempt({
+        topicId: topic.id,
+        attemptId,
+      });
+
+      const [attemptResult, materialResult] = await Promise.all([
+        fetchTopicMaterialUploadAttempts(topic.id),
+        fetchTopicMaterials(topic.id),
+      ]);
+
+      setUploadAttempts(attemptResult.data);
+      setMaterials(
+        materialResult.data.map((material) => ({
+          id: material.id,
+          title: material.title,
+          description: material.description ?? null,
+          materialKind: material.materialKind,
+          extractionStatus: material.extractionStatus,
+          indexingStatus: material.indexingStatus,
+          mimeType: material.mimeType,
+          createdAt:
+            material.createdAt instanceof Date
+              ? material.createdAt
+              : new Date(material.createdAt),
+          analysis: material.analysis,
+        })),
+      );
+
+      if (result.data.attempt.status === "queued") {
+        toast.success("Material retry queued");
+      } else {
+        toast.error(
+          result.data.attempt.userMessage ??
+            result.data.attempt.failureMessage ??
+            "This file could not be re-queued.",
+        );
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to retry this upload",
+      );
+    } finally {
+      setRetryingAttemptId(null);
+    }
+  };
 
   const handleGenerateOutcomes = async () => {
     const notes = rawOutcomeNotes.trim();
@@ -605,10 +665,30 @@ export function TopicSetupPage({
                       </div>
                     </div>
                     {attempt.status === "failed" ? (
-                      <div className="max-w-md text-xs leading-5 text-amber-800">
-                        {attempt.failureMessage ||
-                          "This file could not be processed."}{" "}
-                        Re-upload this file to try again.
+                      <div className="flex max-w-md items-start gap-3 text-xs leading-5 text-amber-800">
+                        <div className="min-w-0">
+                          {attempt.userMessage ||
+                            attempt.failureMessage ||
+                            "This file could not be processed."}{" "}
+                          {attempt.retryable && attempt.storagePath
+                            ? "Retry this file from the saved upload."
+                            : "Re-upload this file to try again."}
+                        </div>
+                        {attempt.retryable && attempt.storagePath ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleRetryAttempt(attempt.id)}
+                            disabled={retryingAttemptId === attempt.id}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 font-medium text-amber-900 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {retryingAttemptId === attempt.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            )}
+                            Retry
+                          </button>
+                        ) : null}
                       </div>
                     ) : (
                       <Loader2 className="h-4 w-4 animate-spin text-slate-400" />

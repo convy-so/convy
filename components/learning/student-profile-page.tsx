@@ -90,7 +90,7 @@ export function StudentProfilePage({
       <div className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.15),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.14),_transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.74))] px-6 py-8 shadow-[0_30px_90px_-60px_rgba(15,23,42,0.32)] backdrop-blur-xl md:px-8 md:py-10">
         <div className="grid gap-8 lg:grid-cols-[1.25fr_0.95fr]">
           <div className="space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-200/70 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-violet-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-violet-200/70 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-violet-700">
               <Sparkles className="h-3.5 w-3.5" />
               Student Profile
             </div>
@@ -105,7 +105,7 @@ export function StudentProfilePage({
           </div>
 
           <GlassPanel className="grid gap-4 p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               Personal snapshot
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -130,7 +130,7 @@ export function StudentProfilePage({
 
             <div className="mt-6 space-y-5">
                 <div className="rounded-[20px] border border-white/70 bg-white/75 p-5">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                  <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                     Primary interests
                   </div>
                   <div className="mt-3 space-y-3">
@@ -151,7 +151,7 @@ export function StudentProfilePage({
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <GlassPanel className="p-5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                       Aspirations
                     </div>
                     <div className="mt-3 space-y-2">
@@ -161,7 +161,7 @@ export function StudentProfilePage({
                     </div>
                   </GlassPanel>
                   <GlassPanel className="p-5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                       Curiosity areas
                     </div>
                     <div className="mt-3 space-y-2">
@@ -174,7 +174,7 @@ export function StudentProfilePage({
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <GlassPanel className="p-5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                       Learning relationship
                     </div>
                     <div className="mt-3 text-sm leading-6 text-slate-700">
@@ -182,7 +182,7 @@ export function StudentProfilePage({
                     </div>
                   </GlassPanel>
                   <GlassPanel className="p-5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                       Motivation themes
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -196,7 +196,7 @@ export function StudentProfilePage({
                 </div>
 
                 <GlassPanel className="p-5">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                  <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                     Context tags
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">

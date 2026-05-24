@@ -17,6 +17,7 @@ export function LearningHub({
   initialOnboardingState,
   initialTutoringSession,
   teacherWorkspaceInitialData,
+  initialStudentSessions,
 }: {
   initialLearningMe: LearningMeData;
   initialStudentPatterns?: Awaited<
@@ -29,6 +30,7 @@ export function LearningHub({
   teacherWorkspaceInitialData?: Awaited<
     ReturnType<typeof getTeacherLearningWorkspaceInitialData>
   >;
+  initialStudentSessions?: any[];
 }) {
   const learningMe = initialLearningMe;
 
@@ -54,8 +56,7 @@ export function LearningHub({
       <StudentLearningHome
         learningMe={{ ...learningMe, invitations: learningMe.invitations ?? [] }}
         initialPatterns={initialStudentPatterns}
-        initialOnboardingState={initialOnboardingState}
-        initialTutoringSession={initialTutoringSession}
+        initialStudentSessions={initialStudentSessions}
       />
     );
   }

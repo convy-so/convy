@@ -13,9 +13,7 @@ import {
   analyzeLearningMaterial,
   extractLearningMaterialText,
 } from "@/lib/learning/materials";
-import { indexLearningMaterialEvidence } from "@/lib/learning/evidence";
 import { buildLearningMaterialAccessPath } from "@/lib/media-access";
-import { replaceLearningMaterialEmbeddings } from "@/lib/learning/rag";
 import {
   deleteLearningMaterial,
   downloadLearningMaterial,
@@ -25,8 +23,139 @@ import { topicSourceBoundarySchema } from "@/lib/learning/types";
 import { publishClassroomRealtimeEvent } from "@/lib/realtime";
 import type { LearningMaterialProcessingJobData } from "@/lib/queue";
 
+export type LearningMaterialUploadAttemptStatus =
+  | "queued"
+  | "processing"
+  | "succeeded"
+  | "failed";
+export type LearningMaterialUploadAttemptStage =
+  | "upload"
+  | "extraction"
+  | "analysis"
+  | "indexing"
+  | "pack_build";
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function getErrorCause(error: unknown) {
+  if (!error || typeof error !== "object" || !("cause" in error)) {
+    return null;
+  }
+
+  return (error as { cause?: unknown }).cause ?? null;
+}
+
+function getErrorCode(error: unknown) {
+  const candidate = [error, getErrorCause(error)].find(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      "code" in item &&
+      typeof (item as { code?: unknown }).code === "string",
+  ) as { code?: string } | undefined;
+
+  return candidate?.code ?? null;
+}
+
+function buildInternalErrorMessage(error: unknown) {
+  const message = getErrorMessage(error, "Unknown learning material pipeline error");
+  const cause = getErrorCause(error);
+  const details =
+    cause && typeof cause === "object"
+      ? [
+          typeof (cause as { message?: unknown }).message === "string"
+            ? `cause=${(cause as { message: string }).message}`
+            : null,
+          typeof (cause as { code?: unknown }).code === "string"
+            ? `code=${(cause as { code: string }).code}`
+            : null,
+          typeof (cause as { detail?: unknown }).detail === "string"
+            ? `detail=${(cause as { detail: string }).detail}`
+            : null,
+          typeof (cause as { hint?: unknown }).hint === "string"
+            ? `hint=${(cause as { hint: string }).hint}`
+            : null,
+          typeof (cause as { constraint?: unknown }).constraint === "string"
+            ? `constraint=${(cause as { constraint: string }).constraint}`
+            : null,
+        ].filter(Boolean)
+      : [];
+
+  return [message, ...details].join(" | ").slice(0, 4_000);
+}
+
+function isRetryableAttemptError(error: unknown) {
+  const message = getErrorMessage(error, "").toLowerCase();
+  const code = getErrorCode(error)?.toLowerCase() ?? "";
+
+  if (
+    message.includes("unsupported learning material format") ||
+    message.includes("file is required") ||
+    message.includes("user is no longer authorized") ||
+    message.includes("topic not found") ||
+    message.includes("could not be found for processing")
+  ) {
+    return false;
+  }
+
+  if (["23503", "23505", "22p02"].includes(code)) {
+    return false;
+  }
+
+  if (
+    code.startsWith("5") ||
+    code === "40001" ||
+    code === "40p01" ||
+    ["etimedout", "econnreset", "enotfound", "sockethangup"].includes(code)
+  ) {
+    return true;
+  }
+
+  return true;
+}
+
+function getUserMessageForStageFailure(
+  stage: LearningMaterialUploadAttemptStage,
+  error: unknown,
+) {
+  const message = getErrorMessage(error, "");
+
+  if (message.toLowerCase().includes("unsupported learning material format")) {
+    return "This file format is not supported. Upload a PDF, DOCX, or TXT file.";
+  }
+
+  switch (stage) {
+    case "upload":
+      return "This file could not be uploaded. Try again.";
+    case "extraction":
+      return "This file was uploaded, but its text could not be extracted. Try again or use a different file.";
+    case "analysis":
+      return "This file was uploaded, but the teaching-material review step failed. Try again.";
+    case "indexing":
+      return "This file was uploaded, but saving the processed material failed. Try again.";
+    case "pack_build":
+      return "This file was processed, but the topic grounding pack could not be rebuilt. Try again.";
+    default:
+      return "This file could not be processed. Try again.";
+  }
+}
+
+export function buildUploadAttemptFailure(
+  stage: LearningMaterialUploadAttemptStage,
+  error: unknown,
+) {
+  const userMessage = getUserMessageForStageFailure(stage, error);
+
+  return {
+    userMessage,
+    internalError: buildInternalErrorMessage(error),
+    errorCode: getErrorCode(error),
+    retryable: isRetryableAttemptError(error),
+    failedAt: new Date(),
+    failureMessage: userMessage,
+  };
 }
 
 export function inferMaterialKind(mimeType: string) {
@@ -88,16 +217,58 @@ export async function updateLearningMaterialUploadAttempt(params: {
   classroomId?: string;
   topicId?: string;
   batchId?: string;
-  status?: "queued" | "processing" | "succeeded" | "failed";
-  stage?: "upload" | "extraction" | "review" | "indexing";
+  status?: LearningMaterialUploadAttemptStatus;
+  stage?: LearningMaterialUploadAttemptStage;
+  fileName?: string;
+  title?: string | null;
+  description?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
+  userMessage?: string | null;
+  internalError?: string | null;
+  errorCode?: string | null;
+  retryable?: boolean | null;
+  queuedAt?: Date | null;
+  processingStartedAt?: Date | null;
+  failedAt?: Date | null;
+  completedAt?: Date | null;
   failureMessage?: string | null;
   materialId?: string | null;
+  previousAttemptId?: string | null;
 }) {
   const [attempt] = await getDb()
     .update(topicMaterialUploadAttempts)
     .set({
+      ...(params.previousAttemptId !== undefined
+        ? { previousAttemptId: params.previousAttemptId }
+        : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.stage ? { stage: params.stage } : {}),
+      ...(params.fileName !== undefined ? { fileName: params.fileName } : {}),
+      ...(params.title !== undefined ? { title: params.title?.trim() || null } : {}),
+      ...(params.description !== undefined
+        ? { description: params.description?.trim() || null }
+        : {}),
+      ...(params.mimeType !== undefined ? { mimeType: params.mimeType } : {}),
+      ...(params.sizeBytes !== undefined ? { sizeBytes: params.sizeBytes } : {}),
+      ...(params.storageBucket !== undefined
+        ? { storageBucket: params.storageBucket }
+        : {}),
+      ...(params.storagePath !== undefined ? { storagePath: params.storagePath } : {}),
+      ...(params.userMessage !== undefined ? { userMessage: params.userMessage } : {}),
+      ...(params.internalError !== undefined
+        ? { internalError: params.internalError }
+        : {}),
+      ...(params.errorCode !== undefined ? { errorCode: params.errorCode } : {}),
+      ...(params.retryable !== undefined ? { retryable: params.retryable } : {}),
+      ...(params.queuedAt !== undefined ? { queuedAt: params.queuedAt } : {}),
+      ...(params.processingStartedAt !== undefined
+        ? { processingStartedAt: params.processingStartedAt }
+        : {}),
+      ...(params.failedAt !== undefined ? { failedAt: params.failedAt } : {}),
+      ...(params.completedAt !== undefined ? { completedAt: params.completedAt } : {}),
       ...(params.failureMessage !== undefined
         ? { failureMessage: params.failureMessage }
         : {}),
@@ -126,20 +297,32 @@ export async function createLearningMaterialUploadAttempt(params: {
   topicId: string;
   uploadedByUserId: string;
   fileName: string;
+  previousAttemptId?: string | null;
   title?: string | null;
   description?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
   storageBucket?: string | null;
   storagePath?: string | null;
-  status: "queued" | "failed";
-  stage?: "upload" | "extraction" | "review" | "indexing";
+  status: LearningMaterialUploadAttemptStatus;
+  stage?: LearningMaterialUploadAttemptStage;
+  userMessage?: string | null;
+  internalError?: string | null;
+  errorCode?: string | null;
+  retryable?: boolean | null;
+  queuedAt?: Date | null;
+  processingStartedAt?: Date | null;
+  failedAt?: Date | null;
+  completedAt?: Date | null;
   failureMessage?: string | null;
+  materialId?: string | null;
 }) {
+  const now = new Date();
   const [attempt] = await getDb()
     .insert(topicMaterialUploadAttempts)
     .values({
       id: params.id,
+      previousAttemptId: params.previousAttemptId ?? null,
       batchId: params.batchId,
       topicId: params.topicId,
       uploadedByUserId: params.uploadedByUserId,
@@ -152,9 +335,18 @@ export async function createLearningMaterialUploadAttempt(params: {
       storagePath: params.storagePath ?? null,
       status: params.status,
       stage: params.stage ?? "upload",
+      userMessage: params.userMessage ?? null,
+      internalError: params.internalError ?? null,
+      errorCode: params.errorCode ?? null,
+      retryable: params.retryable ?? null,
+      queuedAt: params.queuedAt ?? null,
+      processingStartedAt: params.processingStartedAt ?? null,
+      failedAt: params.failedAt ?? null,
+      completedAt: params.completedAt ?? null,
       failureMessage: params.failureMessage ?? null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      materialId: params.materialId ?? null,
+      createdAt: now,
+      updatedAt: now,
     })
     .returning();
 
@@ -170,56 +362,6 @@ export async function indexMaterialAndSyncBoundary(params: {
   analysis: Record<string, unknown>;
   topic: NonNullable<Awaited<ReturnType<typeof getTeacherTopicAccess>>>;
 }) {
-  console.info("[learning-material-upload] extracted content before embeddings", {
-    topicId: params.topicId,
-    materialId: params.materialId,
-    characterLength: params.extractedText.length,
-  });
-  console.log(
-    [
-      "----- BEGIN EXTRACTED LEARNING MATERIAL -----",
-      params.extractedText,
-      "----- END EXTRACTED LEARNING MATERIAL -----",
-    ].join("\n"),
-  );
-
-  await replaceLearningMaterialEmbeddings({
-    classroomId: params.topic.classroomId,
-    topicId: params.topicId,
-    materialId: params.materialId,
-    content: params.extractedText,
-    topicTitle: params.topic.title,
-    materialTitle: params.material.title,
-    materialKind: params.material.materialKind,
-    subjectKey: params.topic.subjectKey,
-    gradeBand: params.topic.classroom.gradeBand,
-    contentLocale: params.topic.contentLocale,
-    sourceUpdatedAt: params.material.updatedAt,
-    metadata: {
-      title: params.material.title,
-      mimeType: params.mimeType,
-      topicTitle: params.topic.title,
-      subjectKey: params.topic.subjectKey,
-      gradeBand: params.topic.classroom.gradeBand,
-      locale: params.topic.contentLocale,
-    },
-  });
-
-  await indexLearningMaterialEvidence({
-    classroomId: params.topic.classroomId,
-    topicId: params.topicId,
-    materialId: params.materialId,
-    topicTitle: params.topic.title,
-    title: params.material.title,
-    description: params.material.description,
-    mimeType: params.mimeType,
-    content: params.extractedText,
-    subjectKey: params.topic.subjectKey,
-    gradeBand: params.topic.classroom.gradeBand,
-    language: params.topic.contentLocale,
-    sourceUpdatedAt: params.material.updatedAt,
-  });
-
   const currentTopic = await getDb().query.learningTopics.findFirst({
     where: eq(learningTopics.id, params.topicId),
     columns: { sourceBoundary: true },
@@ -236,21 +378,13 @@ export async function indexMaterialAndSyncBoundary(params: {
     getDb().update(topicMaterials).set({ indexingStatus: "completed", indexingError: null, updatedAt: new Date() }).where(eq(topicMaterials.id, params.materialId)),
     getDb().update(learningTopics).set({ sourceBoundary: updatedBoundary, lastMaterialSyncAt: new Date(), updatedAt: new Date() }).where(eq(learningTopics.id, params.topicId)),
   ]);
-
-  try {
-    await rebuildTopicGroundingPack(params.topicId);
-  } catch (error) {
-    console.error("[learning-material-upload] topic grounding pack rebuild failed", {
-      topicId: params.topicId,
-      materialId: params.materialId,
-      error: getErrorMessage(error, "Topic grounding pack rebuild failed"),
-    });
-  }
+  await rebuildTopicGroundingPack(params.topicId);
 }
 
 async function deleteMaterialProcessingArtifacts(params: {
   materialId?: string | null;
   storagePath?: string | null;
+  deleteSourceFile?: boolean;
 }) {
   if (params.materialId) {
     await getDb()
@@ -266,7 +400,7 @@ async function deleteMaterialProcessingArtifacts(params: {
       .where(eq(topicMaterials.id, params.materialId));
   }
 
-  if (params.storagePath) {
+  if (params.deleteSourceFile && params.storagePath) {
     try {
       await deleteLearningMaterial(params.storagePath);
     } catch (error) {
@@ -290,11 +424,16 @@ export async function processLearningMaterialUploadAttempt(
   }
 
   let materialId: string | null = null;
+  let currentStage: LearningMaterialUploadAttemptStage = "extraction";
 
   try {
     const topic = await getTeacherTopicAccess(data.userId, data.topicId);
     if (!topic) {
       throw new Error("Topic not found or user is no longer authorized.");
+    }
+
+    if (!attempt.storagePath) {
+      throw new Error("Uploaded file could not be found for processing.");
     }
 
     await updateLearningMaterialUploadAttempt({
@@ -304,23 +443,32 @@ export async function processLearningMaterialUploadAttempt(
       batchId: attempt.batchId,
       status: "processing",
       stage: "extraction",
+      userMessage: null,
+      internalError: null,
+      errorCode: null,
+      retryable: null,
+      failedAt: null,
+      completedAt: null,
+      processingStartedAt: attempt.processingStartedAt ?? new Date(),
       failureMessage: null,
+      materialId: null,
     });
 
-    const buffer = await downloadLearningMaterial(data.storagePath);
+    const buffer = await downloadLearningMaterial(attempt.storagePath);
     const extractedText = await extractLearningMaterialText({
       buffer,
       filename: data.fileName,
       mimeType: data.mimeType,
     });
 
+    currentStage = "analysis";
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
       topicId: data.topicId,
       batchId: attempt.batchId,
       status: "processing",
-      stage: "review",
+      stage: "analysis",
     });
 
     const analysis = await analyzeLearningMaterial({
@@ -334,6 +482,7 @@ export async function processLearningMaterialUploadAttempt(
       throw new Error("AI material review failed for this file.");
     }
 
+    currentStage = "indexing";
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -369,6 +518,17 @@ export async function processLearningMaterialUploadAttempt(
       })
       .returning();
 
+    currentStage = "pack_build";
+    await updateLearningMaterialUploadAttempt({
+      attemptId: data.attemptId,
+      classroomId: data.classroomId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      status: "processing",
+      stage: "pack_build",
+      materialId,
+    });
+
     await indexMaterialAndSyncBoundary({
       topicId: data.topicId,
       materialId,
@@ -385,18 +545,25 @@ export async function processLearningMaterialUploadAttempt(
       topicId: data.topicId,
       batchId: attempt.batchId,
       status: "succeeded",
-      stage: "indexing",
+      stage: "pack_build",
+      userMessage: null,
+      internalError: null,
+      errorCode: null,
+      retryable: null,
+      failedAt: null,
+      completedAt: new Date(),
       failureMessage: null,
       materialId,
     });
 
     return { success: true, materialId };
   } catch (error) {
-    const failureMessage = getErrorMessage(error, "Learning material processing failed");
+    const failure = buildUploadAttemptFailure(currentStage, error);
 
     await deleteMaterialProcessingArtifacts({
       materialId,
-      storagePath: data.storagePath,
+      storagePath: attempt.storagePath ?? data.storagePath,
+      deleteSourceFile: false,
     });
 
     await updateLearningMaterialUploadAttempt({
@@ -405,12 +572,22 @@ export async function processLearningMaterialUploadAttempt(
       topicId: data.topicId,
       batchId: attempt.batchId,
       status: "failed",
-      failureMessage,
+      stage: currentStage,
+      userMessage: failure.userMessage,
+      internalError: failure.internalError,
+      errorCode: failure.errorCode,
+      retryable: failure.retryable,
+      failedAt: failure.failedAt,
+      completedAt: null,
+      failureMessage: failure.failureMessage,
+      materialId: null,
     });
 
     return {
       success: false,
-      error: failureMessage,
+      error: failure.internalError,
+      userMessage: failure.userMessage,
+      retryable: failure.retryable,
     };
   }
 }
