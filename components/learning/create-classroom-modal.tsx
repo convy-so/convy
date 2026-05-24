@@ -26,7 +26,6 @@ export function CreateClassroomModal({
     const queryClient = useQueryClient();
     const [title, setTitle] = useState("");
     const [gradeLabel, setGradeLabel] = useState("");
-    const [subject, setSubject] = useState("");
     const [description, setDescription] = useState("");
     const [defaultContentLocale, setDefaultContentLocale] = useState<AppLocale>("en");
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,7 +39,6 @@ export function CreateClassroomModal({
     const resetForm = () => {
         setTitle("");
         setGradeLabel("");
-        setSubject("");
         setDescription("");
         setDefaultContentLocale("en");
         setError(null);
@@ -56,7 +54,6 @@ export function CreateClassroomModal({
             const result = await createClassroomAction({
                 title: title.trim(),
                 gradeLabel: gradeLabel.trim(),
-                subject: subject.trim() || undefined,
                 description: description.trim() || undefined,
                 defaultContentLocale,
             });
@@ -125,25 +122,15 @@ export function CreateClassroomModal({
                         required
                     />
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <InputField
-                            label="Grade Level"
-                            id="grade-level"
-                            placeholder="e.g. Year 10"
-                            icon={Layers}
-                            value={gradeLabel}
-                            onChange={(e) => setGradeLabel(e.target.value)}
-                            required
-                        />
-                        <InputField
-                            label="Core Subject"
-                            id="core-subject"
-                            placeholder="e.g. Science"
-                            icon={Hash}
-                            value={subject}
-                            onChange={(e) => setSubject(e.target.value)}
-                        />
-                    </div>
+                    <InputField
+                        label="Grade Level"
+                        id="grade-level"
+                        placeholder="e.g. Year 10"
+                        icon={Layers}
+                        value={gradeLabel}
+                        onChange={(e) => setGradeLabel(e.target.value)}
+                        required
+                    />
 
                     <div className="space-y-2">
                         <label className="block text-sm font-medium text-[#292929]">

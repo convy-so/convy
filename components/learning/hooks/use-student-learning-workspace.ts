@@ -99,45 +99,27 @@ export function useStudentLearningWorkspace({
   const invitations = learningMe.invitations ?? [];
 
   // Find membership matching the classroomId from URL, or default to the first one
-  const initialMembershipId = useMemo(() => {
+  const selectedMembership = useMemo(() => {
     if (classroomId) {
       const match = memberships.find(m => m.classroom.id === classroomId);
-      if (match) return match.classroomStudentId;
+      if (match) return match;
     }
-    return memberships?.[0]?.classroomStudentId ?? null;
+    return memberships?.[0] ?? null;
   }, [classroomId, memberships]);
 
-  const [manualSelectedMembershipId, setManualSelectedMembershipId] = useState<
-    string | null
-  >(null);
-  const selectedMembershipId = useMemo(() => {
-    if (
-      manualSelectedMembershipId &&
-      memberships.some(
-        (item) => item.classroomStudentId === manualSelectedMembershipId,
-      )
-    ) {
-      return manualSelectedMembershipId;
-    }
-
-    return initialMembershipId;
-  }, [initialMembershipId, manualSelectedMembershipId, memberships]);
-
-  const selectedMembership =
-    memberships?.find((item) => item.classroomStudentId === selectedMembershipId) ??
-    memberships?.[0] ??
-    null;
+  const selectedMembershipId = selectedMembership?.classroomStudentId ?? null;
+  const initialMembershipId = selectedMembershipId;
 
   const availableTopics = selectedMembership?.topics ?? [];
   const availableSurveys = selectedMembership?.surveys ?? [];
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(
-    availableTopics[0]?.id ?? null,
-  );
-  const effectiveSelectedTopicId = availableTopics.some((topic) => topic.id === selectedTopicId)
-    ? selectedTopicId
-    : availableTopics.some((topic) => topic.id === requestedTopicId)
-      ? requestedTopicId
-      : (availableTopics[0]?.id ?? null);
+
+  const effectiveSelectedTopicId = useMemo(() => {
+    if (requestedTopicId && availableTopics.some((topic) => topic.id === requestedTopicId)) {
+      return requestedTopicId;
+    }
+    return availableTopics[0]?.id ?? null;
+  }, [requestedTopicId, availableTopics]);
+
   const [outOfSessionReply, setOutOfSessionReply] = useState<string | null>(null);
 
   const onboardingQuery = useQuery({
@@ -429,6 +411,27 @@ export function useStudentLearningWorkspace({
 
   const conceptCount = sessionState?.knowledgeFocus?.length ?? 0;
   const patterns = patternsQuery.data?.data ?? [];
+  const setSelectedMembershipId = (membershipId: string | null) => {
+    const membership = memberships.find(m => m.classroomStudentId === membershipId);
+    if (membership) {
+      const firstTopicId = membership.topics[0]?.id;
+      const topicParam = firstTopicId ? `&topicId=${firstTopicId}` : "";
+      router.replace(`/student/dashboard?classroomId=${membership.classroom.id}${topicParam}`);
+    } else {
+      router.replace(`/student/dashboard`);
+    }
+  };
+
+  const setSelectedTopicId = (topicId: string | null) => {
+    if (selectedMembership) {
+      if (topicId) {
+        router.replace(`/student/dashboard?classroomId=${selectedMembership.classroom.id}&topicId=${topicId}`);
+      } else {
+        router.replace(`/student/dashboard?classroomId=${selectedMembership.classroom.id}`);
+      }
+    }
+  };
+
   const strongestPattern = patterns[0] ?? null;
   const membershipCount = memberships?.length ?? 0;
 
@@ -437,11 +440,11 @@ export function useStudentLearningWorkspace({
     selectedStudyLanguage,
     setSelectedStudyLanguage,
     selectedMembershipId,
-    setSelectedMembershipId: setManualSelectedMembershipId,
+    setSelectedMembershipId,
     selectedMembership,
     availableTopics,
     availableSurveys,
-    selectedTopicId,
+    selectedTopicId: effectiveSelectedTopicId,
     setSelectedTopicId,
     effectiveSelectedTopicId,
     onboardingQuery,

@@ -1,4 +1,5 @@
 import {
+  AnyPgColumn,
   boolean,
   check,
   index,
@@ -29,7 +30,7 @@ export const expertGuidancePacks = pgTable(
       onDelete: "set null",
     }),
     activeVersionId: text("active_version_id").references(
-      () => expertGuidanceVersions.id,
+      (): AnyPgColumn => expertGuidanceVersions.id,
       { onDelete: "set null" },
     ),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),

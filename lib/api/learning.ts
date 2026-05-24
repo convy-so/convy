@@ -78,6 +78,7 @@ const topicMaterialSchema = z.object({
 
 const topicMaterialUploadAttemptSchema = z.object({
   id: z.string(),
+  previousAttemptId: z.string().nullable().optional(),
   batchId: z.string(),
   topicId: z.string(),
   uploadedByUserId: z.string(),
@@ -89,7 +90,13 @@ const topicMaterialUploadAttemptSchema = z.object({
   storageBucket: z.string().nullable().optional(),
   storagePath: z.string().nullable().optional(),
   status: z.enum(["queued", "processing", "succeeded", "failed"]),
-  stage: z.enum(["upload", "extraction", "review", "indexing"]),
+  stage: z.enum(["upload", "extraction", "analysis", "indexing", "pack_build"]),
+  userMessage: z.string().nullable().optional(),
+  retryable: z.boolean().nullable().optional(),
+  queuedAt: z.union([z.string(), z.date()]).nullable().optional(),
+  processingStartedAt: z.union([z.string(), z.date()]).nullable().optional(),
+  failedAt: z.union([z.string(), z.date()]).nullable().optional(),
+  completedAt: z.union([z.string(), z.date()]).nullable().optional(),
   failureMessage: z.string().nullable().optional(),
   materialId: z.string().nullable().optional(),
   createdAt: z.union([z.string(), z.date()]),
@@ -520,6 +527,27 @@ export async function fetchTopicMaterialUploadAttempts(topicId: string) {
     z.object({
       success: z.literal(true),
       data: z.array(topicMaterialUploadAttemptSchema),
+    }),
+  );
+}
+
+export async function retryTopicMaterialUploadAttempt(input: {
+  topicId: string;
+  attemptId: string;
+}) {
+  return await parseResponse(
+    await fetch(
+      `/api/learning/sessions/${input.topicId}/material-upload-attempts/${input.attemptId}/retry`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    ),
+    z.object({
+      success: z.literal(true),
+      data: z.object({
+        attempt: topicMaterialUploadAttemptSchema,
+      }),
     }),
   );
 }

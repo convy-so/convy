@@ -14,12 +14,13 @@ export async function createClassroom(params: {
   title: string;
   description?: string;
   subject?: string;
-  gradeLabel: string;
+  gradeLabel?: string;
   defaultContentLocale: "en" | "fr" | "de";
 }) {
   const classroomId = nanoid();
   const now = new Date();
-  const gradeBand = normalizeGradeBand(params.gradeLabel);
+  const gradeLabel = params.gradeLabel || "General";
+  const gradeBand = normalizeGradeBand(gradeLabel);
 
   const [classroom] = await getDb().insert(classrooms).values({
     id: classroomId,
@@ -29,7 +30,7 @@ export async function createClassroom(params: {
     subject: params.subject || null,
     defaultContentLocale: params.defaultContentLocale,
     gradeBand,
-    gradeLabel: params.gradeLabel,
+    gradeLabel,
     status: "active",
     createdAt: now,
     updatedAt: now,

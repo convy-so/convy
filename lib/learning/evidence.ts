@@ -10,7 +10,6 @@ import {
 } from "@/db/schema";
 import { generateStructuredOutput } from "@/lib/ai/runtime";
 import { buildTeacherEvidenceAnswerPrompt } from "@/lib/learning/prompts/evidence";
-import { searchLearningTopicContext } from "@/lib/learning/rag";
 import {
   STANDARD_MODEL,
   EMBEDDING_VERSION,
@@ -32,13 +31,13 @@ type EvidenceContextItem = {
   id: string;
   content: string;
   score: number;
-  sourceType: "material" | "report" | "interaction" | "pattern";
+  sourceType: "report" | "interaction" | "pattern";
   sourceId: string;
   metadata: Record<string, unknown>;
 };
 
 type ReplaceLearningEvidenceEmbeddingsParams = {
-  sourceType: "material" | "report" | "interaction" | "pattern";
+  sourceType: "report" | "interaction" | "pattern";
   sourceId: string;
   content: string;
   classroomStudentId?: string | null;
@@ -289,40 +288,6 @@ async function searchStudentLearningEvidenceContext(params: {
 
 // ─── Public Indexing API ──────────────────────────────────────────────────────
 
-export async function indexLearningMaterialEvidence(params: {
-  classroomId?: string | null;
-  topicId: string;
-  materialId: string;
-  topicTitle?: string | null;
-  title?: string | null;
-  description?: string | null;
-  mimeType?: string | null;
-  content: string;
-  subjectKey?: string | null;
-  gradeBand?: string | null;
-  language?: string | null;
-  sourceUpdatedAt?: Date | null;
-}) {
-  return await replaceLearningEvidenceEmbeddings({
-    sourceType: "material",
-    sourceId: params.materialId,
-    topicId: params.topicId,
-    classroomId: params.classroomId ?? null,
-    language: params.language ?? "en",
-    subjectKey: params.subjectKey ?? null,
-    gradeBand: params.gradeBand ?? null,
-    sourceTitle: params.title ?? params.topicTitle ?? "Learning material",
-    sourceUpdatedAt: params.sourceUpdatedAt ?? null,
-    metadata: {
-      title: params.title ?? null,
-      description: params.description ?? null,
-      mimeType: params.mimeType ?? null,
-      topicTitle: params.topicTitle ?? null,
-    },
-    content: params.content,
-  });
-}
-
 export async function indexLearningInteractionEvidence(params: {
   interactionId: string;
   classroomStudentId: string;
@@ -503,33 +468,6 @@ export async function hydrateStudentLearningEvidence(params: {
 }
 
 // ─── Public Retrieval API ─────────────────────────────────────────────────────
-
-/**
- * Finds the most relevant learning evidence for a teacher's question about a
- * specific topic (material-level, not student-level).
- */
-export async function findLearningEvidenceContext(params: {
-  topicId: string;
-  query: string;
-  language?: string;
-  limit?: number;
-}): Promise<EvidenceContextItem[]> {
-  const results = await searchLearningTopicContext({
-    topicId: params.topicId,
-    query: params.query,
-    contentLocale: params.language ?? "en",
-    limit: params.limit ?? 6,
-  });
-
-  return results.map((result) => ({
-    id: result.id,
-    content: result.content,
-    score: result.score,
-    sourceType: "material",
-    sourceId: result.sourceId ?? result.id,
-    metadata: result.metadata ?? {},
-  }));
-}
 
 /**
  * Answers a teacher's question about a specific student by combining

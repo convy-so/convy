@@ -46,12 +46,12 @@ export function StudentCourseCard({
           {classroomInitials(membership.classroom.title)}
         </div>
         <div className="flex min-w-0 flex-col items-end text-right">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             {membership.classroom.gradeLabel}
           </span>
           {membership.needsOnboarding && (
-            <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800">
-              <AlertCircle className="h-3 w-3" aria-hidden />
+            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800">
+              <AlertCircle className="h-3.5 w-3.5" aria-hidden />
               Setup
             </div>
           )}
@@ -59,14 +59,14 @@ export function StudentCourseCard({
       </div>
 
       <div className="min-w-0 flex-1">
-        <h3 className="text-lg font-semibold leading-snug text-gray-900">{membership.classroom.title}</h3>
+        <h3 className="text-xl font-semibold leading-snug text-gray-900">{membership.classroom.title}</h3>
         <div className="mt-3 flex flex-wrap gap-2">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-gray-600">
-            <Clock className="h-3 w-3" aria-hidden />
+          <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-gray-600">
+            <Clock className="h-3.5 w-3.5" aria-hidden />
             {membership.topics.length} topic{membership.topics.length === 1 ? "" : "s"}
           </div>
-          <div className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-            <Sparkles className="h-3 w-3 text-emerald-600" aria-hidden />
+          <div className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-800">
+            <Sparkles className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
             Active
           </div>
         </div>
@@ -75,34 +75,34 @@ export function StudentCourseCard({
       {variant === "actions" ? (
         <div className="mt-auto grid grid-cols-2 gap-2 border-t border-gray-100 pt-4">
           <Link
-            href={`/student/dashboard?classroomId=${membership.classroom.id}`}
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-900 py-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-gray-800"
+            href={`/student/classes/${membership.classroom.id}/sessions`}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-900 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-gray-800"
           >
             Continue
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
           <Link
-            href={`/student/progress?classroomId=${membership.classroom.id}`}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white py-3 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
+            href={`/student/classes/${membership.classroom.id}/progress`}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
           >
-            <FileText className="h-3.5 w-3.5 text-gray-500" aria-hidden />
+            <FileText className="h-4 w-4 text-gray-500" aria-hidden />
             Progress
           </Link>
         </div>
       ) : (
         <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-4">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
-            <Clock className="h-3.5 w-3.5" aria-hidden />
+          <span className="flex items-center gap-1.5 text-sm font-medium text-gray-500">
+            <Clock className="h-4 w-4" aria-hidden />
             {membership.topics[0]?.subject ?? getSubjectDisplayLabel(membership.topics[0]?.subjectKey)}
           </span>
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold",
+              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-semibold",
               isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700",
             )}
           >
             {isActive ? "Selected" : "Open"}
-            <ArrowRight className={cn("h-3.5 w-3.5", isActive && "translate-x-0.5")} aria-hidden />
+            <ArrowRight className={cn("h-4 w-4", isActive && "translate-x-0.5")} aria-hidden />
           </span>
         </div>
       )}
