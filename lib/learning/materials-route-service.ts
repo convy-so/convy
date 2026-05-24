@@ -35,6 +35,10 @@ export type LearningMaterialUploadAttemptStage =
   | "indexing"
   | "pack_build";
 
+export function normalizeLearningMaterialUploadAttemptStage(stage: string) {
+  return stage === "review" ? "analysis" : stage;
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }

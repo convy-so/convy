@@ -5,7 +5,10 @@ import { apiError } from "@/lib/api/error-contract";
 import { getDb } from "@/db";
 import { topicMaterialUploadAttempts } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getTeacherTopicOrNull } from "@/lib/learning/materials-route-service";
+import {
+  getTeacherTopicOrNull,
+  normalizeLearningMaterialUploadAttemptStage,
+} from "@/lib/learning/materials-route-service";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 function serializeUploadAttempt(attempt: {
@@ -48,7 +51,7 @@ function serializeUploadAttempt(attempt: {
     storageBucket: attempt.storageBucket ?? null,
     storagePath: attempt.storagePath ?? null,
     status: attempt.status,
-    stage: attempt.stage,
+    stage: normalizeLearningMaterialUploadAttemptStage(attempt.stage),
     userMessage: attempt.userMessage ?? null,
     retryable: attempt.retryable ?? null,
     queuedAt: attempt.queuedAt ?? null,
