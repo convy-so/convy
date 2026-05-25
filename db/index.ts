@@ -8,7 +8,7 @@ import * as schema from "./schema";
 /**
  * Configure DNS resolution to prefer IPv4.
  * This prevents ENETUNREACH errors when connecting to databases (like Supabase)
- * that have IPv6 records in environments that only support IPv4 (like standard ECS/Fargate).
+ * that have IPv6 records in environments that only support IPv4.
  */
 dns.setDefaultResultOrder("ipv4first");
 

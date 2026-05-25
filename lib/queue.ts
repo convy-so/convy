@@ -18,6 +18,9 @@ declare global {
   var learningMaterialProcessingQueue:
     | Queue<LearningMaterialProcessingJobData>
     | undefined;
+  var learningMaterialBatchFinalizeQueue:
+    | Queue<LearningMaterialBatchFinalizeJobData>
+    | undefined;
 
   var contentTranslationQueue: Queue<ContentTranslationJobData> | undefined;
   var experimentEvaluationQueue: Queue<unknown> | undefined;
@@ -96,6 +99,12 @@ export interface LearningMaterialProcessingJobData {
   sizeBytes: number;
   title?: string | null;
   description?: string | null;
+}
+
+export interface LearningMaterialBatchFinalizeJobData {
+  batchId: string;
+  topicId: string;
+  classroomId: string;
 }
 
 
@@ -192,6 +201,25 @@ export const getLearningMaterialProcessingQueue = () => {
   }
 
   return global.learningMaterialProcessingQueue;
+};
+
+export const getLearningMaterialBatchFinalizeQueue = () => {
+  if (!global.learningMaterialBatchFinalizeQueue) {
+    global.learningMaterialBatchFinalizeQueue =
+      createQueue<LearningMaterialBatchFinalizeJobData>(
+        "learning-material-batch-finalize",
+        {
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 2000 },
+            removeOnComplete: true,
+            removeOnFail: { age: 7 * 24 * 3600 },
+          },
+        },
+      );
+  }
+
+  return global.learningMaterialBatchFinalizeQueue;
 };
 
 
@@ -355,6 +383,19 @@ export async function enqueueLearningMaterialProcessing(
   );
 }
 
+export async function enqueueLearningMaterialBatchFinalize(
+  data: LearningMaterialBatchFinalizeJobData,
+) {
+  return await getLearningMaterialBatchFinalizeQueue().add(
+    "finalize-learning-material-batch",
+    data,
+    {
+      jobId: `learning-material-batch-${data.batchId}`,
+      priority: 1,
+    },
+  );
+}
+
 
 
 export async function enqueueContentTranslation(data: ContentTranslationJobData) {
@@ -396,6 +437,7 @@ export async function closeQueues() {
     global.imageUploadQueue,
     global.tutoringReportQueue,
     global.learningMaterialProcessingQueue,
+    global.learningMaterialBatchFinalizeQueue,
 
     global.contentTranslationQueue,
     global.experimentEvaluationQueue,
@@ -409,6 +451,7 @@ export async function closeQueues() {
     global.imageUploadQueue = undefined;
     global.tutoringReportQueue = undefined;
     global.learningMaterialProcessingQueue = undefined;
+    global.learningMaterialBatchFinalizeQueue = undefined;
 
     global.contentTranslationQueue = undefined;
     global.experimentEvaluationQueue = undefined;

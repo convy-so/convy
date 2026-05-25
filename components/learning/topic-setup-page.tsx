@@ -673,6 +673,12 @@ export function TopicSetupPage({
                           {attempt.retryable && attempt.storagePath
                             ? "Retry this file from the saved upload."
                             : "Re-upload this file to try again."}
+                          {process.env.NODE_ENV !== "production" &&
+                          attempt.internalError ? (
+                            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1 font-mono text-[11px] leading-4 text-amber-950">
+                              {attempt.internalError}
+                            </div>
+                          ) : null}
                         </div>
                         {attempt.retryable && attempt.storagePath ? (
                           <button

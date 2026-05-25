@@ -61,14 +61,22 @@ function mergePackWithBoundary(
   });
 }
 
-function buildCombinedSourceText(
-  materials: Array<{ title: string; extractedText: string | null }>,
+function buildCompiledGroundingText(
+  materials: Array<{
+    id: string;
+    title: string;
+    groundingMap: Record<string, unknown> | null;
+  }>,
 ) {
   const parts: string[] = [];
   let total = 0;
 
   for (const material of materials) {
-    const text = material.extractedText?.trim();
+    const text = JSON.stringify({
+      materialId: material.id,
+      title: material.title,
+      groundingMap: material.groundingMap ?? {},
+    });
     if (!text) continue;
 
     const header = `\n\n=== SOURCE: ${material.title} ===\n\n`;
@@ -145,10 +153,18 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
   }
 
   const boundary = topicSourceBoundarySchema.parse(topic.sourceBoundary ?? {});
-  const indexedMaterials = topic.materials.filter(
-    (material) =>
-      material.indexingStatus === "completed" && Boolean(material.extractedText?.trim()),
-  );
+  const allowedMaterialIds = new Set(boundary.allowedMaterialIds);
+  const indexedMaterials = topic.materials.filter((material) => {
+    if (material.indexingStatus !== "completed" || !material.groundingMap) {
+      return false;
+    }
+
+    if (allowedMaterialIds.size > 0 && !allowedMaterialIds.has(material.id)) {
+      return false;
+    }
+
+    return true;
+  });
   const materialIds = indexedMaterials.map((material) => material.id);
   const nextVersion = (topic.topicGroundingPack?.version ?? 0) + 1;
 
@@ -175,7 +191,7 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
     return pack;
   }
 
-  const combinedSourceText = buildCombinedSourceText(indexedMaterials);
+  const compiledGroundingText = buildCompiledGroundingText(indexedMaterials);
 
   try {
     const extracted = await generateStructuredOutput({
@@ -185,7 +201,7 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
         topicDescription: topic.description,
         teacherSummary: boundary.teacherSummary,
         learningOutcomes: topic.learningOutcomes ?? [],
-        combinedSourceText,
+        compiledGroundingText,
         existingScopeNotes: boundary.scopeNotes,
         existingNotationNotes: boundary.notationNotes,
         existingRigorNotes: boundary.rigorNotes,
@@ -201,6 +217,15 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
         builtAt: new Date().toISOString(),
         materialIds,
         topicTitle: topic.title,
+        conflictNotes: [],
+        sourceSummaries: indexedMaterials.map((material) => ({
+          materialId: material.id,
+          title: material.title,
+          overview:
+            typeof material.groundingMap?.overview === "string"
+              ? material.groundingMap.overview
+              : "",
+        })),
         formulas: extracted.formulas.map((formula) => ({
           ...formula,
           id: formula.id?.trim() || nanoid(),

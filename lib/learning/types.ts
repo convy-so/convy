@@ -80,6 +80,157 @@ export const topicSourceBoundarySchema = z.object({
 
 export type TopicSourceBoundary = z.infer<typeof topicSourceBoundarySchema>;
 
+export const groundingCitationSchema = z.object({
+  materialId: z.string().default(""),
+  segmentId: z.string().default(""),
+  pageStart: z.number().int().positive().nullable().default(null),
+  pageEnd: z.number().int().positive().nullable().default(null),
+  headingPath: z.array(z.string()).default([]),
+  snippet: z.string().default(""),
+});
+
+export type GroundingCitation = z.infer<typeof groundingCitationSchema>;
+
+export const materialSourceSegmentSchema = z.object({
+  segmentId: z.string().min(1),
+  order: z.number().int().nonnegative(),
+  pageStart: z.number().int().positive().nullable().default(null),
+  pageEnd: z.number().int().positive().nullable().default(null),
+  headingPath: z.array(z.string()).default([]),
+  text: z.string().default(""),
+  charCount: z.number().int().nonnegative().default(0),
+});
+
+export type MaterialSourceSegment = z.infer<typeof materialSourceSegmentSchema>;
+
+export const materialSourceDocumentSchema = z.object({
+  materialId: z.string().default(""),
+  sourceTitle: z.string().default(""),
+  mimeType: z.string().default(""),
+  extractor: z.string().default(""),
+  sourceHash: z.string().default(""),
+  extractedText: z.string().default(""),
+  qualityFlags: z.array(z.string()).default([]),
+  truncated: z.boolean().default(false),
+  segments: z.array(materialSourceSegmentSchema).default([]),
+});
+
+export type MaterialSourceDocument = z.infer<typeof materialSourceDocumentSchema>;
+
+export const materialGroundingConceptSchema = z.object({
+  name: z.string().min(1),
+  summary: z.string().default(""),
+  citations: z.array(groundingCitationSchema).default([]),
+});
+
+export type MaterialGroundingConcept = z.infer<
+  typeof materialGroundingConceptSchema
+>;
+
+export const materialGroundingDefinitionSchema = z.object({
+  term: z.string().min(1),
+  definition: z.string().default(""),
+  citations: z.array(groundingCitationSchema).default([]),
+});
+
+export type MaterialGroundingDefinition = z.infer<
+  typeof materialGroundingDefinitionSchema
+>;
+
+export const materialGroundingProcedureSchema = z.object({
+  name: z.string().min(1),
+  summary: z.string().default(""),
+  steps: z.array(z.string()).default([]),
+  citations: z.array(groundingCitationSchema).default([]),
+});
+
+export type MaterialGroundingProcedure = z.infer<
+  typeof materialGroundingProcedureSchema
+>;
+
+export const materialGroundingFormulaSchema = z.object({
+  label: z.string().min(1),
+  expression: z.string().min(1),
+  conditions: z.string().default(""),
+  usageNotes: z.string().default(""),
+  citations: z.array(groundingCitationSchema).default([]),
+});
+
+export type MaterialGroundingFormula = z.infer<
+  typeof materialGroundingFormulaSchema
+>;
+
+export const materialGroundingSegmentSchema = z.object({
+  segmentId: z.string().min(1),
+  order: z.number().int().nonnegative(),
+  pageStart: z.number().int().positive().nullable().default(null),
+  pageEnd: z.number().int().positive().nullable().default(null),
+  headingPath: z.array(z.string()).default([]),
+  concepts: z.array(materialGroundingConceptSchema).default([]),
+  definitions: z.array(materialGroundingDefinitionSchema).default([]),
+  procedures: z.array(materialGroundingProcedureSchema).default([]),
+  formulas: z.array(materialGroundingFormulaSchema).default([]),
+  workedExamples: z.array(z.string()).default([]),
+  notationRules: z.array(z.string()).default([]),
+  rigorSignals: z.array(z.string()).default([]),
+  scopeInclusions: z.array(z.string()).default([]),
+  scopeExclusions: z.array(z.string()).default([]),
+  ambiguities: z.array(z.string()).default([]),
+});
+
+export type MaterialGroundingSegment = z.infer<
+  typeof materialGroundingSegmentSchema
+>;
+
+export const materialGroundingMapSchema = z.object({
+  version: z.number().int().positive().default(1),
+  builtAt: z.string().min(1),
+  sourceHash: z.string().default(""),
+  materialId: z.string().default(""),
+  sourceTitle: z.string().default(""),
+  overview: z.string().default(""),
+  sections: z.array(
+    z.object({
+      id: z.string().min(1),
+      title: z.string().min(1),
+      summary: z.string().default(""),
+      keyPoints: z.array(z.string()).default([]),
+      citations: z.array(groundingCitationSchema).default([]),
+    }),
+  ).default([]),
+  concepts: z.array(materialGroundingConceptSchema).default([]),
+  definitions: z.array(materialGroundingDefinitionSchema).default([]),
+  procedures: z.array(materialGroundingProcedureSchema).default([]),
+  formulas: z.array(materialGroundingFormulaSchema).default([]),
+  notationRules: z.array(z.string()).default([]),
+  rigorRules: z.array(z.string()).default([]),
+  scopeRules: z.array(z.string()).default([]),
+  explicitlyOutOfScope: z.array(z.string()).default([]),
+  teachingNotes: z.array(z.string()).default([]),
+  ambiguities: z.array(z.string()).default([]),
+  segmentGroundings: z.array(materialGroundingSegmentSchema).default([]),
+});
+
+export type MaterialGroundingMap = z.infer<typeof materialGroundingMapSchema>;
+
+export const materialCoverageReviewSchema = z.object({
+  summary: z.string().default(""),
+  groundingSummary: z.string().default(""),
+  supportedOutcomes: z.array(z.string()).default([]),
+  partialOutcomes: z.array(z.string()).default([]),
+  unsupportedOutcomes: z.array(z.string()).default([]),
+  clarifyingQuestions: z.array(z.string()).default([]),
+  coverageObservations: z.array(z.string()).default([]),
+  recommendedOutcomeEdits: z.array(z.string()).default([]),
+  rigorNotes: z.array(z.string()).default([]),
+  notationNotes: z.array(z.string()).default([]),
+  scopeNotes: z.array(z.string()).default([]),
+});
+
+export type MaterialCoverageReview = z.infer<
+  typeof materialCoverageReviewSchema
+>;
+
 export const sessionOpeningStrategySchema = z.enum([
   "world_connection",
   "story",
@@ -476,6 +627,7 @@ export const topicGroundingFormulaSchema = z.object({
   expression: z.string().min(1),
   conditions: z.string().default(""),
   usageNotes: z.string().default(""),
+  citations: z.array(groundingCitationSchema).default([]),
 });
 
 export type TopicGroundingFormula = z.infer<typeof topicGroundingFormulaSchema>;
@@ -485,6 +637,7 @@ export const topicGroundingSectionSchema = z.object({
   title: z.string().min(1),
   summary: z.string().default(""),
   keyPoints: z.array(z.string()).default([]),
+  citations: z.array(groundingCitationSchema).default([]),
 });
 
 export type TopicGroundingSection = z.infer<typeof topicGroundingSectionSchema>;
@@ -492,6 +645,7 @@ export type TopicGroundingSection = z.infer<typeof topicGroundingSectionSchema>;
 export const topicGroundingConceptSchema = z.object({
   name: z.string().min(1),
   summary: z.string().default(""),
+  citations: z.array(groundingCitationSchema).default([]),
 });
 
 export const topicGroundingPackSchema = z.object({
@@ -508,6 +662,14 @@ export const topicGroundingPackSchema = z.object({
   rigorRules: z.array(z.string()).default([]),
   scopeRules: z.array(z.string()).default([]),
   teachingNotes: z.array(z.string()).default([]),
+  conflictNotes: z.array(z.string()).default([]),
+  sourceSummaries: z.array(
+    z.object({
+      materialId: z.string().default(""),
+      title: z.string().default(""),
+      overview: z.string().default(""),
+    }),
+  ).default([]),
 });
 
 export type TopicGroundingPack = z.infer<typeof topicGroundingPackSchema>;
