@@ -33,6 +33,7 @@ function serializeUploadAttempt(attempt: {
   failedAt?: Date | null;
   completedAt?: Date | null;
   failureMessage?: string | null;
+  internalError?: string | null;
   materialId?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -59,6 +60,8 @@ function serializeUploadAttempt(attempt: {
     failedAt: attempt.failedAt ?? null,
     completedAt: attempt.completedAt ?? null,
     failureMessage: attempt.failureMessage ?? null,
+    internalError:
+      process.env.NODE_ENV === "production" ? null : (attempt.internalError ?? null),
     materialId: attempt.materialId ?? null,
     createdAt: attempt.createdAt,
     updatedAt: attempt.updatedAt,

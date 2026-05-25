@@ -14,16 +14,19 @@ import {
   topicSourceBoundarySchema,
 } from "@/lib/learning/types";
 import { getDb } from "@/db";
-import { learningTopics, topicMaterials } from "@/db/schema";
+import {
+  learningTopics,
+  topicMaterialUploadAttempts,
+  topicMaterials,
+} from "@/db/schema";
 import { count, eq } from "drizzle-orm";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import { getTopicWithMaterials } from "@/lib/learning/storage";
-import {
-  getOrGenerateTopicReadiness,
-  isReadinessQuotaError,
-} from "@/lib/learning/readiness";
 import { expertRuntimeModelService } from "@/lib/learning/expert-runtime-model-service";
-import { isMaterialAnalysisFailed } from "@/lib/learning/materials-route-service";
+import {
+  getTopicActivationMaterialGate,
+  isMaterialAnalysisFailed,
+} from "@/lib/learning/materials-route-service";
 import { ActionError, ActionResult, validateInput, withErrorHandling } from "@/lib/action-wrapper";
 
 import { appLocaleSchema, ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./shared";
@@ -299,6 +302,10 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
       if (!topicWithMaterials) {
         throw new Error("Session not found.");
       }
+      const materialAttempts = await getDb().query.topicMaterialUploadAttempts.findMany({
+        where: eq(topicMaterialUploadAttempts.topicId, body.topicId),
+        orderBy: (table, operators) => [operators.desc(table.createdAt)],
+      });
 
       const completedMaterials = topicWithMaterials.materials.filter(
         (material) =>
@@ -314,34 +321,14 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
         );
       }
 
-      try {
-        const readiness = await getOrGenerateTopicReadiness({
-          ...topicWithMaterials,
-          materials: completedMaterials,
-        });
-        if (!readiness.data.ready) {
-          const gaps = readiness.data.gaps.slice(0, 2).join(" ");
-          throw new ActionError(
-            `This session is not ready to activate. ${readiness.data.summary}${gaps ? ` Gaps: ${gaps}` : ""}`,
-            "VALIDATION_ERROR",
-            400,
-          );
-        }
-      } catch (error) {
-        if (error instanceof ActionError) {
-          throw error;
-        }
-
-        if (isReadinessQuotaError(error)) {
-          throw new ActionError(
-            "The AI readiness check could not run because the AI quota is currently exhausted. Try again later before activating this session.",
-            "RATE_LIMIT_EXCEEDED",
-            429,
-          );
-        }
-
+      const materialGate = getTopicActivationMaterialGate({
+        topic: topicWithMaterials,
+        materials: topicWithMaterials.materials,
+        attempts: materialAttempts,
+      });
+      if (!materialGate.ready) {
         throw new ActionError(
-          "The AI readiness check could not complete. Try again later before activating this session.",
+          materialGate.reason,
           "VALIDATION_ERROR",
           400,
         );

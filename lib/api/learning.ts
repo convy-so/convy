@@ -98,6 +98,7 @@ const topicMaterialUploadAttemptSchema = z.object({
   failedAt: z.union([z.string(), z.date()]).nullable().optional(),
   completedAt: z.union([z.string(), z.date()]).nullable().optional(),
   failureMessage: z.string().nullable().optional(),
+  internalError: z.string().nullable().optional(),
   materialId: z.string().nullable().optional(),
   createdAt: z.union([z.string(), z.date()]),
   updatedAt: z.union([z.string(), z.date()]),

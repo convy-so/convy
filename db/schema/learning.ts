@@ -21,6 +21,9 @@ import type {
   ExpertFramework,
   ExpertHeuristic,
   ExpertTutorRuntimeModel,
+  MaterialCoverageReview,
+  MaterialGroundingMap,
+  MaterialSourceDocument,
   LearningOutcomeDefinition,
   FrameworkState,
   LearningSessionState,
@@ -236,6 +239,15 @@ export const topicMaterials = pgTable(
     indexingStatus: text("indexing_status").default("pending").notNull(),
     indexingError: text("indexing_error"),
     extractedText: text("extracted_text"),
+    sourceDocument: jsonb("source_document")
+      .$type<MaterialSourceDocument | null>()
+      .default(null),
+    groundingMap: jsonb("grounding_map")
+      .$type<MaterialGroundingMap | null>()
+      .default(null),
+    coverageReview: jsonb("coverage_review")
+      .$type<MaterialCoverageReview | null>()
+      .default(null),
     analysis: jsonb("analysis").$type<Record<string, unknown>>().default({}),
   },
   (table) => [

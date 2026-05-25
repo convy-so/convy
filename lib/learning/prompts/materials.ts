@@ -1,53 +1,100 @@
 import { renderUntrustedContextBlock } from "@/lib/ai/scope-policy";
 
-export const MATERIAL_ANALYSIS_MAX_CHARS = 18_000;
-export const MATERIAL_SUMMARY_MAX_CHARS = 16_000;
+export const MATERIAL_SEGMENT_MAX_CHARS = 8_000;
+export const MATERIAL_GROUNDING_MAP_MAX_CHARS = 32_000;
+export const MATERIAL_COVERAGE_REVIEW_MAX_CHARS = 24_000;
 
-/**
- * Input: topic metadata + outcomes + source material.
- * Output: structured object (schema enforced by caller).
- * Fallback instruction: if material is insufficient, state uncertainty explicitly.
- */
-export function buildMaterialAnalysisPrompt(input: {
+export function buildMaterialSegmentGroundingPrompt(input: {
+  topicTitle: string;
+  materialTitle: string;
+  segmentOrder: number;
+  headingPath: string[];
+  pageStart?: number | null;
+  pageEnd?: number | null;
+  segmentText: string;
+}) {
+  const heading =
+    input.headingPath.length > 0 ? input.headingPath.join(" > ") : "(none)";
+  const pageLabel =
+    input.pageStart && input.pageEnd
+      ? input.pageStart === input.pageEnd
+        ? `page ${input.pageStart}`
+        : `pages ${input.pageStart}-${input.pageEnd}`
+      : "(unknown)";
+
+  return `You are extracting grounded teaching facts from one segment of a teacher-uploaded course document.
+
+Topic: ${input.topicTitle}
+Material title: ${input.materialTitle}
+Segment order: ${input.segmentOrder}
+Heading path: ${heading}
+Page range: ${pageLabel}
+
+Segment text:
+${renderUntrustedContextBlock("learning_material_segment", input.segmentText.slice(0, MATERIAL_SEGMENT_MAX_CHARS))}
+
+Return only facts that are directly supported by this segment.
+
+Rules:
+- Do not infer learning outcomes.
+- Do not judge whether the material is sufficient for the topic.
+- Prefer short, concrete extractions over narrative prose.
+- If a category has no evidence, return an empty list.
+- If wording is ambiguous, capture that in ambiguities instead of guessing.`;
+}
+
+export function buildMaterialGroundingMapPrompt(input: {
+  topicTitle: string;
+  materialTitle: string;
+  groundedSegmentsJson: string;
+}) {
+  return `You are compiling a full-document grounding map for one uploaded teaching material.
+
+Topic: ${input.topicTitle}
+Material title: ${input.materialTitle}
+
+Grounded segment data:
+${renderUntrustedContextBlock("material_grounding_segments", input.groundedSegmentsJson.slice(0, MATERIAL_GROUNDING_MAP_MAX_CHARS))}
+
+Produce a grounded synthesis of the full material.
+
+Rules:
+- Use only the grounded segment data above.
+- Preserve source fidelity; omit anything uncertain.
+- Keep the overview concise and teacher-facing.
+- Prefer section titles that reflect the actual teaching structure of the material.
+- Do not mention filenames, PDFs, DOCX, uploads, or pages in prose fields.
+- Teaching notes should focus on sequencing, common pitfalls, and emphasis implied by the material.`;
+}
+
+export function buildMaterialCoverageReviewPrompt(input: {
   topicTitle: string;
   topicDescription?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
-  materialText: string;
-}): string {
-  const outcomeLines = input.learningOutcomes
+  materialGroundingMapsJson: string;
+}) {
+  const outcomes = input.learningOutcomes
     .map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`)
     .join("\n");
 
-  return `Topic: ${input.topicTitle}
+  return `You are reviewing whether the uploaded teaching material can ground a tutoring session for the planned topic outcomes.
+
+Topic: ${input.topicTitle}
 Description: ${input.topicDescription ?? ""}
-Learning outcomes:
-${outcomeLines}
 
-Material excerpt:
-${renderUntrustedContextBlock("learning_material", input.materialText.slice(0, MATERIAL_ANALYSIS_MAX_CHARS))}
+Planned learning outcomes:
+${outcomes || "(none)"}
 
-You are helping a teacher review whether the uploaded source material is sufficient for a tightly grounded tutor.
-- Write a concise summary.
-- Ask only necessary clarifying questions.
-- Note where the material supports or fails to support the learning outcomes.
-- Suggest outcome edits only when the outcomes are too vague or unsupported.
-- Extract Rigor Notes: What is the academic level? What complexity of problems are present?
-- Extract Notation Notes: What specific mathematical or scientific symbols, conventions, or units are used?
-- Extract Scope Notes: What specific sub-topics are included or explicitly excluded? What are the boundaries of the content?
-- If evidence is insufficient, state uncertainty clearly and do not invent details.`;
-}
+Grounding maps derived from the uploaded material:
+${renderUntrustedContextBlock("material_grounding_maps", input.materialGroundingMapsJson.slice(0, MATERIAL_COVERAGE_REVIEW_MAX_CHARS))}
 
-/**
- * Input: topic title + source material.
- * Output: plain-text bullet summary.
- * Fallback instruction: if evidence is thin, explicitly mark assumptions.
- */
-export function buildMaterialGroundingSummaryPrompt(input: {
-  topicTitle: string;
-  materialText: string;
-}): string {
-  return `Summarize the learning boundaries for the topic "${input.topicTitle}" based only on the source material below in 6 bullet points or fewer.
-If evidence is thin or ambiguous, clearly mark assumptions instead of presenting them as facts.
+Return a teacher-facing coverage review.
 
-${renderUntrustedContextBlock("learning_material", input.materialText.slice(0, MATERIAL_SUMMARY_MAX_CHARS))}`;
+Rules:
+- Learning outcomes come from the topic plan, not from the source material.
+- Supported outcomes must be explicitly grounded by the material.
+- Partial outcomes should note where support is incomplete.
+- Unsupported outcomes should only include genuinely ungrounded expectations.
+- Recommended outcome edits are only for vague or unsupported outcomes.
+- Do not invent missing content from the material.`;
 }

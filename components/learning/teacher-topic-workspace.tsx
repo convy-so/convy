@@ -52,6 +52,7 @@ type TopicMaterial = {
 type MaterialUploadAttempt = {
   id: string;
   previousAttemptId?: string | null;
+  batchId: string;
   fileName: string;
   status: "queued" | "processing" | "succeeded" | "failed";
   stage: "upload" | "extraction" | "analysis" | "indexing" | "pack_build";
@@ -59,7 +60,9 @@ type MaterialUploadAttempt = {
   userMessage?: string | null;
   retryable?: boolean | null;
   failureMessage?: string | null;
+  internalError?: string | null;
   materialId?: string | null;
+  createdAt?: string | Date;
 };
 
 type TopicStudent = {
@@ -183,6 +186,51 @@ function formatAttemptStatus(attempt: MaterialUploadAttempt) {
   return `Processing: ${stageLabel}`;
 }
 
+function getLatestBatchUiState(attempts: MaterialUploadAttempt[]) {
+  if (!attempts.length) {
+    return {
+      status: "idle" as const,
+      attemptCount: 0,
+      failedCount: 0,
+      processingCount: 0,
+    };
+  }
+
+  const sorted = [...attempts].sort((left, right) => {
+    const leftTime = new Date(left.createdAt ?? 0).getTime();
+    const rightTime = new Date(right.createdAt ?? 0).getTime();
+    return rightTime - leftTime;
+  });
+  const latestBatchId = sorted[0]?.batchId;
+  const batchAttempts = sorted.filter((attempt) => attempt.batchId === latestBatchId);
+  const supersededIds = new Set(
+    batchAttempts
+      .map((attempt) => attempt.previousAttemptId ?? null)
+      .filter((attemptId): attemptId is string => Boolean(attemptId)),
+  );
+  const latestBatchAttempts = batchAttempts.filter(
+    (attempt) => !supersededIds.has(attempt.id),
+  );
+  const failedCount = latestBatchAttempts.filter(
+    (attempt) => attempt.status === "failed",
+  ).length;
+  const processingCount = latestBatchAttempts.filter(
+    (attempt) => attempt.status === "queued" || attempt.status === "processing",
+  ).length;
+
+  return {
+    status:
+      processingCount > 0
+        ? ("processing" as const)
+        : failedCount > 0
+          ? ("failed" as const)
+          : ("succeeded" as const),
+    attemptCount: latestBatchAttempts.length,
+    failedCount,
+    processingCount,
+  };
+}
+
 export function TeacherTopicWorkspace({
   selectedDirectoryClassroom,
   selectedTopic,
@@ -278,11 +326,14 @@ export function TeacherTopicWorkspace({
   const visibleUploadAttempts = materialUploadAttempts.filter(
     (attempt) => attempt.status !== "succeeded",
   );
+  const latestBatchState = getLatestBatchUiState(materialUploadAttempts);
   const hasRequiredSetup =
     learningOutcomes.length > 0 && validMaterials.length > 0;
   const canActivate =
     (selectedTopic.status === "draft" || selectedTopic.status === "paused") &&
-    hasRequiredSetup;
+    hasRequiredSetup &&
+    latestBatchState.status !== "processing" &&
+    latestBatchState.status !== "failed";
   const canPause = selectedTopic.status === "active";
   const canArchive = selectedTopic.status === "active";
 
@@ -296,6 +347,16 @@ export function TeacherTopicWorkspace({
       : "This session is paused, but the required setup is incomplete.";
   } else if (selectedTopic.status === "archived") {
     statusHint = "This session is archived and no longer active for students.";
+  } else if (latestBatchState.status === "processing") {
+    statusHint =
+      latestBatchState.attemptCount <= 1
+        ? "Material processing is still running. Activation unlocks when the uploaded file and tutoring pack are ready."
+        : `Material processing is still running for ${latestBatchState.attemptCount} files. Activation unlocks when the full upload batch and tutoring pack are ready.`;
+  } else if (latestBatchState.status === "failed") {
+    statusHint =
+      latestBatchState.attemptCount <= 1
+        ? "Activation is locked because the latest uploaded file failed. Retry or remove it first."
+        : `Activation is locked because ${latestBatchState.failedCount} of ${latestBatchState.attemptCount} files in the latest upload batch failed. Retry or remove the failed files first.`;
   } else if (!hasRequiredSetup) {
     const missing = [
       learningOutcomes.length === 0 ? "learning outcomes" : null,
@@ -844,6 +905,12 @@ export function TeacherTopicWorkspace({
                                 {attempt.retryable && attempt.storagePath
                                   ? "Retry this file from the saved upload."
                                   : "Re-upload this file to try again."}
+                                {process.env.NODE_ENV !== "production" &&
+                                attempt.internalError ? (
+                                  <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1 font-mono text-[11px] leading-4 text-amber-950">
+                                    {attempt.internalError}
+                                  </div>
+                                ) : null}
                               </div>
                               {attempt.retryable && attempt.storagePath ? (
                                 <button

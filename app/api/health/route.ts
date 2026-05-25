@@ -5,8 +5,8 @@ import { getRuntimeProcessorHealth } from "@/lib/privacy/compliance";
  * GET /api/health
  *
  * Used by:
- * - AWS ALB health checks (to decide if this task is healthy)
- * - docker-compose HEALTHCHECK directive
+ * - load balancer health checks
+ * - container health checks
  *
  * Returns 200 OK when the server is running.
  * You can extend this later to check DB connectivity etc.

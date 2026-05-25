@@ -10,9 +10,10 @@ import {
 } from "@/db/schema";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import {
-  analyzeLearningMaterial,
-  extractLearningMaterialText,
+  buildMaterialGroundingMap,
+  extractLearningMaterialSourceDocument,
 } from "@/lib/learning/materials";
+import { indexLearningMaterialEvidence } from "@/lib/learning/evidence";
 import { buildLearningMaterialAccessPath } from "@/lib/media-access";
 import {
   deleteLearningMaterial,
@@ -21,7 +22,11 @@ import {
 import { rebuildTopicGroundingPack } from "@/lib/learning/topic-grounding-pack-service";
 import { topicSourceBoundarySchema } from "@/lib/learning/types";
 import { publishClassroomRealtimeEvent } from "@/lib/realtime";
-import type { LearningMaterialProcessingJobData } from "@/lib/queue";
+import {
+  enqueueLearningMaterialBatchFinalize,
+  type LearningMaterialBatchFinalizeJobData,
+  type LearningMaterialProcessingJobData,
+} from "@/lib/queue";
 
 export type LearningMaterialUploadAttemptStatus =
   | "queued"
@@ -198,6 +203,193 @@ export function isMaterialAnalysisFailed(
   );
 }
 
+export type MaterialBatchGateState =
+  | {
+      batchId: null;
+      status: "idle";
+      attemptCount: 0;
+      succeededCount: 0;
+      failedCount: 0;
+      processingCount: 0;
+      materialIds: string[];
+    }
+  | {
+      batchId: string;
+      status: "processing" | "failed" | "succeeded";
+      attemptCount: number;
+      succeededCount: number;
+      failedCount: number;
+      processingCount: number;
+      materialIds: string[];
+    };
+
+function getActiveBatchAttempts<T extends {
+  id?: string;
+  previousAttemptId?: string | null;
+  batchId: string;
+}>(attempts: T[]) {
+  if (attempts.length === 0) return [];
+  const latestBatchId = [...attempts]
+    .sort(
+      (left, right) =>
+        new Date((right as { createdAt?: Date | string | null }).createdAt ?? 0).getTime() -
+        new Date((left as { createdAt?: Date | string | null }).createdAt ?? 0).getTime(),
+    )[0]?.batchId;
+  const batchAttempts = attempts.filter((attempt) => attempt.batchId === latestBatchId);
+  const supersededIds = new Set(
+    batchAttempts
+      .map((attempt) => attempt.previousAttemptId ?? null)
+      .filter((attemptId): attemptId is string => Boolean(attemptId)),
+  );
+
+  return batchAttempts.filter((attempt) => !supersededIds.has(attempt.id ?? ""));
+}
+
+export function getLatestMaterialBatchGateState(
+  attempts: Array<{
+    id?: string;
+    previousAttemptId?: string | null;
+    batchId: string;
+    status: string;
+    materialId?: string | null;
+    createdAt?: Date | string | null;
+  }>,
+): MaterialBatchGateState {
+  if (attempts.length === 0) {
+    return {
+      batchId: null,
+      status: "idle",
+      attemptCount: 0,
+      succeededCount: 0,
+      failedCount: 0,
+      processingCount: 0,
+      materialIds: [],
+    };
+  }
+
+  const sorted = [...attempts].sort((left, right) => {
+    const leftTime = new Date(left.createdAt ?? 0).getTime();
+    const rightTime = new Date(right.createdAt ?? 0).getTime();
+    return rightTime - leftTime;
+  });
+  const latestBatchId = sorted[0]?.batchId;
+  const latestBatchAttempts = getActiveBatchAttempts(
+    sorted.filter((attempt) => attempt.batchId === latestBatchId),
+  );
+  const succeededCount = latestBatchAttempts.filter(
+    (attempt) => attempt.status === "succeeded",
+  ).length;
+  const failedCount = latestBatchAttempts.filter(
+    (attempt) => attempt.status === "failed",
+  ).length;
+  const processingCount = latestBatchAttempts.filter(
+    (attempt) => attempt.status === "queued" || attempt.status === "processing",
+  ).length;
+
+  return {
+    batchId: latestBatchId ?? null,
+    status:
+      processingCount > 0
+        ? "processing"
+        : failedCount > 0
+          ? "failed"
+          : "succeeded",
+    attemptCount: latestBatchAttempts.length,
+    succeededCount,
+    failedCount,
+    processingCount,
+    materialIds: latestBatchAttempts
+      .map((attempt) => attempt.materialId ?? null)
+      .filter((materialId): materialId is string => Boolean(materialId)),
+  };
+}
+
+function sameIdSet(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
+export function getTopicActivationMaterialGate(params: {
+  topic: {
+    sourceBoundary?: unknown;
+    topicGroundingPack?: { materialIds?: string[] | null } | null;
+  };
+  materials: Array<{
+    id: string;
+    extractionStatus: string;
+    indexingStatus: string;
+    analysis?: Record<string, unknown> | null;
+  }>;
+  attempts: Array<{
+    id?: string;
+    previousAttemptId?: string | null;
+    batchId: string;
+    status: string;
+    materialId?: string | null;
+    createdAt?: Date | string | null;
+  }>;
+}) {
+  const batch = getLatestMaterialBatchGateState(params.attempts);
+  const boundary = topicSourceBoundarySchema.parse(params.topic.sourceBoundary ?? {});
+  const completedMaterialIds = params.materials
+    .filter(
+      (material) =>
+        material.extractionStatus === "completed" &&
+        material.indexingStatus === "completed" &&
+        !isMaterialAnalysisFailed(material.analysis),
+    )
+    .map((material) => material.id);
+  const expectedPackMaterialIds =
+    boundary.allowedMaterialIds.length > 0
+      ? completedMaterialIds.filter((id) => boundary.allowedMaterialIds.includes(id))
+      : completedMaterialIds;
+  const packMaterialIds = (params.topic.topicGroundingPack?.materialIds ?? []).filter(Boolean);
+  const packMatchesCurrentMaterials = sameIdSet(packMaterialIds, expectedPackMaterialIds);
+
+  if (batch.status === "processing") {
+    return {
+      ready: false,
+      reason:
+        batch.attemptCount === 1
+          ? "Activation is locked until the uploaded material finishes processing."
+          : `Activation is locked until all ${batch.attemptCount} files in the current upload batch finish processing.`,
+    };
+  }
+
+  if (batch.status === "failed") {
+    return {
+      ready: false,
+      reason:
+        batch.attemptCount === 1
+          ? "Activation is locked because the latest uploaded file failed. Retry or remove it first."
+          : `Activation is locked because ${batch.failedCount} of ${batch.attemptCount} files in the latest upload batch failed. Retry or remove the failed files first.`,
+    };
+  }
+
+  if (expectedPackMaterialIds.length === 0) {
+    return {
+      ready: false,
+      reason:
+        "Upload and finish processing at least one supporting material before activating this session.",
+    };
+  }
+
+  if (!params.topic.topicGroundingPack || !packMatchesCurrentMaterials) {
+    return {
+      ready: false,
+      reason:
+        "Activation is locked until the tutoring pack is rebuilt from the full successful material set.",
+    };
+  }
+
+  return {
+    ready: true,
+    reason: "",
+  };
+}
+
 export async function getTeacherTopicOrNull(userId: string, topicId: string) {
   return getTeacherTopicAccess(userId, topicId);
 }
@@ -364,6 +556,8 @@ export async function indexMaterialAndSyncBoundary(params: {
   mimeType: string;
   extractedText: string;
   analysis: Record<string, unknown>;
+  sourceDocument: Record<string, unknown>;
+  groundingMap: Record<string, unknown>;
   topic: NonNullable<Awaited<ReturnType<typeof getTeacherTopicAccess>>>;
 }) {
   const currentTopic = await getDb().query.learningTopics.findFirst({
@@ -373,16 +567,233 @@ export async function indexMaterialAndSyncBoundary(params: {
   const existingBoundary = topicSourceBoundarySchema.parse(currentTopic?.sourceBoundary ?? {});
   const updatedBoundary = topicSourceBoundarySchema.parse({
     ...existingBoundary,
-    rigorNotes: Array.from(new Set([...(existingBoundary.rigorNotes || []), ...((params.analysis.rigorNotes as string[]) || [])])),
-    notationNotes: Array.from(new Set([...(existingBoundary.notationNotes || []), ...((params.analysis.notationNotes as string[]) || [])])),
-    scopeNotes: Array.from(new Set([...(existingBoundary.scopeNotes || []), ...((params.analysis.scopeNotes as string[]) || [])])),
+    rigorNotes: Array.from(
+      new Set([
+        ...(existingBoundary.rigorNotes || []),
+        ...((params.analysis.rigorNotes as string[]) || []),
+        ...((params.groundingMap.rigorRules as string[]) || []),
+      ]),
+    ),
+    notationNotes: Array.from(
+      new Set([
+        ...(existingBoundary.notationNotes || []),
+        ...((params.analysis.notationNotes as string[]) || []),
+        ...((params.groundingMap.notationRules as string[]) || []),
+      ]),
+    ),
+    scopeNotes: Array.from(
+      new Set([
+        ...(existingBoundary.scopeNotes || []),
+        ...((params.analysis.scopeNotes as string[]) || []),
+        ...((params.groundingMap.scopeRules as string[]) || []),
+      ]),
+    ),
+  });
+
+  await indexLearningMaterialEvidence({
+    materialId: params.materialId,
+    topicId: params.topicId,
+    classroomId: params.topic.classroomId,
+    language: params.topic.contentLocale,
+    subjectKey: params.topic.subjectKey,
+    gradeBand: params.topic.classroom.gradeBand,
+    sourceTitle: params.material.title,
+    sourceUpdatedAt: params.material.updatedAt ?? new Date(),
+    sourceDocument: params.sourceDocument,
+    groundingMap: params.groundingMap,
   });
 
   await Promise.all([
     getDb().update(topicMaterials).set({ indexingStatus: "completed", indexingError: null, updatedAt: new Date() }).where(eq(topicMaterials.id, params.materialId)),
     getDb().update(learningTopics).set({ sourceBoundary: updatedBoundary, lastMaterialSyncAt: new Date(), updatedAt: new Date() }).where(eq(learningTopics.id, params.topicId)),
   ]);
-  await rebuildTopicGroundingPack(params.topicId);
+}
+
+function buildMaterialAnalysisPreview(params: {
+  groundingMap: Record<string, unknown>;
+}) {
+  const overview =
+    typeof params.groundingMap.overview === "string"
+      ? params.groundingMap.overview
+      : "";
+  const scopeRules = Array.isArray(params.groundingMap.scopeRules)
+    ? (params.groundingMap.scopeRules as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  const notationRules = Array.isArray(params.groundingMap.notationRules)
+    ? (params.groundingMap.notationRules as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  const rigorRules = Array.isArray(params.groundingMap.rigorRules)
+    ? (params.groundingMap.rigorRules as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  const ambiguities = Array.isArray(params.groundingMap.ambiguities)
+    ? (params.groundingMap.ambiguities as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+
+  return {
+    summary: overview || "Material grounded successfully.",
+    groundingSummary: overview,
+    supportedOutcomes: [],
+    partialOutcomes: [],
+    unsupportedOutcomes: [],
+    clarifyingQuestions: [],
+    coverageObservations: [...scopeRules, ...ambiguities].slice(0, 6),
+    recommendedOutcomeEdits: [],
+    rigorNotes: rigorRules.slice(0, 6),
+    notationNotes: notationRules.slice(0, 6),
+    scopeNotes: scopeRules.slice(0, 6),
+  };
+}
+
+function isFileTerminalAttempt(attempt: {
+  status: string;
+  materialId?: string | null;
+}) {
+  if (attempt.status === "failed" || attempt.status === "succeeded") {
+    return true;
+  }
+
+  return attempt.status === "processing" && Boolean(attempt.materialId);
+}
+
+function buildLatestBatchLeafState(
+  attempts: Array<typeof topicMaterialUploadAttempts.$inferSelect>,
+) {
+  const activeAttempts = getActiveBatchAttempts(attempts);
+  const failedAttempts = activeAttempts.filter((attempt) => attempt.status === "failed");
+  const incompleteAttempts = activeAttempts.filter((attempt) => !isFileTerminalAttempt(attempt));
+  const successfulAttempts = activeAttempts.filter(
+    (attempt) => attempt.status !== "failed" && Boolean(attempt.materialId),
+  );
+
+  return {
+    activeAttempts,
+    failedAttempts,
+    incompleteAttempts,
+    successfulAttempts,
+  };
+}
+
+export async function processLearningMaterialBatchFinalizer(
+  data: LearningMaterialBatchFinalizeJobData,
+) {
+  const attempts = await getDb().query.topicMaterialUploadAttempts.findMany({
+    where: eq(topicMaterialUploadAttempts.batchId, data.batchId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  const { activeAttempts, failedAttempts, incompleteAttempts, successfulAttempts } =
+    buildLatestBatchLeafState(attempts);
+
+  if (activeAttempts.length === 0) {
+    return { success: true, status: "empty" as const };
+  }
+
+  if (incompleteAttempts.length > 0) {
+    return {
+      success: true,
+      status: "batch_incomplete" as const,
+      pendingCount: incompleteAttempts.length,
+    };
+  }
+
+  if (failedAttempts.length > 0) {
+    await Promise.all(
+      successfulAttempts.map((attempt) =>
+        updateLearningMaterialUploadAttempt({
+          attemptId: attempt.id,
+          classroomId: data.classroomId,
+          topicId: attempt.topicId,
+          batchId: attempt.batchId,
+          status: "succeeded",
+          stage: "pack_build",
+          userMessage: null,
+          internalError: null,
+          errorCode: null,
+          retryable: null,
+          failedAt: null,
+          completedAt: attempt.completedAt ?? new Date(),
+          failureMessage: null,
+          materialId: attempt.materialId ?? null,
+        }),
+      ),
+    );
+
+    return {
+      success: true,
+      status: "batch_failed" as const,
+      failedCount: failedAttempts.length,
+    };
+  }
+
+  await rebuildTopicGroundingPack(data.topicId);
+
+  await Promise.all(
+    successfulAttempts.map((attempt) =>
+      updateLearningMaterialUploadAttempt({
+        attemptId: attempt.id,
+        classroomId: data.classroomId,
+        topicId: attempt.topicId,
+        batchId: attempt.batchId,
+        status: "succeeded",
+        stage: "pack_build",
+        userMessage: null,
+        internalError: null,
+        errorCode: null,
+        retryable: null,
+        failedAt: null,
+        completedAt: new Date(),
+        failureMessage: null,
+        materialId: attempt.materialId ?? null,
+      }),
+    ),
+  );
+
+  return {
+    success: true,
+    status: "batch_succeeded" as const,
+    materialCount: successfulAttempts.length,
+  };
+}
+
+export async function markLearningMaterialBatchFinalizerFailed(
+  data: LearningMaterialBatchFinalizeJobData,
+  error: unknown,
+) {
+  const attempts = await getDb().query.topicMaterialUploadAttempts.findMany({
+    where: eq(topicMaterialUploadAttempts.batchId, data.batchId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+  const { successfulAttempts } = buildLatestBatchLeafState(attempts);
+  const failure = buildUploadAttemptFailure("pack_build", error);
+
+  await Promise.all(
+    successfulAttempts.map((attempt) =>
+      updateLearningMaterialUploadAttempt({
+        attemptId: attempt.id,
+        classroomId: data.classroomId,
+        topicId: attempt.topicId,
+        batchId: attempt.batchId,
+        status: "failed",
+        stage: "pack_build",
+        userMessage: failure.userMessage,
+        internalError: failure.internalError,
+        errorCode: failure.errorCode,
+        retryable: failure.retryable,
+        failedAt: failure.failedAt,
+        completedAt: null,
+        failureMessage: failure.failureMessage,
+        materialId: attempt.materialId ?? null,
+      }),
+    ),
+  );
 }
 
 async function deleteMaterialProcessingArtifacts(params: {
@@ -419,6 +830,7 @@ async function deleteMaterialProcessingArtifacts(params: {
 export async function processLearningMaterialUploadAttempt(
   data: LearningMaterialProcessingJobData,
 ) {
+  const startedAt = Date.now();
   const attempt = await getDb().query.topicMaterialUploadAttempts.findFirst({
     where: eq(topicMaterialUploadAttempts.id, data.attemptId),
   });
@@ -431,6 +843,15 @@ export async function processLearningMaterialUploadAttempt(
   let currentStage: LearningMaterialUploadAttemptStage = "extraction";
 
   try {
+    console.info("[learning-material-worker] processing start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      classroomId: data.classroomId,
+      fileName: data.fileName,
+      mimeType: data.mimeType,
+      sizeBytes: data.sizeBytes,
+    });
+
     const topic = await getTeacherTopicAccess(data.userId, data.topicId);
     if (!topic) {
       throw new Error("Topic not found or user is no longer authorized.");
@@ -458,11 +879,24 @@ export async function processLearningMaterialUploadAttempt(
       materialId: null,
     });
 
+    materialId = nanoid();
     const buffer = await downloadLearningMaterial(attempt.storagePath);
-    const extractedText = await extractLearningMaterialText({
+    const sourceDocument = await extractLearningMaterialSourceDocument({
+      materialId,
       buffer,
       filename: data.fileName,
       mimeType: data.mimeType,
+      title: data.title,
+      traceId: data.attemptId,
+      topicId: data.topicId,
+    });
+    const extractedText = sourceDocument.extractedText;
+
+    console.info("[learning-material-worker] extraction complete", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      extractedTextLength: extractedText.length,
+      segmentCount: sourceDocument.segments.length,
     });
 
     currentStage = "analysis";
@@ -475,11 +909,27 @@ export async function processLearningMaterialUploadAttempt(
       stage: "analysis",
     });
 
-    const analysis = await analyzeLearningMaterial({
+    const groundingMap = await buildMaterialGroundingMap({
       topicTitle: topic.title,
-      topicDescription: topic.description,
-      learningOutcomes: topic.learningOutcomes,
-      materialText: extractedText,
+      materialId,
+      materialTitle: data.title?.trim() || data.fileName,
+      sourceDocument,
+      traceId: data.attemptId,
+      topicId: data.topicId,
+    });
+
+    const analysis = buildMaterialAnalysisPreview({
+      groundingMap,
+    });
+
+    console.info("[learning-material-worker] analysis complete", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      analysisKeys: Object.keys(analysis).join(","),
+      summaryLength: typeof analysis.summary === "string" ? analysis.summary.length : 0,
+      clarifyingQuestionCount: Array.isArray(analysis.clarifyingQuestions)
+        ? analysis.clarifyingQuestions.length
+        : 0,
     });
 
     if (isMaterialAnalysisFailed(analysis)) {
@@ -496,7 +946,6 @@ export async function processLearningMaterialUploadAttempt(
       stage: "indexing",
     });
 
-    materialId = nanoid();
     const [material] = await getDb()
       .insert(topicMaterials)
       .values({
@@ -516,6 +965,9 @@ export async function processLearningMaterialUploadAttempt(
         indexingStatus: "processing",
         indexingError: null,
         extractedText,
+        sourceDocument,
+        groundingMap,
+        coverageReview: analysis,
         analysis,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -540,6 +992,8 @@ export async function processLearningMaterialUploadAttempt(
       mimeType: data.mimeType,
       extractedText,
       analysis,
+      sourceDocument,
+      groundingMap,
       topic,
     });
 
@@ -548,7 +1002,7 @@ export async function processLearningMaterialUploadAttempt(
       classroomId: data.classroomId,
       topicId: data.topicId,
       batchId: attempt.batchId,
-      status: "succeeded",
+      status: "processing",
       stage: "pack_build",
       userMessage: null,
       internalError: null,
@@ -560,9 +1014,31 @@ export async function processLearningMaterialUploadAttempt(
       materialId,
     });
 
+    await enqueueLearningMaterialBatchFinalize({
+      batchId: attempt.batchId,
+      topicId: data.topicId,
+      classroomId: data.classroomId,
+    });
+
+    console.info("[learning-material-worker] processing succeeded", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+      durationMs: Date.now() - startedAt,
+    });
+
     return { success: true, materialId };
   } catch (error) {
     const failure = buildUploadAttemptFailure(currentStage, error);
+
+    console.error("[learning-material-worker] processing failed", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      stage: currentStage,
+      durationMs: Date.now() - startedAt,
+      error: failure.internalError,
+      retryable: failure.retryable,
+    });
 
     await deleteMaterialProcessingArtifacts({
       materialId,

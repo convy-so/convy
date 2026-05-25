@@ -23,6 +23,18 @@ const learningMaterialWorker = new Worker<LearningMaterialProcessingJobData>(
   "learning-material-processing",
   async (job: Job<LearningMaterialProcessingJobData>) => {
     const data = learningMaterialJobSchema.parse(job.data);
+    const startedAt = Date.now();
+
+    Sentry.logger.info("Learning material worker job started", {
+      service: "workers",
+      worker_name: "Learning Material",
+      job_id: job.id ?? "",
+      attempt_id: data.attemptId,
+      topic_id: data.topicId,
+      file_name: data.fileName,
+      mime_type: data.mimeType,
+    });
+
     await job.updateProgress(10);
 
     const result = await processLearningMaterialUploadAttempt(data);
@@ -32,9 +44,21 @@ const learningMaterialWorker = new Worker<LearningMaterialProcessingJobData>(
       Sentry.logger.warn("Learning material processing failed", {
         service: "workers",
         worker_name: "Learning Material",
+        job_id: job.id ?? "",
         attempt_id: data.attemptId,
         topic_id: data.topicId,
         error_message: result.error,
+        duration_ms: Date.now() - startedAt,
+      });
+    } else {
+      Sentry.logger.info("Learning material worker job completed", {
+        service: "workers",
+        worker_name: "Learning Material",
+        job_id: job.id ?? "",
+        attempt_id: data.attemptId,
+        topic_id: data.topicId,
+        material_id: result.materialId ?? "",
+        duration_ms: Date.now() - startedAt,
       });
     }
 
@@ -42,7 +66,8 @@ const learningMaterialWorker = new Worker<LearningMaterialProcessingJobData>(
   },
   {
     connection: getRedisClient({ fresh: true }),
-    concurrency: 2,
+    // Keep background material analysis serialized to avoid bursty provider spend.
+    concurrency: 1,
     metrics: { maxDataPoints: MetricsTime.ONE_WEEK * 2 },
   },
 );

@@ -1,0 +1,20 @@
+import { redirectLegacyLocalizedRoute } from "@/lib/i18n/legacy-localized-route";
+import { getAdminAppPath } from "@/lib/auth/admin-path";
+
+type AdminRedirectPageProps = {
+  params: Promise<{ rest?: string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function AdminRedirectPage({
+  params,
+  searchParams,
+}: AdminRedirectPageProps) {
+  const { rest = [] } = await params;
+
+  await redirectLegacyLocalizedRoute({
+    basePath: getAdminAppPath(),
+    rest,
+    searchParams,
+  });
+}

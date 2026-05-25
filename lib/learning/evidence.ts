@@ -31,13 +31,13 @@ type EvidenceContextItem = {
   id: string;
   content: string;
   score: number;
-  sourceType: "report" | "interaction" | "pattern";
+  sourceType: "material" | "report" | "interaction" | "pattern";
   sourceId: string;
   metadata: Record<string, unknown>;
 };
 
 type ReplaceLearningEvidenceEmbeddingsParams = {
-  sourceType: "report" | "interaction" | "pattern";
+  sourceType: "material" | "report" | "interaction" | "pattern";
   sourceId: string;
   content: string;
   classroomStudentId?: string | null;
@@ -97,6 +97,97 @@ function buildReportEvidenceText(report: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildMaterialEvidenceText(params: {
+  sourceDocument: Record<string, unknown>;
+  groundingMap: Record<string, unknown>;
+}) {
+  const segments = Array.isArray(params.sourceDocument.segments)
+    ? params.sourceDocument.segments
+    : [];
+  const segmentGroundings = Array.isArray(params.groundingMap.segmentGroundings)
+    ? params.groundingMap.segmentGroundings
+    : [];
+  const groundingBySegmentId = new Map(
+    segmentGroundings
+      .filter(
+        (segment): segment is Record<string, unknown> =>
+          Boolean(segment && typeof segment === "object"),
+      )
+      .map((segment) => [String(segment.segmentId ?? ""), segment]),
+  );
+
+  return segments
+    .filter(
+      (segment): segment is Record<string, unknown> =>
+        Boolean(segment && typeof segment === "object"),
+    )
+    .map((segment, index) => {
+      const segmentId = String(segment.segmentId ?? "");
+      const headingPath = Array.isArray(segment.headingPath)
+        ? segment.headingPath.filter((value): value is string => typeof value === "string")
+        : [];
+      const grounding = groundingBySegmentId.get(segmentId);
+
+      const getStringArray = (value: unknown, key: string) =>
+        value &&
+        typeof value === "object" &&
+        Array.isArray((value as Record<string, unknown>)[key])
+          ? ((value as Record<string, unknown>)[key] as unknown[]).filter(
+              (item): item is string => typeof item === "string" && item.trim().length > 0,
+            )
+          : [];
+
+      const concepts =
+        grounding &&
+        Array.isArray((grounding as Record<string, unknown>).concepts)
+          ? ((grounding as Record<string, unknown>).concepts as unknown[])
+              .flatMap((item) =>
+                item && typeof item === "object" && typeof (item as Record<string, unknown>).name === "string"
+                  ? [String((item as Record<string, unknown>).name)]
+                  : [],
+              )
+          : [];
+
+      const formulas =
+        grounding &&
+        Array.isArray((grounding as Record<string, unknown>).formulas)
+          ? ((grounding as Record<string, unknown>).formulas as unknown[])
+              .flatMap((item) =>
+                item &&
+                typeof item === "object" &&
+                typeof (item as Record<string, unknown>).label === "string" &&
+                typeof (item as Record<string, unknown>).expression === "string"
+                  ? [
+                      `${String((item as Record<string, unknown>).label)}: ${String(
+                        (item as Record<string, unknown>).expression,
+                      )}`,
+                    ]
+                  : [],
+              )
+          : [];
+
+      return [
+        `Segment ${index + 1}`,
+        headingPath.length ? `Heading path: ${headingPath.join(" > ")}` : null,
+        typeof segment.pageStart === "number"
+          ? `Pages: ${segment.pageStart}${typeof segment.pageEnd === "number" ? `-${segment.pageEnd}` : ""}`
+          : null,
+        concepts.length ? `Concepts: ${concepts.join("; ")}` : null,
+        formulas.length ? `Formulas: ${formulas.join("; ")}` : null,
+        getStringArray(grounding, "notationRules").length
+          ? `Notation rules: ${getStringArray(grounding, "notationRules").join("; ")}`
+          : null,
+        getStringArray(grounding, "scopeInclusions").length
+          ? `Scope: ${getStringArray(grounding, "scopeInclusions").join("; ")}`
+          : null,
+        typeof segment.text === "string" ? `Text: ${segment.text}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n---\n\n");
 }
 
 // ─── Indexing ─────────────────────────────────────────────────────────────────
@@ -357,6 +448,44 @@ export async function indexLearningReportEvidence(params: {
       topic: params.topicTitle ? { title: params.topicTitle } : null,
       masteryPercent: params.masteryPercent,
       report: params.report,
+    }),
+  });
+}
+
+export async function indexLearningMaterialEvidence(params: {
+  materialId: string;
+  topicId: string;
+  classroomId?: string | null;
+  language?: string | null;
+  subjectKey?: string | null;
+  gradeBand?: string | null;
+  sourceTitle?: string | null;
+  sourceUpdatedAt?: Date | null;
+  sourceDocument: Record<string, unknown>;
+  groundingMap: Record<string, unknown>;
+}) {
+  return await replaceLearningEvidenceEmbeddings({
+    sourceType: "material",
+    sourceId: params.materialId,
+    topicId: params.topicId,
+    classroomId: params.classroomId ?? null,
+    language: params.language ?? "en",
+    subjectKey: params.subjectKey ?? null,
+    gradeBand: params.gradeBand ?? null,
+    sourceTitle: params.sourceTitle ?? "Learning material",
+    sourceUpdatedAt: params.sourceUpdatedAt ?? null,
+    metadata: {
+      extractor:
+        typeof params.sourceDocument.extractor === "string"
+          ? params.sourceDocument.extractor
+          : null,
+      segmentCount: Array.isArray(params.sourceDocument.segments)
+        ? params.sourceDocument.segments.length
+        : 0,
+    },
+    content: buildMaterialEvidenceText({
+      sourceDocument: params.sourceDocument,
+      groundingMap: params.groundingMap,
     }),
   });
 }

@@ -7,7 +7,7 @@ export function buildTopicGroundingPackPrompt(input: {
   topicDescription?: string | null;
   teacherSummary: string;
   learningOutcomes: Array<{ title: string; description: string }>;
-  combinedSourceText: string;
+  compiledGroundingText: string;
   existingScopeNotes: string[];
   existingNotationNotes: string[];
   existingRigorNotes: string[];
@@ -32,8 +32,8 @@ Existing boundary notes (merge and deduplicate; do not drop):
 - Notation: ${input.existingNotationNotes.join("; ") || "(none)"}
 - Rigor: ${input.existingRigorNotes.join("; ") || "(none)"}
 
-Source material (teacher uploads; use for extraction only — never reference filenames or upload types in outputs):
-${renderUntrustedContextBlock("teacher_source_material", input.combinedSourceText)}
+Compiled grounding from teacher uploads (already extracted and normalized; use as the authoritative source corpus for pack compilation):
+${renderUntrustedContextBlock("teacher_source_grounding", input.compiledGroundingText)}
 
 Extract a structured pack:
 1. digest — 2–4 paragraphs: what this topic covers, how ideas connect, and how tutoring should stay grounded.
@@ -45,7 +45,7 @@ Extract a structured pack:
 7. teachingNotes — pedagogy hints implied by the material (common mistakes, order of ideas, what to probe first).
 
 Rules:
-- Ground only in the source material and outcomes. If uncertain, omit rather than invent.
+- Ground only in the compiled grounding and outcomes. If uncertain, omit rather than invent.
 - Do not mention PDFs, slides, filenames, or upload formats.
 - Prefer completeness for formulas and scope boundaries over narrative length.
 - Section titles should be student-facing topic names, not document names.`;
