@@ -94,10 +94,10 @@ export const RATE_LIMIT_CONFIG = {
  */
 export const AI_CONFIG = {
   /** Default model for general operations */
-  DEFAULT_MODEL: "gpt-4.1-mini" as const,
+  DEFAULT_MODEL: "gemini-3.1-flash-lite" as const,
   
   /** Model for high-volume analysis tasks */
-  ANALYSIS_MODEL: "gemini-2.5-flash" as const,
+  ANALYSIS_MODEL: "gemini-3.1-flash-lite" as const,
   
   /** Default temperature for generation */
   DEFAULT_TEMPERATURE: 0.7,
@@ -113,6 +113,8 @@ export const AI_CONFIG = {
     "gpt-4.1-mini": 128000,
     "gpt-4o": 128000,
     "gpt-4o-mini": 128000,
+    "gemini-3-flash-preview": 1000000,
+    "gemini-3.1-flash-lite": 1000000,
     "gemini-2.5-flash": 1000000,
     "gemini-2.5-flash-lite": 1000000,
     "gemini-1.5-pro": 2000000,

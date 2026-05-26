@@ -327,11 +327,13 @@ export function getTopicActivationMaterialGate(params: {
     previousAttemptId?: string | null;
     batchId: string;
     status: string;
+    stage?: string | null;
     materialId?: string | null;
     createdAt?: Date | string | null;
   }>;
 }) {
   const batch = getLatestMaterialBatchGateState(params.attempts);
+  const activeBatchAttempts = getActiveBatchAttempts(params.attempts);
   const boundary = topicSourceBoundarySchema.parse(params.topic.sourceBoundary ?? {});
   const completedMaterialIds = params.materials
     .filter(
@@ -347,6 +349,11 @@ export function getTopicActivationMaterialGate(params: {
       : completedMaterialIds;
   const packMaterialIds = (params.topic.topicGroundingPack?.materialIds ?? []).filter(Boolean);
   const packMatchesCurrentMaterials = sameIdSet(packMaterialIds, expectedPackMaterialIds);
+  const onlyPackBuildFailures =
+    activeBatchAttempts.length > 0 &&
+    activeBatchAttempts
+      .filter((attempt) => attempt.status === "failed")
+      .every((attempt) => attempt.stage === "pack_build");
 
   if (batch.status === "processing") {
     return {
@@ -359,6 +366,18 @@ export function getTopicActivationMaterialGate(params: {
   }
 
   if (batch.status === "failed") {
+    if (
+      onlyPackBuildFailures &&
+      expectedPackMaterialIds.length > 0 &&
+      params.topic.topicGroundingPack &&
+      packMatchesCurrentMaterials
+    ) {
+      return {
+        ready: true,
+        reason: "",
+      };
+    }
+
     return {
       ready: false,
       reason:

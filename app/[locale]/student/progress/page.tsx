@@ -1,6 +1,6 @@
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
-import { classroomStudents, studentProgressReports, studentModels, studentModelSnapshots } from "@/db/schema/learning";
+import { classroomStudents, studentProgressReports } from "@/db/schema/learning";
 import { desc, eq } from "drizzle-orm";
 import { TrendingUp, Award, Target, AlertCircle, ChevronLeft, Sparkles, Lightbulb, Map } from "lucide-react";
 import { Link } from "@/i18n/routing";
@@ -47,20 +47,12 @@ export default async function StudentProgressPage(props: {
         }
     }) : [];
 
-    const models = studentId ? await getDb().query.studentModels.findMany({
-        where: eq(studentModels.classroomStudentId, studentId),
-        limit: 1
-    }) : [];
-
-    const studentModelId = models[0]?.id;
-
-    const snapshots = studentModelId ? await getDb().query.studentModelSnapshots.findMany({
-        where: eq(studentModelSnapshots.studentModelId, studentModelId),
-        orderBy: [desc(studentModelSnapshots.version)],
-        limit: 1
-    }) : [];
-
-    const latestModel = snapshots[0]?.snapshot;
+    const latestReport = progressReports[0] ?? null;
+    const latestModel = latestReport?.report
+        ? {
+            knowledgeStateModel: latestReport.report.conceptProgress ?? [],
+        }
+        : null;
 
     return (
         <div className="space-y-8">

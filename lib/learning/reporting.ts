@@ -25,7 +25,7 @@ export async function generateTeacherProgressReport(params: {
     metadata?: Record<string, unknown> | null;
   }>;
   previousReport?: TeacherProgressReport | null;
-  studentModel?: Record<string, unknown> | null;
+  teachingPlaybook?: Record<string, unknown> | null;
 }) {
   return await generateStructuredOutput({
     schema: teacherProgressReportSchema,
@@ -33,7 +33,7 @@ export async function generateTeacherProgressReport(params: {
       studentName: params.studentName,
       topicTitle: params.topicTitle,
       sessionState: params.state,
-      studentModel: params.studentModel ?? null,
+      teachingPlaybook: params.teachingPlaybook ?? null,
       transcript: params.transcript,
       previousReport: params.previousReport ?? null,
     }),

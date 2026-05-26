@@ -1,38 +1,12 @@
-import { getLatestStudentProgressReport, logLearningInteraction, updateLearningSessionState } from "@/lib/learning/storage";
-import type { ExpertTutorRuntimeModel, LearningSessionState } from "@/lib/learning/types";
 import { enqueueTutoringReportGeneration } from "@/lib/queue";
+import {
+  getLatestStudentProgressReport,
+  logLearningInteraction,
+  updateLearningSessionState,
+} from "@/lib/learning/storage";
+import type { LearningSessionState } from "@/lib/learning/types";
 
-const FRAMEWORK_COMPLETE_MESSAGE =
-  "Tutoring session completed after the framework reached its terminal stage.";
 const STUDENT_COMPLETE_MESSAGE = "Tutoring session completed by the student.";
-
-
-export function shouldRefreshStudentModel(params: {
-  previousState: LearningSessionState;
-  nextState: LearningSessionState;
-  forcedCompletion: boolean;
-}) {
-
-  return (
-    params.previousState.turnCount === 0 ||
-    params.previousState.turnsSinceStudentModelRefresh >= 1 ||
-    params.forcedCompletion
-  );
-}
-
-export function shouldAutoCompleteTutoringSession(params: {
-  runtimeModel: ExpertTutorRuntimeModel;
-  previousState: LearningSessionState;
-  nextState: LearningSessionState;
-}) {
-  return (
-    Boolean(params.runtimeModel.compiledPolicy) &&
-    params.nextState.frameworkState.closeRequirementsMet &&
-    !params.nextState.frameworkState.assessmentPending &&
-    !params.nextState.frameworkState.transferPending &&
-    !params.nextState.frameworkState.reflectionPending
-  );
-}
 
 export async function finalizeTutoringSession(params: {
   sessionId: string;
@@ -46,12 +20,13 @@ export async function finalizeTutoringSession(params: {
   summary?: string | null;
   expectedStateVersion: number;
   state: LearningSessionState;
-  reason: "student_finished" | "framework_complete";
+  reason: "student_finished";
 }) {
   const completedState: LearningSessionState = {
     ...params.state,
     completed: true,
     reportReady: false,
+    completionRequestedAt: new Date().toISOString(),
   };
 
   const completedSession = await updateLearningSessionState({
@@ -62,18 +37,13 @@ export async function finalizeTutoringSession(params: {
     expectedStateVersion: params.expectedStateVersion,
   });
 
-  const completionMessage =
-    params.reason === "framework_complete"
-      ? FRAMEWORK_COMPLETE_MESSAGE
-      : STUDENT_COMPLETE_MESSAGE;
-
   await logLearningInteraction({
     classroomStudentId: params.classroomStudentId,
     topicId: params.topicId,
     sessionId: params.sessionId,
     role: "system",
     interactionType: "session_event",
-    content: completionMessage,
+    content: STUDENT_COMPLETE_MESSAGE,
     metadata: {
       reason: params.reason,
     },

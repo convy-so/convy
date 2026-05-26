@@ -1,29 +1,24 @@
+import type { UIMessage } from "ai";
 import { z } from "zod";
 
-import { generateStructuredOutput } from "@/lib/ai/runtime";
+import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
+import { generateStructuredOutput, streamUiText } from "@/lib/ai/runtime";
 import {
-  buildInterestOnboardingPrompt,
+  buildInterestOnboardingConversationPrompt,
+  buildInterestOnboardingEvaluationPrompt,
   buildOnboardingGreeting as buildOnboardingGreetingPrompt,
+  onboardingTurnPromptSpec,
 } from "@/lib/learning/prompts/onboarding";
 import {
-  studentModelSnapshotSchema,
   studentInterestProfileSchema,
   type StudentInterestProfile,
-  type StudentModelSnapshot,
 } from "@/lib/learning/types";
 
-/**
- * Inner schema returned by the LLM — timestamps are optional here because
- * the model reliably omits or gets them wrong. We inject them server-side.
- */
 const onboardingTurnSchema = z.object({
   response: z.string(),
   status: z.enum(["continue", "complete"]),
   interestProfile: studentInterestProfileSchema
     .extend({ lastUpdated: z.string().optional() })
-    .nullable(),
-  studentModelSnapshot: studentModelSnapshotSchema
-    .extend({ updatedAt: z.string().optional() })
     .nullable(),
 });
 
@@ -54,33 +49,93 @@ export function shouldRefreshInterestProfile(
 export async function runInterestOnboardingTurn(params: {
   studentName: string;
   existingProfile?: StudentInterestProfile | null;
-  existingStudentModel?: StudentModelSnapshot | null;
   messages: OnboardingMessage[];
 }) {
   const transcript = messagesToTranscript(params.messages);
   const now = new Date().toISOString();
+  const latestUserMessage =
+    [...params.messages].reverse().find((message) => message.role === "user")
+      ?.content ?? "";
+  const dynamicExamples = await getDynamicFewShotExamples({
+    feature: "learning_onboarding",
+    limit: 3,
+    context: [
+      params.studentName,
+      latestUserMessage,
+      params.existingProfile?.primaryInterests
+        .map((interest) => interest.label)
+        .join(", "),
+      params.existingProfile?.aspirations.join(", "),
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  });
 
   const raw = await generateStructuredOutput({
     schema: onboardingTurnSchema,
-    prompt: buildInterestOnboardingPrompt({
+    prompt: buildInterestOnboardingEvaluationPrompt({
       studentName: params.studentName,
       existingProfile: params.existingProfile,
-      existingStudentModel: params.existingStudentModel,
       transcript,
     }),
+    promptSpec: onboardingTurnPromptSpec,
+    dynamicExamples,
+    maxOutputTokens: 1100,
   });
 
-  // Inject server-generated timestamps so the model doesn't have to produce them
   return {
     response: raw.response,
     status: raw.status,
     interestProfile: raw.interestProfile
       ? { ...raw.interestProfile, lastUpdated: now }
       : null,
-    studentModelSnapshot: raw.studentModelSnapshot
-      ? { ...raw.studentModelSnapshot, updatedAt: now }
-      : null,
   };
+}
+
+function toUIMessages(messages: OnboardingMessage[]): UIMessage[] {
+  return messages.map((message, index) => ({
+    id: `onboarding-history-${index}`,
+    role: message.role,
+    parts: [{ type: "text", text: message.content }],
+  }));
+}
+
+export async function streamInterestOnboardingTurn(params: {
+  studentName: string;
+  existingProfile?: StudentInterestProfile | null;
+  messages: OnboardingMessage[];
+}) {
+  const transcript = messagesToTranscript(params.messages);
+  const latestUserMessage =
+    [...params.messages].reverse().find((message) => message.role === "user")
+      ?.content ?? "";
+  const dynamicExamples = await getDynamicFewShotExamples({
+    feature: "learning_onboarding",
+    limit: 3,
+    context: [
+      params.studentName,
+      latestUserMessage,
+      params.existingProfile?.primaryInterests
+        .map((interest) => interest.label)
+        .join(", "),
+      params.existingProfile?.aspirations.join(", "),
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  });
+
+  return streamUiText({
+    messages: toUIMessages(params.messages),
+    system: buildInterestOnboardingConversationPrompt({
+      studentName: params.studentName,
+      existingProfile: params.existingProfile,
+      transcript,
+    }),
+    maxOutputTokens: 280,
+    temperature: 0.4,
+    promptSpec: onboardingTurnPromptSpec,
+    dynamicExamples,
+  });
 }
 
 export function buildOnboardingGreeting(studentName: string) {

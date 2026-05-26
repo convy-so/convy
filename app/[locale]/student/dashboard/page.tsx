@@ -4,7 +4,7 @@ import { LearningHub } from "@/components/learning/learning-hub";
 import { getLearningMeData } from "@/lib/server/app-queries";
 import { getDb } from "@/db";
 import { learningSessions } from "@/db/schema/learning";
-import { inArray, desc } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 export default async function StudentDashboardPage() {
     const learningMe = await getLearningMeData();
@@ -15,7 +15,10 @@ export default async function StudentDashboardPage() {
 
     const studentSessions = studentIds.length > 0 
         ? await getDb().query.learningSessions.findMany({
-            where: inArray(learningSessions.classroomStudentId, studentIds),
+            where: and(
+                inArray(learningSessions.classroomStudentId, studentIds),
+                eq(learningSessions.sessionType, "tutoring"),
+            ),
             orderBy: [desc(learningSessions.updatedAt)],
             with: {
                 topic: true,

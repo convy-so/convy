@@ -186,51 +186,6 @@ function formatAttemptStatus(attempt: MaterialUploadAttempt) {
   return `Processing: ${stageLabel}`;
 }
 
-function getLatestBatchUiState(attempts: MaterialUploadAttempt[]) {
-  if (!attempts.length) {
-    return {
-      status: "idle" as const,
-      attemptCount: 0,
-      failedCount: 0,
-      processingCount: 0,
-    };
-  }
-
-  const sorted = [...attempts].sort((left, right) => {
-    const leftTime = new Date(left.createdAt ?? 0).getTime();
-    const rightTime = new Date(right.createdAt ?? 0).getTime();
-    return rightTime - leftTime;
-  });
-  const latestBatchId = sorted[0]?.batchId;
-  const batchAttempts = sorted.filter((attempt) => attempt.batchId === latestBatchId);
-  const supersededIds = new Set(
-    batchAttempts
-      .map((attempt) => attempt.previousAttemptId ?? null)
-      .filter((attemptId): attemptId is string => Boolean(attemptId)),
-  );
-  const latestBatchAttempts = batchAttempts.filter(
-    (attempt) => !supersededIds.has(attempt.id),
-  );
-  const failedCount = latestBatchAttempts.filter(
-    (attempt) => attempt.status === "failed",
-  ).length;
-  const processingCount = latestBatchAttempts.filter(
-    (attempt) => attempt.status === "queued" || attempt.status === "processing",
-  ).length;
-
-  return {
-    status:
-      processingCount > 0
-        ? ("processing" as const)
-        : failedCount > 0
-          ? ("failed" as const)
-          : ("succeeded" as const),
-    attemptCount: latestBatchAttempts.length,
-    failedCount,
-    processingCount,
-  };
-}
-
 export function TeacherTopicWorkspace({
   selectedDirectoryClassroom,
   selectedTopic,
@@ -247,6 +202,9 @@ export function TeacherTopicWorkspace({
   materialFiles,
   setMaterialFiles,
   materialUploadAttempts,
+  activationState,
+  isActivationStateLoading,
+  isActivationStateError,
   uploadMaterialMutation,
   setIsInviteModalOpen,
 }: {
@@ -281,6 +239,9 @@ export function TeacherTopicWorkspace({
   materialFiles: File[];
   setMaterialFiles: Dispatch<SetStateAction<File[]>>;
   materialUploadAttempts: MaterialUploadAttempt[];
+  activationState: { ready: boolean; reason: string } | null;
+  isActivationStateLoading: boolean;
+  isActivationStateError: boolean;
   uploadMaterialMutation: {
     mutate: (
       payload: {
@@ -312,59 +273,38 @@ export function TeacherTopicWorkspace({
   const [isGeneratingOutcomes, setIsGeneratingOutcomes] = useState(false);
   const [isSavingOutcomes, setIsSavingOutcomes] = useState(false);
   const [retryingAttemptId, setRetryingAttemptId] = useState<string | null>(null);
-  const learningOutcomes = parseOutcomeNotes(rawOutcomeNotes).filter(
-    (outcome) => outcome.title.trim() && outcome.description.trim(),
-  );
-  const validMaterials = materials.filter((material) => {
-    const review = getMaterialReviewState(material);
-    return (
-      material.extractionStatus === "completed" &&
-      material.indexingStatus === "completed" &&
-      !review.failed
-    );
-  });
   const visibleUploadAttempts = materialUploadAttempts.filter(
     (attempt) => attempt.status !== "succeeded",
   );
-  const latestBatchState = getLatestBatchUiState(materialUploadAttempts);
-  const hasRequiredSetup =
-    learningOutcomes.length > 0 && validMaterials.length > 0;
+  const isActivationEligibleTopic =
+    selectedTopic.status === "draft" || selectedTopic.status === "paused";
+  const isActivationReady = activationState?.ready ?? false;
   const canActivate =
-    (selectedTopic.status === "draft" || selectedTopic.status === "paused") &&
-    hasRequiredSetup &&
-    latestBatchState.status !== "processing" &&
-    latestBatchState.status !== "failed";
+    isActivationEligibleTopic && isActivationReady;
   const canPause = selectedTopic.status === "active";
   const canArchive = selectedTopic.status === "active";
 
-  let statusHint =
-    "To activate this session, add at least one learning outcome and one supporting material.";
+  let statusHint = isActivationStateLoading
+    ? "Checking whether this session is ready to activate."
+    : "To activate this session, add at least one learning outcome and one supporting material.";
   if (selectedTopic.status === "active") {
     statusHint = "This session is live for tutoring. You can pause it or archive it.";
-  } else if (selectedTopic.status === "paused") {
-    statusHint = hasRequiredSetup
-      ? "This session is paused. Resume it when students should access it again."
-      : "This session is paused, but the required setup is incomplete.";
   } else if (selectedTopic.status === "archived") {
     statusHint = "This session is archived and no longer active for students.";
-  } else if (latestBatchState.status === "processing") {
+  } else if (isActivationStateLoading) {
+    statusHint = "Checking whether this session is ready to activate.";
+  } else if (isActivationStateError) {
     statusHint =
-      latestBatchState.attemptCount <= 1
-        ? "Material processing is still running. Activation unlocks when the uploaded file and tutoring pack are ready."
-        : `Material processing is still running for ${latestBatchState.attemptCount} files. Activation unlocks when the full upload batch and tutoring pack are ready.`;
-  } else if (latestBatchState.status === "failed") {
-    statusHint =
-      latestBatchState.attemptCount <= 1
-        ? "Activation is locked because the latest uploaded file failed. Retry or remove it first."
-        : `Activation is locked because ${latestBatchState.failedCount} of ${latestBatchState.attemptCount} files in the latest upload batch failed. Retry or remove the failed files first.`;
-  } else if (!hasRequiredSetup) {
-    const missing = [
-      learningOutcomes.length === 0 ? "learning outcomes" : null,
-      materials.length === 0 ? "supporting material" : null,
-    ]
-      .filter(Boolean)
-      .join(" and ");
-    statusHint = `Still needed before activation: ${missing}.`;
+      "Could not verify activation readiness right now. Refresh the page to try again.";
+  } else if (selectedTopic.status === "paused") {
+    statusHint = isActivationReady
+      ? "This session is paused. Resume it when students should access it again."
+      : activationState?.reason ??
+        "This session is paused, but the required setup is incomplete.";
+  } else if (activationState?.reason) {
+    statusHint = activationState.reason;
+  } else if (isActivationReady) {
+    statusHint = "This session is ready to activate.";
   }
 
   useEffect(() => {
@@ -375,9 +315,14 @@ export function TeacherTopicWorkspace({
   }, [selectedTopic.id, selectedTopic.title, selectedTopic.learningOutcomes]);
 
   const invalidateTopicData = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.learning.topics(selectedDirectoryClassroom.id),
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.learning.topics(selectedDirectoryClassroom.id),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.learning.activationState(selectedTopic.id),
+      }),
+    ]);
   };
 
   const refreshMaterialState = async () => {
@@ -389,7 +334,7 @@ export function TeacherTopicWorkspace({
         queryKey: queryKeys.learning.materialUploadAttempts(selectedTopic.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.readiness(selectedTopic.id),
+        queryKey: queryKeys.learning.activationState(selectedTopic.id),
       }),
     ]);
   };
@@ -552,10 +497,20 @@ export function TeacherTopicWorkspace({
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
                 {formatTopicStatusLabel(selectedTopic.status)}
               </span>
-              {!hasRequiredSetup ? (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
-                  Setup incomplete
-                </span>
+              {isActivationEligibleTopic ? (
+                isActivationStateLoading ? (
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                    Checking readiness
+                  </span>
+                ) : isActivationReady ? (
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                    Ready to activate
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                    Setup incomplete
+                  </span>
+                )
               ) : null}
             </div>
             <p className="text-sm leading-6 text-slate-500">{statusHint}</p>

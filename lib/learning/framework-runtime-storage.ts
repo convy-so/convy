@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -7,7 +7,6 @@ import {
   expertCrystallizations,
   expertFrameworks,
   expertFrameworkVersions,
-  expertRuntimeModels,
   learningTopics,
 } from "@/db/schema";
 import {
@@ -16,8 +15,10 @@ import {
 } from "@/lib/learning/course-service";
 import { createEmptyExpertFramework } from "@/lib/learning/framework-presets";
 import { listFrameworksWithTopicLite } from "@/lib/learning/framework-records";
-import type { ExpertTutorRuntimeModel } from "@/lib/learning/types";
-import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
+import {
+  activeExpertFrameworkSchema,
+  type ActiveExpertFramework,
+} from "@/lib/learning/types";
 
 async function findFrameworkForCourseId(courseId: string) {
   const frameworks = await listFrameworksWithTopicLite();
@@ -123,7 +124,6 @@ export async function getActiveFrameworkVersion(topicId: string) {
 
 export async function listApprovedCrystallizations(params: {
   courseId: string;
-  topicId: string;
   frameworkVersionId?: string;
 }) {
   return await getDb().query.expertCrystallizations.findMany({
@@ -148,66 +148,56 @@ export async function listOpenConflicts(params: { topicId: string }) {
       eq(expertConflicts.topicId, params.topicId),
       eq(expertConflicts.status, "open"),
     ),
-    orderBy: [desc(expertConflicts.createdAt)],
+    orderBy: (table, operators) => [operators.desc(table.createdAt)],
   });
 }
 
-export async function createRuntimeModel(params: {
-  courseId: string;
-  topicId?: string | null;
-  frameworkId: string;
-  frameworkVersionId: string;
-  runtimeModel: ExpertTutorRuntimeModel;
-  conflictIds?: string[];
-  status?: "draft" | "published" | "archived";
-}) {
-  const latest = await getDb().query.expertRuntimeModels.findFirst({
-    where: eq(expertRuntimeModels.courseId, params.courseId),
-    orderBy: [desc(expertRuntimeModels.version)],
-  });
-
-  const nextVersion = (latest?.version ?? 0) + 1;
-  const [created] = await getDb()
-    .insert(expertRuntimeModels)
-    .values({
-      id: nanoid(),
-      courseId: params.courseId,
-      topicId: params.topicId ?? null,
-      frameworkId: params.frameworkId,
-      frameworkVersionId: params.frameworkVersionId,
-      version: nextVersion,
-      status: params.status ?? "published",
-      runtimeModel: expertTutorRuntimeModelSchema.parse({
-        ...params.runtimeModel,
-        version: nextVersion,
-      }),
-      conflictIds: params.conflictIds ?? [],
-      publishedAt: params.status === "draft" ? null : new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .returning();
-
-  return created;
-}
-
-export async function getPublishedRuntimeModel(topicId: string) {
-  const topic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, topicId),
-    columns: {
-      courseId: true,
-    },
-  });
-
-  if (!topic) {
-    return null;
+export async function getActiveExpertFrameworkBundle(
+  topicId: string,
+): Promise<ActiveExpertFramework> {
+  const framework = await getTopicFramework({ topicId });
+  if (!framework) {
+    throw new Error(
+      "No expert framework exists for this course. Create and publish a framework before activating tutoring.",
+    );
   }
 
-  return await getDb().query.expertRuntimeModels.findFirst({
-    where: and(
-      eq(expertRuntimeModels.courseId, topic.courseId),
-      eq(expertRuntimeModels.status, "published"),
-    ),
-    orderBy: [desc(expertRuntimeModels.version)],
+  const frameworkVersion = await getActiveFrameworkVersion(topicId);
+  if (!frameworkVersion) {
+    throw new Error(
+      "No published framework version is active for this course. Publish a framework version in the expert studio first.",
+    );
+  }
+
+  const [approvedCrystallizations, openConflicts] = await Promise.all([
+    listApprovedCrystallizations({
+      courseId: framework.courseId,
+      frameworkVersionId: frameworkVersion.id,
+    }),
+    listOpenConflicts({ topicId }),
+  ]);
+
+  const blockedCrystallizationIds = new Set(
+    openConflicts
+      .map((conflict) => conflict.crystallizationId)
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  return activeExpertFrameworkSchema.parse({
+    frameworkId: framework.id,
+    frameworkVersionId: frameworkVersion.id,
+    framework: frameworkVersion.framework,
+    heuristics: approvedCrystallizations
+      .filter((item) => !blockedCrystallizationIds.has(item.id))
+      .map((item) => item.heuristic),
+    openConflicts: openConflicts.map((conflict) => ({
+      id: conflict.id,
+      summary: conflict.summary,
+      details: conflict.details ?? null,
+    })),
+    seedSource:
+      frameworkVersion.seedSource === "deep_default"
+        ? "deep_default"
+        : "expert_authored",
   });
 }

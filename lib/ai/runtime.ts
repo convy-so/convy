@@ -8,6 +8,8 @@ import {
 } from "ai";
 import { z } from "zod";
 
+import type { PromptExample, PromptSpec } from "@/lib/ai-core/types";
+import { resolvePromptExecution } from "@/lib/ai-core/prompting";
 import { logUsage, type UsageLogInput } from "@/lib/billing/logger";
 import { tutorAnalysisModel, tutorChatModel } from "@/lib/ai/models";
 import * as Sentry from "@sentry/nextjs";
@@ -23,6 +25,8 @@ type StructuredGenerationParams<TSchema extends z.ZodTypeAny> = {
   model?: LanguageModel;
   temperature?: number;
   maxOutputTokens?: number;
+  promptSpec?: PromptSpec;
+  dynamicExamples?: PromptExample[];
 };
 
 type StreamUiTextParams = {
@@ -31,18 +35,26 @@ type StreamUiTextParams = {
   model?: LanguageModel;
   temperature?: number;
   maxOutputTokens?: number;
+  promptSpec?: PromptSpec;
+  dynamicExamples?: PromptExample[];
 };
 
 export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
   params: StructuredGenerationParams<TSchema>,
 ): Promise<z.infer<TSchema>> {
   const model = params.model ?? tutorAnalysisModel;
+  const resolvedPrompt = resolvePromptExecution({
+    prompt: params.prompt,
+    systemPrompt: params.system,
+    promptSpec: params.promptSpec,
+    dynamicExamples: params.dynamicExamples,
+  });
 
   try {
     const result = await generateText({
       model,
-      system: params.system,
-      prompt: params.prompt,
+      system: resolvedPrompt.systemPrompt,
+      prompt: resolvedPrompt.prompt,
       temperature: params.temperature ?? 0.2,
       maxOutputTokens: params.maxOutputTokens ?? 1500,
       output: Output.object({
@@ -74,9 +86,14 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
 
 export async function streamUiText(params: StreamUiTextParams) {
   const messages = await convertToModelMessages(params.messages);
+  const resolvedPrompt = resolvePromptExecution({
+    systemPrompt: params.system,
+    promptSpec: params.promptSpec,
+    dynamicExamples: params.dynamicExamples,
+  });
   return streamText({
     model: params.model ?? tutorChatModel,
-    system: params.system,
+    system: resolvedPrompt.systemPrompt,
     messages,
     temperature: params.temperature ?? 0.3,
     maxOutputTokens: params.maxOutputTokens ?? 900,

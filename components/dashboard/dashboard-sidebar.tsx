@@ -6,7 +6,6 @@ import Image from "next/image";
 import {
   LayoutDashboard,
   MessageSquare,
-  BarChart3,
   Settings,
   FolderOpen,
   GraduationCap,
@@ -16,8 +15,6 @@ import {
   User as UserIcon,
   Bell,
   Inbox,
-  TrendingUp,
-  BookOpen,
   Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,7 +29,6 @@ import type { LearningMeData } from "@/lib/api/learning";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import { fetchLearningMe } from "@/lib/api/learning";
-import { classroomInitials } from "@/lib/student-course-accents";
 
 type ViewerAccessNav = {
   authRole: "student" | "teacher" | "expert" | "admin";
@@ -78,16 +74,7 @@ export function DashboardSidebar({
   const isStudent = viewerAccess.authRole === "student" || learningMeQuery.data?.role === "student";
   const isAdminOrExpert = viewerAccess.authRole === "admin" || viewerAccess.authRole === "expert";
 
-  const memberships = learningMeQuery.data?.role === "student" ? learningMeQuery.data.student : [];
-  const studentProgressHref = selectedClassroomId
-    ? `/student/progress?classroomId=${selectedClassroomId}`
-    : "/student/progress";
-  const studentSessionsHref = selectedClassroomId
-    ? `/student/sessions?classroomId=${selectedClassroomId}`
-    : "/student/sessions";
-  const studentProfileHref = selectedClassroomId
-    ? `/student/profile?classroomId=${selectedClassroomId}`
-    : "/student/profile";
+  const studentProfileHref = "/student/profile";
 
   const navigation = useMemo(() => {
     if (isAdminOrExpert) {
@@ -106,7 +93,7 @@ export function DashboardSidebar({
       if (activeClassroomId) {
         studentNav.push({
           name: "Interests Profile",
-          href: `/student/classes/${activeClassroomId}/onboarding`,
+          href: "/student/profile",
           icon: Settings2,
         });
       }
@@ -120,7 +107,7 @@ export function DashboardSidebar({
       { name: "Surveys", href: "/dashboard/surveys", icon: MessageSquare },
       { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
     ];
-  }, [isStudent, isAdminOrExpert, studentProgressHref, studentSessionsHref, t]);
+  }, [activeClassroomId, isAdminOrExpert, isStudent, t]);
 
   const bottomNavigation = useMemo(() => {
     if (isStudent) {

@@ -1,5 +1,8 @@
 import { normalizeAppLocale } from "@/lib/i18n/config";
-import { getStudentTutoringAccess } from "@/lib/learning/access";
+import {
+  getStudentTutoringAccess,
+  getStudentTutoringAccessState,
+} from "@/lib/learning/access";
 import {
   createLearningSession,
   getActiveLearningSession,
@@ -12,6 +15,9 @@ import { generateSessionOpening } from "@/lib/learning/tutor";
 export type StudentTopicAccess = NonNullable<
   Awaited<ReturnType<typeof getStudentTutoringAccess>>
 >;
+export type StudentTutoringAccessFailureReason =
+  | "topic_unavailable"
+  | "interest_profile_required";
 
 export async function resolveStudentTutoringContext(input: {
   userId: string;
@@ -19,10 +25,23 @@ export async function resolveStudentTutoringContext(input: {
   language?: string | null;
   preferredLanguage?: string | null;
 }) {
-  const access = await getStudentTutoringAccess(input.userId, input.topicId);
+  const { access, reason } = await getStudentTutoringAccessState(
+    input.userId,
+    input.topicId,
+  );
   const studyLanguage = resolveStudyLanguage(input);
 
-  return { access, studyLanguage };
+  return { access, deniedReason: reason, studyLanguage };
+}
+
+export function getStudentTutoringAccessFailureMessage(
+  reason: StudentTutoringAccessFailureReason,
+) {
+  if (reason === "interest_profile_required") {
+    return "Complete your interest profile before starting this tutoring session.";
+  }
+
+  return "This tutoring topic is no longer available in your classroom.";
 }
 
 export function resolveStudyLanguage(input: {
@@ -40,24 +59,29 @@ export async function ensureTutoringSession(input: {
   sessionId?: string;
   studyLanguage: string;
 }) {
-  const requestedSession = input.sessionId
-    ? await getLearningSessionById(input.sessionId)
-    : null;
-  const existing =
-    (requestedSession &&
-    requestedSession.sessionStatus === "active" &&
-    requestedSession.sessionType === "tutoring" &&
-    requestedSession.topicId === input.topicId &&
-    requestedSession.classroomStudentId === input.access.classroomStudent.id &&
-    requestedSession.sessionLocale === input.studyLanguage
-      ? requestedSession
-      : null) ??
-    (await getActiveLearningSession({
-      classroomStudentId: input.access.classroomStudent.id,
-      topicId: input.topicId,
-      sessionType: "tutoring",
-      sessionLocale: input.studyLanguage,
-    }));
+  if (input.sessionId) {
+    const requestedSession = await getLearningSessionById(input.sessionId);
+
+    if (
+      requestedSession &&
+      requestedSession.sessionStatus === "active" &&
+      requestedSession.sessionType === "tutoring" &&
+      requestedSession.topicId === input.topicId &&
+      requestedSession.classroomStudentId === input.access.classroomStudent.id &&
+      requestedSession.sessionLocale === input.studyLanguage
+    ) {
+      return requestedSession;
+    }
+
+    throw new Error("Tutoring session not found.");
+  }
+
+  const existing = await getActiveLearningSession({
+    classroomStudentId: input.access.classroomStudent.id,
+    topicId: input.topicId,
+    sessionType: "tutoring",
+    sessionLocale: input.studyLanguage,
+  });
 
   if (existing) {
     return existing;
@@ -67,9 +91,6 @@ export async function ensureTutoringSession(input: {
     topicId: input.topicId,
     topicTitle: input.access.topic.title,
     sourceBoundary: input.access.topic.sourceBoundary,
-    classroomId: input.access.topic.classroomId,
-    classroomStudentId: input.access.classroomStudent.id,
-    studentUserId: input.access.classroomStudent.userId,
     studyLanguage: input.studyLanguage,
   });
 

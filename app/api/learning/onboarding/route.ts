@@ -1,21 +1,59 @@
-import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
+import { type UIMessage } from "ai";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { extractMessageText, toPersistedUIChatMessages } from "@/lib/chat-ui-messages";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import {
-  finalizeCompletedOnboarding,
+  createOnboardingResponseStream,
+  finalizeOnboardingTurn,
   getOnboardingState,
-  runOnboardingTurn,
+  prepareOnboardingTurn,
 } from "@/lib/learning/onboarding-route-service";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
   messages: z.array(z.custom<UIMessage>()).default([]),
 });
+
+function extractLatestUserText(messages: UIMessage[]): string {
+  const latestUserMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "user");
+
+  if (!latestUserMessage) {
+    return "";
+  }
+
+  const contentText =
+    "content" in latestUserMessage && typeof latestUserMessage.content === "string"
+      ? latestUserMessage.content
+      : "";
+
+  const partsText = Array.isArray(latestUserMessage.parts)
+    ? latestUserMessage.parts
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("")
+    : "";
+
+  return (partsText || contentText).trim();
+}
+
+function extractAssistantText(message: UIMessage): string {
+  const contentText =
+    "content" in message && typeof message.content === "string"
+      ? message.content
+      : "";
+
+  const partsText = Array.isArray(message.parts)
+    ? message.parts
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("")
+    : "";
+
+  return (partsText || contentText).trim();
+}
 
 export async function GET() {
   try {
@@ -39,36 +77,46 @@ export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
     const body = requestSchema.parse(await request.json());
-    const latestUserMessage = [...body.messages].reverse().find((message) => message.role === "user");
-    const latestUserText = extractMessageText(
-      latestUserMessage ? toPersistedUIChatMessages([latestUserMessage])[0] : null,
-    ).trim();
+    const latestUserText = extractLatestUserText(body.messages);
     if (!latestUserText) return apiError("VALIDATION_ERROR", "Message is required");
 
-    const runResult = await runOnboardingTurn({ userId: session.user.id, latestUserText });
-    if (!runResult.membership) return apiError("NOT_FOUND", "Student context not found");
+    const prepared = await prepareOnboardingTurn({
+      userId: session.user.id,
+      latestUserText,
+    });
+    if (!prepared.membership) return apiError("NOT_FOUND", "Student context not found");
 
-    return createUIMessageStreamResponse({
-      stream: createUIMessageStream({
-        execute: async ({ writer }) => {
-          writer.write({ type: "text-delta", id: `onboarding-${Date.now()}`, delta: runResult.result.response });
+    const result = await createOnboardingResponseStream({
+      membership: prepared.membership,
+      transcript: prepared.transcript,
+      existingProfile: prepared.existingProfile,
+      existingStudentModel: prepared.existingStudentModel,
+    });
 
-          if (
-            runResult.result.status === "complete" &&
-            runResult.result.interestProfile &&
-            runResult.result.studentModelSnapshot
-          ) {
-            await finalizeCompletedOnboarding({
-              membership: runResult.membership,
-              studentModelId: runResult.studentModel.id,
-              activeSessionId: runResult.activeSession.id,
-              expectedStateVersion: runResult.activeSession.stateVersion ?? 1,
-              interestProfile: runResult.result.interestProfile,
-              studentModelSnapshot: runResult.result.studentModelSnapshot,
-            });
-          }
-        },
-      }),
+    return result.toUIMessageStreamResponse({
+      originalMessages: body.messages,
+      onFinish: async ({ isAborted, responseMessage }) => {
+        if (isAborted) {
+          return;
+        }
+
+        const assistantResponse = extractAssistantText(responseMessage);
+        if (!assistantResponse) {
+          return;
+        }
+
+        await finalizeOnboardingTurn({
+          membership: prepared.membership,
+          activeSessionId: prepared.activeSession.id,
+          expectedStateVersion: prepared.activeSession.stateVersion ?? 1,
+          transcript: prepared.transcript,
+          assistantResponse,
+          existingProfile: prepared.existingProfile,
+        });
+      },
+      onError: () => {
+        return "Something went wrong while continuing onboarding.";
+      },
     });
   } catch (error) {
     return handleLearningRouteError(error, "Failed to continue onboarding", "/api/learning/onboarding");

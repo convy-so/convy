@@ -1,23 +1,28 @@
-import { formatFunctionalityGuidanceForPrompt } from "@/lib/learning/tutor-capabilities";
+import {
+  renderTeachingPlaybookContext,
+} from "@/lib/learning/patterns";
 import { renderTopicGroundingPackForPrompt } from "@/lib/learning/topic-grounding-pack-render";
 import type {
-  CompiledFrameworkPolicy,
+  ActiveExpertFramework,
   ContentScopeSnapshot,
-  ExpertTutorRuntimeModel,
-  FrameworkState,
-  StudentModelSnapshot,
+  StudentInterestProfile,
 } from "@/lib/learning/types";
+import type {
+  LearningTeachingPlaybook,
+} from "@/lib/learning/pattern-types";
+import type { PatternMemoryState } from "@/lib/learning/pattern-memory-service";
 
 function renderList(values: string[]) {
   return values.length ? values.map((value) => `- ${value}`).join("\n") : "- none";
 }
 
-function renderFewShotExamples(label: string, examples: string[]) {
+function renderFewShotExamples(examples: string[]) {
   if (!examples.length) {
-    return `${label}:\n- none`;
+    return "- none";
   }
 
-  return `${label}:\n${examples
+  return examples
+    .slice(0, 4)
     .map(
       (example, index) =>
         `- Example ${index + 1}:\n${example
@@ -25,83 +30,52 @@ function renderFewShotExamples(label: string, examples: string[]) {
           .map((line) => `  ${line}`)
           .join("\n")}`,
     )
-    .join("\n\n")}`;
+    .join("\n\n");
 }
 
-function renderPhaseSummary(policy: CompiledFrameworkPolicy | null) {
-  if (!policy) return "- none";
-
-  return policy.phases
-    .map(
-      (phase) =>
-        `- ${phase.label} (${phase.id}): ${phase.purpose || "no purpose provided"} | preferred moves: ${
-          phase.preferredMoves.join(", ") || "none"
-        }`,
-    )
-    .join("\n");
-}
-
-function renderLevelSummary(policy: CompiledFrameworkPolicy | null) {
-  if (!policy) return "- none";
-
-  return policy.levels
-    .map(
-      (level) =>
-        `- ${level.label} (${level.id}): ${level.description || "no description provided"}`,
-    )
-    .join("\n");
-}
-
-function renderCompiledPolicySection(
-  compiledPolicy: CompiledFrameworkPolicy | null,
-  frameworkState: FrameworkState,
-) {
-  if (!compiledPolicy) {
-    return `Framework runtime state:
-- Current phase: ${frameworkState.currentPhaseId ?? "none"}
-- Current level: ${frameworkState.currentLevelId ?? "none"}
-- Diagnostic status: ${frameworkState.diagnosticStatus}
-- Recommended next move: ${frameworkState.recommendedMove}
-- Assessment pending: ${frameworkState.assessmentPending ? "yes" : "no"}
-- Transfer pending: ${frameworkState.transferPending ? "yes" : "no"}
-- Reflection pending: ${frameworkState.reflectionPending ? "yes" : "no"}
-- Close requirements met: ${frameworkState.closeRequirementsMet ? "yes" : "no"}
-- No compiled framework policy is active for this course. Follow the expert framework text, few-shot examples, and heuristics directly.`;
+function renderInterestProfile(profile: StudentInterestProfile | null | undefined) {
+  if (!profile) {
+    return "No interest profile is currently available.";
   }
 
-  return `Compiled runtime policy:
-- Summary: ${compiledPolicy.policySummary || "none"}
-- Current phase: ${frameworkState.currentPhaseId ?? compiledPolicy.defaultPhaseId ?? "none"}
-- Current level: ${frameworkState.currentLevelId ?? compiledPolicy.defaultLevelId ?? "none"}
-- Diagnostic status: ${frameworkState.diagnosticStatus}
-- Recommended next move: ${frameworkState.recommendedMove}
-- Assessment pending: ${frameworkState.assessmentPending ? "yes" : "no"}
-- Transfer pending: ${frameworkState.transferPending ? "yes" : "no"}
-- Reflection pending: ${frameworkState.reflectionPending ? "yes" : "no"}
-- Close requirements met: ${frameworkState.closeRequirementsMet ? "yes" : "no"}
-- Framework phases:
-${renderPhaseSummary(compiledPolicy)}
-- Framework levels:
-${renderLevelSummary(compiledPolicy)}
-- Tool policy: course material grounding=session pack (fixed at start), images=${compiledPolicy.toolPolicy.images}, videos=${compiledPolicy.toolPolicy.videos}, quiz=${compiledPolicy.toolPolicy.structuredQuiz}, grading=${compiledPolicy.toolPolicy.formalGrading}, notebook uploads=${compiledPolicy.toolPolicy.notebookUploads}
-- Completion policy: transfer=${compiledPolicy.completionPolicy.requireTransfer ? "required" : "optional"}, reflection=${compiledPolicy.completionPolicy.requireMetacognitiveReflection ? "required" : "optional"}, explicit understanding evidence=${compiledPolicy.completionPolicy.requireExplicitEvidenceOfUnderstanding ? "required" : "optional"}
-- Review taxonomy:
-${renderList(compiledPolicy.reviewTaxonomy)}`;
+  return [
+    `Primary interests: ${profile.primaryInterests.map((item) => item.label).join(", ") || "none"}`,
+    `Aspirations: ${profile.aspirations.join(", ") || "none"}`,
+    `Curiosity areas: ${profile.curiosityAreas.join(", ") || "none"}`,
+    `Motivational style: ${profile.motivationalStyle.join(", ") || "none"}`,
+    `Learning relationship: ${profile.learningRelationship}`,
+    `Context tags: ${profile.contextTags.join(", ") || "none"}`,
+  ].join("\n");
+}
+
+function renderConflictSection(activeFramework: ActiveExpertFramework) {
+  if (activeFramework.openConflicts.length === 0) {
+    return "- none";
+  }
+
+  return activeFramework.openConflicts
+    .map((conflict) => `- ${conflict.summary}`)
+    .join("\n");
 }
 
 export function buildStudentTurnSystemPrompt(params: {
   contentScope: ContentScopeSnapshot;
-  runtimeModel: ExpertTutorRuntimeModel;
-  studentModel: StudentModelSnapshot;
-  frameworkState: FrameworkState;
+  activeFramework: ActiveExpertFramework;
+  interestProfile: StudentInterestProfile | null;
+  teachingPlaybook: LearningTeachingPlaybook | null;
+  memoryState: PatternMemoryState;
   studyLanguage: string;
 }) {
-  const compiledPolicy = params.runtimeModel.compiledPolicy;
   const groundingPackBlock = params.contentScope.topicGroundingPack
     ? renderTopicGroundingPackForPrompt(params.contentScope.topicGroundingPack)
     : null;
+  const teachingPlaybookText = params.teachingPlaybook
+    ? renderTeachingPlaybookContext(params.teachingPlaybook)
+    : params.memoryState.message ?? "No long-horizon teaching playbook is available yet.";
 
   return `You are Convy's tutor.
+
+Reply in ${params.studyLanguage}.
 
 You are teaching inside a bounded course scope. The uploaded teacher materials define:
 - what concepts are in scope
@@ -118,8 +92,6 @@ You may use your own intelligence only for pedagogy:
 
 You must not introduce new off-scope concepts, formulas, or unsupported rigor.
 
-Reply in ${params.studyLanguage}.
-
 Course content scope:
 - Topic: ${params.contentScope.topicTitle}
 - Teacher summary: ${params.contentScope.teacherSummary || "none"}
@@ -131,62 +103,45 @@ ${renderList(params.contentScope.notationNotes)}
 ${renderList(params.contentScope.rigorNotes)}
 ${
   groundingPackBlock
-    ? `- Topic grounding pack (authoritative source — loaded for this session; do not name files or upload types):\n${groundingPackBlock}`
-    : `- Topic grounding pack: not compiled yet — stay within teacher summary and scope notes only.`
+    ? `- Topic grounding pack (authoritative source for this session):\n${groundingPackBlock}`
+    : `- Topic grounding pack: unavailable. Stay inside the teacher summary and scope notes only.`
 }
 
-Published expert framework:
-- Framework: ${params.runtimeModel.framework.name}
-- Framework description: ${params.runtimeModel.framework.description}
-- Tutor capability guidance:
-${formatFunctionalityGuidanceForPrompt(params.runtimeModel.framework.functionalityGuidance) || "none"}
-${
-  params.runtimeModel.framework.markdownContent
-    ? `- Framework Guidelines & Instructions:\n${params.runtimeModel.framework.markdownContent}`
-    : renderFewShotExamples(
-        "Framework reference examples",
-        params.runtimeModel.framework.fewShotExamples.slice(0, 3),
-      )
-}
+Active expert framework:
+- Framework: ${params.activeFramework.framework.name}
+- Description: ${params.activeFramework.framework.description || "none"}
+- Framework instructions:
+${params.activeFramework.framework.markdownContent || "none"}
+- Tool usage guide:
+${params.activeFramework.framework.toolUsageGuidance || "none"}
+- Framework few-shot examples:
+${renderFewShotExamples(params.activeFramework.framework.fewShotExamples)}
 
-${renderCompiledPolicySection(compiledPolicy ?? null, params.frameworkState)}
-
-Crystallized pedagogical heuristics:
+Approved pedagogical heuristics:
 ${renderList(
-  params.runtimeModel.heuristics.map(
+  params.activeFramework.heuristics.map(
     (heuristic) =>
       `${heuristic.title}: when ${heuristic.trigger}, ${heuristic.action}`,
   ),
 )}
 
-Student model (Dynamic Tracking):
-- Cognitive Model (Open-Ended Conceptual Mastery & State):
-${JSON.stringify(params.studentModel.cognitiveModel ?? {}, null, 2)}
-- Personalization Profiles (Open-Ended Interests & Context):
-${JSON.stringify(params.studentModel.personalization ?? {}, null, 2)}
+Open expert conflicts to keep in mind:
+${renderConflictSection(params.activeFramework)}
 
-Student model (Structured Calibration - Fallback):
-- Motivations:
-${renderList(params.studentModel.motivationalContext?.deeperMotivations ?? [])}
-- Relevance hooks:
-${renderList(params.studentModel.motivationalContext?.relevanceHooks ?? [])}
-- Cognitive entry points:
-${renderList(params.studentModel.cognitiveStyleCalibration?.preferredEntryPoints ?? [])}
-- Productive struggle band: ${params.studentModel.productiveStruggleCalibration?.targetBand ?? "balanced"}
-- Longitudinal signals:
-${renderList(params.studentModel.longitudinalDevelopment?.betterQuestionSignals ?? [])}
+Student interest profile from the database:
+${renderInterestProfile(params.interestProfile)}
+
+Long-horizon teaching playbook from mem0:
+${teachingPlaybookText}
 
 Teaching rules:
-- The topic grounding pack above is already loaded for this session. Use it for facts, notation, and formulas. Do not invent formulas or definitions that are not listed unless you are clearly teaching general pedagogy without factual claims.
-- Never mention PDFs, slides, filenames, or how materials were uploaded.
-- You can ask a structured quiz, accept notebook/photo evidence when appropriate, and return a formal graded evaluation when the framework calls for it.
+- The topic grounding pack above is the authoritative source for facts, notation, and formulas.
+- Never mention PDFs, slides, filenames, storage, uploads, or internal tooling.
 - Stay inside the topic grounding pack and scope notes for concepts and claims.
-- Follow the expert framework text, capability guidance, and heuristics together. If a compiled policy is present, it takes precedence for progression and completion.
-- Respect the current framework phase and level unless the student's evidence justifies a move.
-- If diagnosis-first is required by the framework or the active compiled policy, do not skip it.
-- If the framework or compiled policy requires assessment, transfer, or reflection, do not close the session without them.
-- Push for genuine understanding rather than accepting shallow compliance.
-- Keep the student in productive struggle: challenging but not discouraging.
+- Follow the expert framework instructions, separate tool-usage guide, heuristics, and open conflicts together.
+- Use the interest profile and teaching playbook to shape framing, examples, pacing, and challenge level.
+- If memory is unavailable, continue tutoring normally without pretending you remember long-horizon patterns.
+- Push for genuine understanding rather than shallow compliance.
 - Prefer one strong move per turn.
 - When needed, ask a question instead of explaining.
 - If the student is clearly stuck, give the minimum next support rather than the full answer.`;

@@ -19,15 +19,13 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   const prepared = await tutorRuntimeService.prepareTurn({
     topicId: params.topicId,
     topicTitle: params.access.topic.title,
+    subjectKey: params.access.topic.subjectKey,
+    subjectLabel: params.access.topic.subject,
     sourceBoundary: params.access.topic.sourceBoundary,
-    classroomId: params.access.topic.classroomId,
-    classroomStudentId: params.access.classroomStudent.id,
     studentUserId: params.access.classroomStudent.userId,
-    sessionId: params.tutorSessionId,
     studyLanguage: params.studyLanguage,
     state: params.state,
-    latestStudentMessage: params.latestUserText,
-    latestTutorMessage: previousAssistant?.content ?? null,
+    interestProfile: params.access.classroomStudent.interestProfile?.profile ?? null,
   });
 
   const { createTutorTools } = await import("@/lib/learning/agent-tools");
@@ -44,5 +42,12 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
     ),
   );
 
-  return { previousAssistant, prepared, fewShotExamples: [], tools, sanitizedMessages };
+  const fewShotExamples = prepared.activeFramework.framework.fewShotExamples.map(
+    (example, index) => ({
+      label: `framework_example_${index + 1}`,
+      content: example,
+    }),
+  );
+
+  return { previousAssistant, prepared, fewShotExamples, tools, sanitizedMessages };
 }

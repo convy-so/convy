@@ -8,6 +8,8 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "gpt-4.1-mini": 128000,
   "gpt-4o": 128000,
   "gpt-4o-mini": 128000,
+  "gemini-3-flash-preview": 1000000,
+  "gemini-3.1-flash-lite": 1000000,
   "gemini-2.5-flash": 1000000,
   "gemini-2.5-flash-lite": 1000000,
   "gemini-1.5-pro": 2000000,

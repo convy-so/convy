@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
+import { apiError } from "@/lib/api/error-contract";
+import { summarizeStudentPatternMemory } from "@/lib/learning/pattern-memory-service";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
 
 export async function GET(
   _request: Request,
@@ -31,14 +32,6 @@ export async function GET(
       where: (table, { eq }) => eq(table.id, classroomStudentId),
       with: {
         classroom: true,
-        studentModel: {
-          with: {
-            snapshots: {
-              orderBy: (table, { desc }) => [desc(table.version)],
-              limit: 1,
-            },
-          },
-        },
       },
     });
 
@@ -46,7 +39,18 @@ export async function GET(
       return apiError("NOT_FOUND", "Student not found");
     }
 
-    const latestSnapshot = membership.studentModel?.snapshots[0]?.snapshot ?? null;
+    const summary = membership.userId
+      ? await summarizeStudentPatternMemory({
+          studentUserId: membership.userId,
+        })
+      : {
+          profiles: [],
+          memoryState: {
+            status: "unavailable" as const,
+            message:
+              "This student does not have a connected account for long-horizon learning memory yet.",
+          },
+        };
 
     return NextResponse.json({
       success: true,
@@ -56,36 +60,14 @@ export async function GET(
           fullName: membership.fullName,
           email: membership.email,
         },
-        profiles: latestSnapshot
-          ? [
-              {
-                scopeType: "student",
-                subjectKey: null,
-                subjectLabel: membership.classroom.title,
-                patternConfidence:
-                  latestSnapshot.cognitiveStyleCalibration.confidence ?? 0,
-                confidenceLabel:
-                  latestSnapshot.cognitiveStyleCalibration.confidence > 0.65
-                    ? "Established"
-                    : "Emerging",
-                studentSummary: latestSnapshot.summary,
-                persistentMisconceptions: [],
-                updatedAt: membership.studentModel?.snapshots[0]?.updatedAt,
-                motivationalContext: latestSnapshot.motivationalContext,
-                knowledgeStateModel: latestSnapshot.knowledgeStateModel,
-                cognitiveStyleCalibration: latestSnapshot.cognitiveStyleCalibration,
-                productiveStruggleCalibration:
-                  latestSnapshot.productiveStruggleCalibration,
-                longitudinalDevelopment: latestSnapshot.longitudinalDevelopment,
-              },
-            ]
-          : [],
+        profiles: summary.profiles,
+        memoryState: summary.memoryState,
       },
     });
   } catch (error) {
     return handleLearningRouteError(
       error,
-      "Failed to load student model",
+      "Failed to load learning memory",
       "/api/learning/students/[studentId]/patterns",
     );
   }

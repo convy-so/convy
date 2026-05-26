@@ -1,12 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
 import {
-  Brain,
   Sparkles,
   UserCircle,
   GraduationCap,
-  ArrowRight,
   BookOpen,
   CheckCircle2,
   Clock,
@@ -14,12 +11,12 @@ import {
   PlayCircle,
 } from "lucide-react";
 import { Link } from "@/i18n/routing";
-import { motion } from "framer-motion";
 import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-student-learning-workspace";
 import type { LearningMeData } from "@/lib/api/learning";
 import { StudentInvitationCard } from "@/components/learning/student-invitation-card";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { useAuth } from "@/components/providers/auth-provider";
+import type { getMyPatternSummaries } from "@/lib/server/app-queries";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
   invitations?: Array<{
@@ -30,6 +27,25 @@ type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
     status: string;
     expiresAt: string | null;
   }>;
+};
+
+type StudentDashboardSession = {
+  id: string;
+  classroomStudentId: string;
+  topicId: string | null;
+  sessionStatus: string;
+  updatedAt: string;
+  topic?: {
+    title?: string | null;
+    description?: string | null;
+  } | null;
+  classroomStudent?: {
+    classroom?: {
+      classroomId?: string;
+      title?: string | null;
+    } | null;
+    classroomId?: string;
+  } | null;
 };
 
 function firstNameFromDisplayName(value: string | null | undefined) {
@@ -44,8 +60,8 @@ export function StudentLearningHome({
   initialStudentSessions = [],
 }: {
   learningMe: StudentLearningMeData;
-  initialPatterns?: any;
-  initialStudentSessions?: any[];
+  initialPatterns?: Awaited<ReturnType<typeof getMyPatternSummaries>>;
+  initialStudentSessions?: StudentDashboardSession[];
 }) {
   const { user } = useAuth();
   const {
@@ -70,24 +86,22 @@ export function StudentLearningHome({
   const activeSessionsCount = activeSessions.length;
   const completedSessionsCount = initialStudentSessions.filter((s) => s.sessionStatus === "completed").length;
 
-  // Calculate Not Started Topics
-  const notStartedTopicsCount = useMemo(() => {
-    let count = 0;
-    for (const membership of memberships) {
-      for (const topic of membership.topics) {
-        const hasSession = initialStudentSessions.some(
-          (s) => s.classroomStudentId === membership.classroomStudentId && s.topicId === topic.id
-        );
-        if (!hasSession) count++;
+  let notStartedLessonCount = 0;
+  for (const membership of memberships) {
+    for (const topic of membership.topics) {
+      const hasSession = initialStudentSessions.some(
+        (s) => s.classroomStudentId === membership.classroomStudentId && s.topicId === topic.id,
+      );
+      if (!hasSession) {
+        notStartedLessonCount += 1;
       }
     }
-    return count;
-  }, [memberships, initialStudentSessions]);
+  }
 
   const quickActions = [
     {
       title: "My Classes",
-      description: "View lessons, sessions, and materials",
+      description: "View lessons, tutoring sessions, and materials",
       icon: GraduationCap,
       href: "/student/classes",
       color: "from-blue-600 to-indigo-600",
@@ -137,8 +151,8 @@ export function StudentLearningHome({
         />
 
         <StatsCard
-          title="Not Started Topics"
-          value={notStartedTopicsCount.toString()}
+          title="Not Started Lessons"
+          value={notStartedLessonCount.toString()}
           description="Available lessons"
           icon={<BookOpen className="w-5 h-5" />}
           iconColor="bg-indigo-50 text-indigo-600 border border-indigo-100"
@@ -242,7 +256,7 @@ export function StudentLearningHome({
                         Last Active: {new Date(s.updatedAt).toLocaleDateString()}
                       </span>
                       <Link
-                        href={`/student/classes/${s.classroomStudent?.classroomId}/sessions/active?topicId=${s.topicId}`}
+                        href={`/student/classes/${s.classroomStudent?.classroomId}/lessons/${s.topicId}`}
                         className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-100 transition-all hover:scale-105"
                       >
                         <PlayCircle className="h-4 w-4" />
