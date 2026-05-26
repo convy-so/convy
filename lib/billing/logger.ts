@@ -28,6 +28,8 @@ export type UsageLogInput = {
 
 // Rough pricing per 1M tokens or per minute/query
 const PRICING: Record<string, { prompt: number; completion: number }> = {
+  "gemini-3-flash-preview": { prompt: 0.25, completion: 1.0 },
+  "gemini-3.1-flash-lite": { prompt: 0.1, completion: 0.4 },
   "gemini-2.5-flash": { prompt: 0.1, completion: 0.4 },
   "gemini-2.5-flash-lite": { prompt: 0.075, completion: 0.3 },
   "gpt-4o": { prompt: 5.0, completion: 15.0 },
@@ -37,7 +39,7 @@ const PRICING: Record<string, { prompt: number; completion: number }> = {
 
 export function calculateCost(input: UsageLogInput): string {
   if (input.type === "llm_text" && input.modelName) {
-    const pricing = PRICING[input.modelName] || PRICING["gemini-2.5-flash"];
+    const pricing = PRICING[input.modelName] || PRICING["gemini-3.1-flash-lite"];
     const promptCost = (input.promptTokens || 0) * (pricing.prompt / 1_000_000);
     const completionCost =
       (input.completionTokens || 0) * (pricing.completion / 1_000_000);

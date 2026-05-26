@@ -7,7 +7,6 @@ import {
   folders,
   learningInteractions,
   learningSessions,
-  learningTopics,
   notifications,
   sampleConversations,
   studentProgressReports,
@@ -25,7 +24,11 @@ import {
 import { getCurrentSession, getPlatformRole, getVerifiedSession } from "@/lib/auth/dal";
 import { isTransientDatabaseError } from "@/lib/db/errors";
 import { env } from "@/lib/env";
-import { listStudentMemberships, getTeacherTopicAccess } from "@/lib/learning/access";
+import {
+  getTeacherTopicAccess,
+  getUniversalStudentInterestProfile,
+  listStudentMemberships,
+} from "@/lib/learning/access";
 import * as ClassroomService from "@/lib/learning/classroom-service";
 import { listCourses } from "@/lib/learning/course-service";
 import * as InterventionService from "@/lib/learning/intervention-service";
@@ -42,8 +45,8 @@ import {
 import {
   getTopicWithMaterials,
   listLearningMessages,
-  listStudentModelSummaries,
 } from "@/lib/learning/storage";
+import { summarizeStudentPatternMemory } from "@/lib/learning/pattern-memory-service";
 import { isMaterialAnalysisFailed } from "@/lib/learning/materials-route-service";
 import {
   buildReadinessUnavailableFallback,
@@ -52,6 +55,7 @@ import {
 } from "@/lib/learning/readiness";
 import {
   ensureTutoringSession,
+  getStudentTutoringAccessFailureMessage,
   resolveStudentTutoringContext,
 } from "@/lib/learning/tutoring-route-orchestrator";
 import { getSurveyPermissionForSession, hasSurveyPermission } from "@/lib/survey-access";
@@ -110,6 +114,9 @@ export async function getLearningMeDataForSession(session: VerifiedSession): Pro
     listStudentMemberships(session.user.id),
     listPendingInvitationsForUser(session.user.id),
   ]);
+  const universalInterestProfile = memberships.length
+    ? await getUniversalStudentInterestProfile(session.user.id)
+    : null;
 
   if (memberships.length === 0) {
     const learnerPersona = getPlatformRole(session.user) === "student";
@@ -194,11 +201,12 @@ export async function getLearningMeDataForSession(session: VerifiedSession): Pro
           gradeBand: membership.classroom.gradeBand,
           gradeLabel: membership.classroom.gradeLabel,
         },
-        needsOnboarding: !membership.interestProfile,
-        profileLastUpdated: membership.interestProfile?.profile.lastUpdated ?? null,
+        needsOnboarding: !universalInterestProfile,
+        profileLastUpdated: universalInterestProfile?.profile.lastUpdated ?? null,
         topics: topics.map((topic) => ({
           id: topic.id,
           title: topic.title,
+          description: topic.description,
           subject: topic.subject,
           subjectKey: topic.subjectKey,
           status: topic.status,
@@ -255,49 +263,15 @@ export const getLearningMeData = cache(async (): Promise<LearningMeData> => {
 });
 
 async function getMyPatternSummariesForSession(session: VerifiedSession) {
-  const memberships = await getDb().query.classroomStudents.findMany({
-    where: and(
-      eq(classroomStudents.userId, session.user.id),
-      eq(classroomStudents.inviteStatus, "accepted"),
-    ),
-    with: {
-      classroom: true,
-    },
-  });
-
-  if (memberships.length === 0) {
-    return { success: true as const, data: [] };
-  }
-
-  const models = await listStudentModelSummaries({
+  const summary = await summarizeStudentPatternMemory({
     studentUserId: session.user.id,
   });
-
   return {
     success: true as const,
-    data: models.map((model) => ({
-      scopeType: "student",
-      subjectKey: null,
-      patternConfidence:
-        model.latestSnapshot?.snapshot.cognitiveStyleCalibration.confidence ?? 0,
-      confidenceLabel:
-        model.latestSnapshot?.snapshot.cognitiveStyleCalibration.confidence &&
-        model.latestSnapshot.snapshot.cognitiveStyleCalibration.confidence > 0.65
-          ? "Established"
-          : "Emerging",
-      studentSummary:
-        model.latestSnapshot?.snapshot.summary || "Personalization model is still forming.",
-      persistentMisconceptions: [],
-      updatedAt: model.latestSnapshot?.updatedAt ?? model.updatedAt,
-      motivationalContext:
-        model.latestSnapshot?.snapshot.motivationalContext ?? null,
-      cognitiveStyleCalibration:
-        model.latestSnapshot?.snapshot.cognitiveStyleCalibration ?? null,
-      productiveStruggleCalibration:
-        model.latestSnapshot?.snapshot.productiveStruggleCalibration ?? null,
-      longitudinalDevelopment:
-        model.latestSnapshot?.snapshot.longitudinalDevelopment ?? null,
-    })),
+    data: {
+      profiles: summary.profiles,
+      memoryState: summary.memoryState,
+    },
   };
 }
 
@@ -480,14 +454,6 @@ export async function getClassroomStudentPatternData(
     where: (table, { eq: eqTable }) => eqTable(table.id, classroomStudentId),
     with: {
       classroom: true,
-      studentModel: {
-        with: {
-          snapshots: {
-            orderBy: (table, { desc: orderDesc }) => [orderDesc(table.version)],
-            limit: 1,
-          },
-        },
-      },
     },
   });
 
@@ -495,7 +461,18 @@ export async function getClassroomStudentPatternData(
     throw new Error("Student not found");
   }
 
-  const latestSnapshot = membership.studentModel?.snapshots[0]?.snapshot ?? null;
+  const summary = membership.userId
+    ? await summarizeStudentPatternMemory({
+        studentUserId: membership.userId,
+      })
+    : {
+        profiles: [],
+        memoryState: {
+          status: "unavailable" as const,
+          message:
+            "This student does not have a connected account for long-horizon learning memory yet.",
+        },
+      };
 
   return {
     success: true as const,
@@ -505,29 +482,8 @@ export async function getClassroomStudentPatternData(
         fullName: membership.fullName,
         email: membership.email,
       },
-      profiles: latestSnapshot
-        ? [
-            {
-              scopeType: "student",
-              subjectKey: null,
-              patternConfidence:
-                latestSnapshot.cognitiveStyleCalibration.confidence ?? 0,
-              confidenceLabel:
-                latestSnapshot.cognitiveStyleCalibration.confidence > 0.65
-                  ? "Established"
-                  : "Emerging",
-              studentSummary: latestSnapshot.summary,
-              persistentMisconceptions: [],
-              updatedAt: membership.studentModel?.snapshots[0]?.updatedAt,
-              motivationalContext: latestSnapshot.motivationalContext,
-              knowledgeStateModel: latestSnapshot.knowledgeStateModel,
-              cognitiveStyleCalibration: latestSnapshot.cognitiveStyleCalibration,
-              productiveStruggleCalibration:
-                latestSnapshot.productiveStruggleCalibration,
-              longitudinalDevelopment: latestSnapshot.longitudinalDevelopment,
-            },
-          ]
-        : [],
+      profiles: summary.profiles,
+      memoryState: summary.memoryState,
     },
   };
 }
@@ -1005,13 +961,17 @@ export async function getTutoringSessionInitialData(
   authContext?: QueryAuthContext,
 ) {
   const session = await resolveQuerySession(authContext);
-  const { access, studyLanguage } = await resolveStudentTutoringContext({
-    userId: session.user.id,
-    topicId,
-    language: language ?? null,
-    preferredLanguage: session.user.preferredLanguage,
-  });
+  const { access, deniedReason, studyLanguage } =
+    await resolveStudentTutoringContext({
+      userId: session.user.id,
+      topicId,
+      language: language ?? null,
+      preferredLanguage: session.user.preferredLanguage,
+    });
 
+  if (!access && deniedReason) {
+    throw new Error(getStudentTutoringAccessFailureMessage(deniedReason));
+  }
   if (!access) {
     throw new Error("Unauthorized");
   }
@@ -1030,7 +990,7 @@ export async function getTutoringSessionInitialData(
         sessionId: tutorSession.id,
         sessionLocale: normalizeAppLocale(tutorSession.sessionLocale),
         sourceLocale: normalizeAppLocale(access.topic.contentLocale),
-        topic: {
+        lesson: {
           id: access.topic.id,
           title: access.topic.title,
           subject: access.topic.subject,
@@ -1211,46 +1171,50 @@ export async function getTeacherLearningWorkspaceInitialData(
 }
 
 export async function getStudentLearningWorkspaceInitialData(options: {
-  classroomId?: string | null;
+  classroomId: string;
+  lessonId: string;
   language?: string | null;
-} = {}, authContext?: QueryAuthContext) {
+}, authContext?: QueryAuthContext) {
   const session = await resolveQuerySession(authContext);
-  const queryAuthContext = { session };
   const learningMe = await getLearningMeDataForSession(session);
   if (learningMe.role !== "student") {
     return {
       learningMe,
       initialPatterns: undefined,
-      initialOnboardingState: undefined,
       initialTutoringSession: undefined,
     };
   }
 
   const selectedMembership =
-    (options.classroomId
-      ? learningMe.student.find(
-          (membership) => membership.classroom.id === options.classroomId,
-        )
-      : null) ??
-    learningMe.student[0] ??
-    null;
+    learningMe.student.find(
+      (membership) => membership.classroom.id === options.classroomId,
+    ) ?? null;
 
-  const initialTopicId = selectedMembership?.topics[0]?.id ?? null;
-  const [initialPatterns, initialOnboardingState, initialTutoringSession] =
-    await Promise.all([
-      getMyPatternSummariesForSession(session),
-      selectedMembership?.needsOnboarding
-        ? getOnboardingStateData(queryAuthContext)
-        : Promise.resolve(undefined),
-      selectedMembership && !selectedMembership.needsOnboarding && initialTopicId
-        ? getTutoringSessionInitialData(initialTopicId, options.language, queryAuthContext)
-        : Promise.resolve(undefined),
-    ]);
+  if (!selectedMembership) {
+    throw new Error("Classroom not found.");
+  }
+
+  const selectedLesson =
+    selectedMembership.topics.find((topic) => topic.id === options.lessonId) ?? null;
+
+  if (!selectedLesson) {
+    throw new Error("Lesson not found.");
+  }
+
+  const [initialPatterns, initialTutoringSession] = await Promise.all([
+    getMyPatternSummariesForSession(session),
+    !selectedMembership.needsOnboarding
+      ? getTutoringSessionInitialData(
+          options.lessonId,
+          options.language,
+          { session },
+        ).catch(() => undefined)
+      : Promise.resolve(undefined),
+  ]);
 
   return {
     learningMe,
     initialPatterns,
-    initialOnboardingState,
     initialTutoringSession,
   };
 }

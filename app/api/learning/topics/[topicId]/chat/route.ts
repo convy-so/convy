@@ -3,12 +3,14 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
+import { flashModel } from "@/lib/ai";
 import { listLearningMessages } from "@/lib/learning/storage";
 import { learningSessionStateSchema } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { apiError } from "@/lib/api/error-contract";
 import {
   ensureTutoringSession,
+  getStudentTutoringAccessFailureMessage,
   resolveStudyLanguage,
   resolveStudentTutoringContext,
 } from "@/lib/learning/tutoring-route-orchestrator";
@@ -32,13 +34,19 @@ export async function GET(
     const session = await getVerifiedSession();
     const { topicId } = await params;
     const { searchParams } = new URL(request.url);
-    const { access, studyLanguage } = await resolveStudentTutoringContext({
+    const { access, deniedReason, studyLanguage } = await resolveStudentTutoringContext({
       userId: session.user.id,
       topicId,
       language: searchParams.get("language"),
       preferredLanguage: session.user.preferredLanguage,
     });
 
+    if (!access && deniedReason) {
+      return apiError(
+        deniedReason === "topic_unavailable" ? "NOT_FOUND" : "VALIDATION_ERROR",
+        getStudentTutoringAccessFailureMessage(deniedReason),
+      );
+    }
     if (!access) return apiError("UNAUTHORIZED", "Unauthorized");
 
     const tutorSession = await ensureTutoringSession({
@@ -55,7 +63,7 @@ export async function GET(
         sessionId: tutorSession.id,
         sessionLocale: normalizeAppLocale(tutorSession.sessionLocale),
         sourceLocale: normalizeAppLocale(access.topic.contentLocale),
-        topic: {
+        lesson: {
           id: access.topic.id,
           title: access.topic.title,
           subject: access.topic.subject,
@@ -80,11 +88,17 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { topicId } = await params;
-    const { access } = await resolveStudentTutoringContext({
+    const { access, deniedReason } = await resolveStudentTutoringContext({
       userId: session.user.id,
       topicId,
     });
 
+    if (!access && deniedReason) {
+      return apiError(
+        deniedReason === "topic_unavailable" ? "NOT_FOUND" : "VALIDATION_ERROR",
+        getStudentTutoringAccessFailureMessage(deniedReason),
+      );
+    }
     if (!access) return apiError("UNAUTHORIZED", "Unauthorized");
 
     const body = requestSchema.parse(await request.json());
@@ -96,6 +110,29 @@ export async function POST(
 
     if (!latestUserText) {
       return apiError("VALIDATION_ERROR", "Message is required");
+    }
+
+    if (body.sessionId) {
+      const requestedSession = await resolveStudentTutoringSessionById({
+        sessionId: body.sessionId,
+        topicId,
+        classroomStudentId: access.classroomStudent.id,
+      });
+
+      if (!requestedSession) {
+        return apiError("NOT_FOUND", "Tutoring session not found.");
+      }
+
+      if (requestedSession.sessionStatus !== "active") {
+        return apiError("VALIDATION_ERROR", "Tutoring session is no longer active.");
+      }
+
+      if (requestedSession.sessionLocale !== studyLanguage) {
+        return apiError(
+          "VALIDATION_ERROR",
+          "Tutoring session language does not match this lesson workspace.",
+        );
+      }
     }
 
     const scopeDecision = await evaluateTutoringScope({
@@ -147,6 +184,7 @@ export async function POST(
     const { streamAgentResponse } = await import("@/lib/ai");
 
     return await streamAgentResponse(sanitizedMessages, prepared.systemPrompt, {
+      model: flashModel,
       attribution: {
         userId: session.user.id,
         feature: "learning-tutor-chat",

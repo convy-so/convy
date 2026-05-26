@@ -3,7 +3,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { ArrowLeft, ArrowRight, Loader2, Save } from "lucide-react";
 
-import { TUTOR_CAPABILITIES } from "@/lib/learning/tutor-capabilities";
 import type { ExpertFramework } from "@/lib/learning/types";
 
 const EDITOR_STEPS = [
@@ -44,9 +43,7 @@ function validateStep(stepId: EditorStepId, framework: ExpertFramework): string 
 }
 
 function countFilledCapabilities(framework: ExpertFramework) {
-  return TUTOR_CAPABILITIES.filter(
-    (capability) => framework.functionalityGuidance[capability.id]?.trim(),
-  ).length;
+  return framework.toolUsageGuidance.trim().length > 0 ? 1 : 0;
 }
 
 function FrameworkEditorStepper({
@@ -248,35 +245,25 @@ export function FrameworkEditorWizard({
           {currentStep.id === "capabilities" ? (
             <div className="space-y-4">
               <p className="text-sm text-slate-500">
-                Add guidance only where you want to shape behavior. Empty fields are skipped when
-                you publish.
+                Keep tool usage separate from the framework body. Describe when the tutor should
+                use images, videos, quizzes, grading, or other tools, and when it should avoid
+                them.
               </p>
-              {TUTOR_CAPABILITIES.map((capability) => (
-                <div
-                  key={capability.id}
-                  className="border-b border-slate-100 py-5 last:border-b-0"
-                >
-                  <div className="mb-3">
-                    <p className="text-sm font-medium text-slate-950">{capability.label}</p>
-                    <p className="mt-0.5 text-sm text-slate-500">{capability.summary}</p>
-                  </div>
-                  <textarea
-                    value={draftFramework.functionalityGuidance[capability.id] ?? ""}
-                    onChange={(event) =>
-                      setDraftFramework((current) => ({
-                        ...current,
-                        functionalityGuidance: {
-                          ...current.functionalityGuidance,
-                          [capability.id]: event.target.value,
-                        },
-                      }))
-                    }
-                    rows={3}
-                    placeholder={capability.placeholder}
-                    className={`${fieldClassName(true)} min-h-[88px]`}
-                  />
-                </div>
-              ))}
+              <div>
+                <label className={labelClassName()}>Tool usage guide</label>
+                <textarea
+                  value={draftFramework.toolUsageGuidance}
+                  onChange={(event) =>
+                    setDraftFramework((current) => ({
+                      ...current,
+                      toolUsageGuidance: event.target.value,
+                    }))
+                  }
+                  rows={10}
+                  placeholder="Example: Use an image when a concept has a strong visual form. Prefer quizzes only after explanation and one student attempt. Avoid grading unless the student explicitly asks for evaluation or submits work."
+                  className={`${fieldClassName(true)} min-h-[220px]`}
+                />
+              </div>
             </div>
           ) : null}
 
@@ -381,8 +368,8 @@ export function FrameworkEditorWizard({
                   },
                   {
                     label: "Capabilities",
-                    value: `${capabilityCount} of ${TUTOR_CAPABILITIES.length} customized`,
-                    sub: "Tutor search, media, quiz, and grading guidance",
+                    value: capabilityCount ? "Tool guide added" : "No tool guide yet",
+                    sub: "Separate tutor tool-usage guidance",
                     stepIndex: 2,
                   },
                   {

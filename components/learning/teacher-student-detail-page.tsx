@@ -59,7 +59,11 @@ export function TeacherStudentDetailPage({
     useState<string | null>(null);
   const { student, recentReports, tutoringSessions, conversationTurns, navigation } =
     initialOverview.data;
-  const patterns = initialPatterns.data.profiles ?? [];
+  const patterns = useMemo(
+    () => initialPatterns.data.profiles ?? [],
+    [initialPatterns.data.profiles],
+  );
+  const memoryState = initialPatterns.data.memoryState;
   const selectedConversationSession =
     tutoringSessions.find((session) => session.id === selectedConversationSessionId) ??
     tutoringSessions[0] ??
@@ -310,9 +314,9 @@ export function TeacherStudentDetailPage({
                 Patterns
               </h2>
               <p className="max-w-3xl text-sm leading-6 text-slate-500">
-                This area separates the tutor's current student-model summary from
-                longer-running misconception signals so each surface carries one kind
-                of meaning.
+                This area separates current long-horizon learning memory summaries from
+                recurring misconception signals so each surface carries one kind of
+                meaning.
               </p>
             </div>
 
@@ -359,11 +363,16 @@ export function TeacherStudentDetailPage({
                   Learning patterns
                 </h3>
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  The tutor's current interpretation of how this learner tends to
+                  The tutor&apos;s current interpretation of how this learner tends to
                   understand, respond, and progress.
                 </p>
               </div>
               <div className="divide-y divide-slate-100">
+                {memoryState.status !== "ready" && memoryState.message ? (
+                  <div className="px-6 py-4 text-sm text-amber-900">
+                    {memoryState.message}
+                  </div>
+                ) : null}
                 {patterns.length ? (
                   patterns.map((pattern) => (
                     <div

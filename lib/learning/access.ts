@@ -10,6 +10,18 @@ import { normalizeAppLocale } from "@/lib/i18n/config";
 
 export type ClassroomTeacherAccessLevel = "owner" | "none";
 
+export function pickUniversalStudentInterestProfile<
+  T extends { interestProfile?: { lastRefreshedAt: Date } | null },
+>(memberships: T[]) {
+  return memberships
+    .map((membership) => membership.interestProfile ?? null)
+    .filter((profile): profile is NonNullable<T["interestProfile"]> => profile !== null)
+    .sort(
+      (left, right) =>
+        right.lastRefreshedAt.getTime() - left.lastRefreshedAt.getTime(),
+    )[0] ?? null;
+}
+
 export async function getTeacherClassroomAccess(
   userId: string,
   classroomId: string,
@@ -112,17 +124,44 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
 
   if (!classroomStudent) return null;
 
+  const universalInterestProfile =
+    classroomStudent.interestProfile ??
+    (await getUniversalStudentInterestProfile(userId));
+
   return {
     topic,
-    classroomStudent,
+    classroomStudent: {
+      ...classroomStudent,
+      interestProfile: universalInterestProfile,
+    },
   };
 }
 
 export async function getStudentTutoringAccess(userId: string, topicId: string) {
+  const result = await getStudentTutoringAccessState(userId, topicId);
+  return result.access;
+}
+
+export async function getStudentTutoringAccessState(userId: string, topicId: string) {
   const access = await getStudentTopicAccess(userId, topicId);
-  if (!access) return null;
-  if (!access.classroomStudent.interestProfile) return null;
-  return access;
+  if (!access) {
+    return {
+      access: null,
+      reason: "topic_unavailable" as const,
+    };
+  }
+
+  if (!access.classroomStudent.interestProfile) {
+    return {
+      access: null,
+      reason: "interest_profile_required" as const,
+    };
+  }
+
+  return {
+    access,
+    reason: null,
+  };
 }
 
 export const getTeacherSessionAccess = getTeacherTopicAccess;
@@ -130,11 +169,7 @@ export const getStudentSessionAccess = getStudentTopicAccess;
 
 export async function getPrimaryStudentMembership(userId: string) {
   const memberships = await listStudentMemberships(userId);
-  return (
-    memberships.find((membership) => !membership.interestProfile) ??
-    memberships[0] ??
-    null
-  );
+  return memberships[0] ?? null;
 }
 
 export async function listStudentMemberships(userId: string) {
@@ -145,4 +180,9 @@ export async function listStudentMemberships(userId: string) {
       interestProfile: true,
     },
   });
+}
+
+export async function getUniversalStudentInterestProfile(userId: string) {
+  const memberships = await listStudentMemberships(userId);
+  return pickUniversalStudentInterestProfile(memberships);
 }

@@ -1,7 +1,7 @@
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { classroomStudents, learningSessions } from "@/db/schema/learning";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { BookOpen, Clock, CheckCircle, PlayCircle, Calendar, ChevronLeft } from "lucide-react";
 import { Link } from "@/i18n/routing";
 
@@ -28,7 +28,10 @@ export default async function StudentSessionsPage(props: {
     const studentIds = visibleProfiles.map((profile) => profile.id);
 
     const sessions = studentIds.length > 0 ? await getDb().query.learningSessions.findMany({
-        where: inArray(learningSessions.classroomStudentId, studentIds),
+        where: and(
+            inArray(learningSessions.classroomStudentId, studentIds),
+            eq(learningSessions.sessionType, "tutoring"),
+        ),
         orderBy: [desc(learningSessions.updatedAt)],
         with: {
             topic: true,
@@ -49,7 +52,7 @@ export default async function StudentSessionsPage(props: {
                         All courses
                     </Link>
                 )}
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Learning Sessions</h1>
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Tutoring Sessions</h1>
                 <p className="text-slate-500 text-lg mt-1">
                     {selectedClassroom
                         ? `Review or resume sessions for ${selectedClassroom.title}.`
@@ -90,7 +93,7 @@ export default async function StudentSessionsPage(props: {
                                 <div className="flex items-center gap-3">
                                     {lsession.sessionStatus === 'active' && (
                                         <Link 
-                                            href={`/student/dashboard?classroomId=${lsession.classroomStudent?.classroomId}${lsession.topicId ? `&topicId=${lsession.topicId}` : ""}`} 
+                                            href={lsession.topicId ? `/student/classes/${lsession.classroomStudent?.classroomId}/lessons/${lsession.topicId}` : "/student/classes"} 
                                             className="inline-flex w-full sm:w-auto justify-center items-center gap-2 px-5 py-2.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-colors"
                                         >
                                             <PlayCircle className="w-4 h-4" />

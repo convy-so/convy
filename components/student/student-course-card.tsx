@@ -63,7 +63,7 @@ export function StudentCourseCard({
         <div className="mt-3 flex flex-wrap gap-2">
           <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-gray-600">
             <Clock className="h-3.5 w-3.5" aria-hidden />
-            {membership.topics.length} topic{membership.topics.length === 1 ? "" : "s"}
+            {membership.topics.length} lesson{membership.topics.length === 1 ? "" : "s"}
           </div>
           <div className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-800">
             <Sparkles className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
@@ -75,7 +75,7 @@ export function StudentCourseCard({
       {variant === "actions" ? (
         <div className="mt-auto grid grid-cols-2 gap-2 border-t border-gray-100 pt-4">
           <Link
-            href={`/student/classes/${membership.classroom.id}/sessions`}
+            href={`/student/classes/${membership.classroom.id}/lessons`}
             className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-900 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-gray-800"
           >
             Continue

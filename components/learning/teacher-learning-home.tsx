@@ -84,6 +84,9 @@ export function TeacherLearningHome(
     resendInvitationMutation,
     cancelInvitationMutation,
     reports,
+    activationState,
+    isActivationStateLoading,
+    isActivationStateError,
     setSelectedClassroomId,
     setSelectedTopicId,
   } = useTeacherLearningWorkspace(initialData, { activeTopicView });
@@ -656,6 +659,9 @@ export function TeacherLearningHome(
               materialFiles={materialFiles}
               setMaterialFiles={setMaterialFiles}
               materialUploadAttempts={materialUploadAttemptsQuery.data?.data ?? []}
+              activationState={activationState}
+              isActivationStateLoading={isActivationStateLoading}
+              isActivationStateError={isActivationStateError}
               uploadMaterialMutation={uploadMaterialMutation}
               setIsInviteModalOpen={setIsInviteModalOpen}
             />

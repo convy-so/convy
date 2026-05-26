@@ -87,8 +87,8 @@ export async function buildCreationSystemPrompt(
   const sanitizedCriteria = sanitizeStringArray(brief?.successCriteria, { maxItems: 10 });
   const sanitizedQuestions = sanitizeStringArray(brief?.analysisQuestions, { maxItems: 10 });
   
-  // Create token budget manager (assuming GPT-4.1-mini or similar)
-  const budgetManager = createTokenBudgetManager("gpt-4.1-mini");
+  // Create token budget manager using the app's current default LLM family.
+  const budgetManager = createTokenBudgetManager("gemini-3.1-flash-lite");
   
   // Allocate tokens to different components
   const basePromptTokens = estimateTokenCount(program.creationPrompt);

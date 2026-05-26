@@ -1,6 +1,6 @@
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
-import { classroomStudents, studentProgressReports, studentModels, studentModelSnapshots } from "@/db/schema/learning";
+import { classroomStudents, studentProgressReports } from "@/db/schema/learning";
 import { and, eq, desc } from "drizzle-orm";
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -40,21 +40,12 @@ export default async function ClassroomProgressPage({ params }: ClassroomProgres
         }
     });
 
-    // Get student model and latest snapshot
-    const models = await getDb().query.studentModels.findMany({
-        where: eq(studentModels.classroomStudentId, membership.id),
-        limit: 1
-    });
-
-    const studentModelId = models[0]?.id;
-
-    const snapshots = studentModelId ? await getDb().query.studentModelSnapshots.findMany({
-        where: eq(studentModelSnapshots.studentModelId, studentModelId),
-        orderBy: [desc(studentModelSnapshots.version)],
-        limit: 1
-    }) : [];
-
-    const latestModel = snapshots[0]?.snapshot ?? null;
+    const latestReport = progressReports[0] ?? null;
+    const latestModel = latestReport?.report
+        ? {
+            knowledgeStateModel: latestReport.report.conceptProgress ?? [],
+        }
+        : null;
 
     return (
         <ClassroomProgressClient 

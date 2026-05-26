@@ -22,7 +22,7 @@ import {
 import { count, eq } from "drizzle-orm";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import { getTopicWithMaterials } from "@/lib/learning/storage";
-import { expertRuntimeModelService } from "@/lib/learning/expert-runtime-model-service";
+import { getActiveFrameworkVersion } from "@/lib/learning/framework-runtime-storage";
 import {
   getTopicActivationMaterialGate,
   isMaterialAnalysisFailed,
@@ -334,17 +334,13 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
         );
       }
 
-      try {
-        await expertRuntimeModelService.getRuntimeModel({
-          topicId: body.topicId,
-          classroomId: topic.classroomId,
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Publish a course framework before activating tutoring for this topic.";
-        throw new ActionError(message, "VALIDATION_ERROR", 400);
+      const activeFrameworkVersion = await getActiveFrameworkVersion(body.topicId);
+      if (!activeFrameworkVersion) {
+        throw new ActionError(
+          "Publish an expert framework version before activating tutoring for this lesson.",
+          "VALIDATION_ERROR",
+          400,
+        );
       }
     }
 

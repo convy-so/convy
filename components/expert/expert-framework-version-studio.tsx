@@ -13,7 +13,6 @@ import toast from "react-hot-toast";
 import { FrameworkEditorWizard } from "@/components/expert/framework-editor-wizard";
 import { Link } from "@/i18n/routing";
 import { createEmptyExpertFramework } from "@/lib/learning/framework-presets";
-import { normalizeFunctionalityGuidance } from "@/lib/learning/tutor-capabilities";
 import {
   expertFrameworkSchema,
   type ExpertFramework,
@@ -58,9 +57,7 @@ function normalizeDraftForSave(framework: ExpertFramework): ExpertFramework {
     ...framework,
     name: framework.name.trim(),
     description: framework.description.trim(),
-    functionalityGuidance: normalizeFunctionalityGuidance(
-      framework.functionalityGuidance,
-    ),
+    toolUsageGuidance: framework.toolUsageGuidance.trim(),
     markdownContent: framework.markdownContent?.trim() ?? "",
     fewShotExamples: framework.fewShotExamples
       .map((example) => example.trim())

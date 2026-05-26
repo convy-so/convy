@@ -15,7 +15,7 @@ export function buildReportingPrompt(input: {
   studentName: string;
   topicTitle: string;
   sessionState: unknown;
-  studentModel: Record<string, unknown> | null;
+  teachingPlaybook: Record<string, unknown> | null;
   transcript: Array<{
     role: string;
     content: string;
@@ -30,8 +30,8 @@ Topic: ${input.topicTitle}
 Session state:
 ${JSON.stringify(input.sessionState)}
 
-Student model:
-${JSON.stringify(input.studentModel)}
+Teaching playbook:
+${JSON.stringify(input.teachingPlaybook)}
 
 Previous report:
 ${JSON.stringify(input.previousReport)}
@@ -45,5 +45,5 @@ Rules:
 - Ground claims in the transcript and session state.
 - Be explicit about uncertainty when evidence is limited.
 - Focus on understanding, misconceptions, confidence, and next instructional moves.
-- If the session state contains framework phase, level, or closure signals, reflect them in frameworkPhase, frameworkLevel, and frameworkProgressSummary.`;
+- Use the teaching playbook only as personalization context. Do not claim it as fresh evidence unless the transcript supports it.`;
 }

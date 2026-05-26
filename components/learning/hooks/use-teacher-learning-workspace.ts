@@ -13,6 +13,7 @@ import {
 import {
   fetchClassroomStudents,
   fetchClassroomTopics,
+  fetchTopicActivationState,
   fetchTopicMaterialUploadAttempts,
   fetchTeacherClassrooms,
   fetchTopicMaterials,
@@ -109,7 +110,7 @@ export function useTeacherLearningWorkspace(
           queryKey: queryKeys.learning.materialUploadAttempts(topicId),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.readiness(topicId),
+          queryKey: queryKeys.learning.activationState(topicId),
         }),
       ]);
     },
@@ -205,6 +206,22 @@ export function useTeacherLearningWorkspace(
     },
     retry: retryTransientLearningApiFailure,
   });
+  const activationStateQuery = useQuery({
+    queryKey: selectedTopic
+      ? queryKeys.learning.activationState(selectedTopic.id)
+      : ["learningActivationState", "idle"],
+    queryFn: async () => {
+      if (!selectedTopic) {
+        throw new Error("Missing topic");
+      }
+      return fetchTopicActivationState(selectedTopic.id);
+    },
+    enabled: Boolean(selectedTopic),
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      query.state.data?.data?.ready ? false : 5_000,
+    retry: retryTransientLearningApiFailure,
+  });
   const reportsQuery = useQuery({
     queryKey: selectedTopic ? queryKeys.learning.reports(selectedTopic.id) : ["learningReports", "idle"],
     queryFn: async () => {
@@ -244,7 +261,7 @@ export function useTeacherLearningWorkspace(
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: queryKeys.learning.materials(selectedTopic.id) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.learning.materialUploadAttempts(selectedTopic.id) }),
-          queryClient.invalidateQueries({ queryKey: queryKeys.learning.readiness(selectedTopic.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.learning.activationState(selectedTopic.id) }),
         ]);
       }
     },
@@ -268,6 +285,9 @@ export function useTeacherLearningWorkspace(
       toast.success("Topic status updated");
       if (selectedAccessibleClassroomId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.learning.topics(selectedAccessibleClassroomId) });
+      }
+      if (selectedTopic) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.learning.activationState(selectedTopic.id) });
       }
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to update topic"),
@@ -318,6 +338,9 @@ export function useTeacherLearningWorkspace(
 
   const reportsPayload = reportsQuery.data?.data ?? null;
   const reports = reportsPayload?.reports ?? [];
+  const activationState = activationStateQuery.data?.data ?? null;
+  const isActivationStateLoading = activationStateQuery.isLoading;
+  const isActivationStateError = activationStateQuery.isError;
 
   return {
     classroomsQuery,
@@ -333,6 +356,10 @@ export function useTeacherLearningWorkspace(
     selectedTopic,
     materialsQuery,
     materialUploadAttemptsQuery,
+    activationStateQuery,
+    activationState,
+    isActivationStateLoading,
+    isActivationStateError,
     reportsQuery,
     uploadMaterialMutation,
     updateTopicStatusMutation,

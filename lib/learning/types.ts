@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { coerceFunctionalityGuidance } from "@/lib/learning/tutor-capabilities";
-
 export const gradeBandSchema = z.enum([
   "nursery",
   "primary",
@@ -257,7 +255,6 @@ export const learningInteractionTypeSchema = z.enum([
   "student_message",
   "tutor_message",
   "framework_transition",
-  "student_model_signal",
   "out_of_session_question",
   "agent_answer",
   "session_event",
@@ -330,11 +327,10 @@ function coerceFrameworkExampleToText(value: unknown): string | null {
   return text.length > 0 ? text : null;
 }
 
-const expertFrameworkBaseSchema = z.object({
+export const expertFrameworkSchema = z.object({
   name: z.string().trim().min(1, "Framework name is required"),
   description: z.string().default(""),
-  functionalityGuidance: z.record(z.string()).default({}),
-  toolUseGuidance: z.string().optional(),
+  toolUsageGuidance: z.string().default(""),
   fewShotExamples: z
     .array(z.union([z.string(), legacyExpertFrameworkExampleSchema]))
     .default([])
@@ -347,147 +343,7 @@ const expertFrameworkBaseSchema = z.object({
   metadata: z.record(z.unknown()).default({}),
 });
 
-export const expertFrameworkSchema = expertFrameworkBaseSchema.transform(
-  ({ toolUseGuidance, functionalityGuidance, ...framework }) => ({
-    ...framework,
-    functionalityGuidance: coerceFunctionalityGuidance({
-      functionalityGuidance,
-      toolUseGuidance,
-    }),
-  }),
-);
-
 export type ExpertFramework = z.infer<typeof expertFrameworkSchema>;
-
-export const frameworkCompileIssueSchema = z.object({
-  code: z.string().min(1),
-  message: z.string().min(1),
-  path: z.string().default(""),
-  details: z.string().default(""),
-  suggestion: z.string().default(""),
-  severity: z.enum(["warning", "error"]).default("warning"),
-});
-
-export type FrameworkCompileIssue = z.infer<typeof frameworkCompileIssueSchema>;
-
-export const tutorMoveSchema = z.string().min(1);
-
-export type TutorMove = z.infer<typeof tutorMoveSchema>;
-
-export const compiledFrameworkPhaseSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  purpose: z.string().default(""),
-  entrySignals: z.array(z.string()).default([]),
-  exitSignals: z.array(z.string()).default([]),
-  preferredMoves: z.array(tutorMoveSchema).default(["probe"]),
-});
-
-export type CompiledFrameworkPhase = z.infer<
-  typeof compiledFrameworkPhaseSchema
->;
-
-export const compiledFrameworkLevelSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  description: z.string().default(""),
-  successSignals: z.array(z.string()).default([]),
-  proofSignals: z.array(z.string()).default([]),
-});
-
-export type CompiledFrameworkLevel = z.infer<
-  typeof compiledFrameworkLevelSchema
->;
-
-export const compiledTurnPolicySchema = z.object({
-  diagnosisFirst: z.boolean().default(true),
-  maxLevelJumpPerTurn: z.number().int().min(0).max(2).default(1),
-  requireStudentAttemptBeforeDirectAnswer: z.boolean().default(true),
-  preferQuestionBeforeExplanation: z.boolean().default(true),
-  oneStrongMovePerTurn: z.boolean().default(true),
-});
-
-export type CompiledTurnPolicy = z.infer<typeof compiledTurnPolicySchema>;
-
-export const compiledToolPolicySchema = z.object({
-  courseSearch: z
-    .enum(["required", "available", "minimal"])
-    .default("required"),
-  images: z.enum(["allowed", "discouraged", "forbidden"]).default("forbidden"),
-  videos: z.enum(["allowed", "discouraged", "forbidden"]).default("forbidden"),
-  structuredQuiz: z
-    .enum(["allowed", "encouraged", "required_before_close", "forbidden"])
-    .default("allowed"),
-  formalGrading: z
-    .enum(["allowed", "encouraged", "required_after_quiz", "forbidden"])
-    .default("allowed"),
-  notebookUploads: z
-    .enum(["never", "when_visual_or_symbolic", "encouraged"])
-    .default("when_visual_or_symbolic"),
-});
-
-export type CompiledToolPolicy = z.infer<typeof compiledToolPolicySchema>;
-
-export const compiledAssessmentPolicySchema = z.object({
-  requiresAssessmentBeforeAdvance: z.boolean().default(false),
-  requiresAssessmentBeforeClose: z.boolean().default(false),
-  evaluationSignals: z.array(z.string()).default([]),
-});
-
-export type CompiledAssessmentPolicy = z.infer<
-  typeof compiledAssessmentPolicySchema
->;
-
-export const compiledCompletionPolicySchema = z.object({
-  requireTransfer: z.boolean().default(false),
-  requireMetacognitiveReflection: z.boolean().default(false),
-  requireExplicitEvidenceOfUnderstanding: z.boolean().default(true),
-  closeSignalPhrases: z.array(z.string()).default([]),
-});
-
-export type CompiledCompletionPolicy = z.infer<
-  typeof compiledCompletionPolicySchema
->;
-
-export const compiledFrameworkPolicySchema = z.object({
-  policySummary: z.string().default(""),
-  phases: z.array(compiledFrameworkPhaseSchema).min(1),
-  defaultPhaseId: z.string().min(1),
-  levels: z.array(compiledFrameworkLevelSchema).min(1),
-  defaultLevelId: z.string().min(1),
-  turnPolicy: compiledTurnPolicySchema.default({}),
-  toolPolicy: compiledToolPolicySchema.default({}),
-  assessmentPolicy: compiledAssessmentPolicySchema.default({}),
-  completionPolicy: compiledCompletionPolicySchema.default({}),
-  reviewTaxonomy: z.array(z.string()).default([]),
-  fallbackMoves: z.array(tutorMoveSchema).default(["probe", "hint", "reflection"]),
-});
-
-export type CompiledFrameworkPolicy = z.infer<
-  typeof compiledFrameworkPolicySchema
->;
-
-export const frameworkCompilationStatusSchema = z.enum([
-  "ready",
-  "needs_attention",
-  "failed",
-]);
-
-export type FrameworkCompilationStatus = z.infer<
-  typeof frameworkCompilationStatusSchema
->;
-
-export const frameworkRuntimeMetadataSchema = z.object({
-  compileStatus: frameworkCompilationStatusSchema.default("needs_attention"),
-  compilerVersion: z.string().default("1"),
-  compiledAt: z.string().nullable().default(null),
-  issues: z.array(frameworkCompileIssueSchema).default([]),
-  compiledPolicy: compiledFrameworkPolicySchema.nullable().default(null),
-});
-
-export type FrameworkRuntimeMetadata = z.infer<
-  typeof frameworkRuntimeMetadataSchema
->;
 
 export const expertHeuristicSchema = z.object({
   id: z.string().min(1),
@@ -503,19 +359,27 @@ export const expertHeuristicSchema = z.object({
 
 export type ExpertHeuristic = z.infer<typeof expertHeuristicSchema>;
 
-export const expertTutorRuntimeModelSchema = z.object({
+export const expertConflictPreviewSchema = z.object({
   id: z.string().min(1),
-  version: z.number().int().positive(),
+  summary: z.string().min(1),
+  details: z.string().nullable().default(null),
+});
+
+export type ExpertConflictPreview = z.infer<
+  typeof expertConflictPreviewSchema
+>;
+
+export const activeExpertFrameworkSchema = z.object({
+  frameworkId: z.string().min(1),
   frameworkVersionId: z.string().min(1),
   framework: expertFrameworkSchema,
-  compiledPolicy: compiledFrameworkPolicySchema.nullable().default(null),
   heuristics: z.array(expertHeuristicSchema).default([]),
-  conflictIds: z.array(z.string()).default([]),
+  openConflicts: z.array(expertConflictPreviewSchema).default([]),
   seedSource: z.enum(["deep_default", "expert_authored"]).default("deep_default"),
 });
 
-export type ExpertTutorRuntimeModel = z.infer<
-  typeof expertTutorRuntimeModelSchema
+export type ActiveExpertFramework = z.infer<
+  typeof activeExpertFrameworkSchema
 >;
 
 export const motivationalContextSchema = z.object({
@@ -584,42 +448,6 @@ export const longitudinalDevelopmentSchema = z.object({
 export type LongitudinalDevelopment = z.infer<
   typeof longitudinalDevelopmentSchema
 >;
-
-export const studentModelSnapshotSchema = z.object({
-  version: z.number().int().positive().default(1),
-  cognitiveModel: z.record(z.unknown()).default({}),
-  personalization: z.record(z.unknown()).default({}),
-  motivationalContext: motivationalContextSchema.optional().default({}),
-  knowledgeStateModel: z.array(knowledgeStateNodeSchema).optional().default([]),
-  cognitiveStyleCalibration: cognitiveStyleCalibrationSchema.optional().default({}),
-  productiveStruggleCalibration:
-    productiveStruggleCalibrationSchema.optional().default({}),
-  longitudinalDevelopment: longitudinalDevelopmentSchema.optional().default({}),
-  summary: z.string().default(""),
-  updatedAt: z.string(),
-});
-
-export type StudentModelSnapshot = z.infer<typeof studentModelSnapshotSchema>;
-
-export const frameworkStateSchema = z.object({
-  currentPhaseId: z.string().nullable().default(null),
-  currentLevelId: z.string().nullable().default(null),
-  targetOutcomeId: z.string().nullable().default(null),
-  diagnosticStatus: z
-    .enum(["not_started", "in_progress", "complete"])
-    .default("not_started"),
-  recommendedMove: tutorMoveSchema.default("probe"),
-  assessmentPending: z.boolean().default(false),
-  transferPending: z.boolean().default(false),
-  reflectionPending: z.boolean().default(false),
-  closeRequirementsMet: z.boolean().default(false),
-  frameworkSignals: z.array(z.string()).default([]),
-  activeMisconceptionTags: z.array(z.string()).default([]),
-  lastTransitionAt: z.string().nullable().default(null),
-  lastTransitionReason: z.string().default(""),
-});
-
-export type FrameworkState = z.infer<typeof frameworkStateSchema>;
 
 export const topicGroundingFormulaSchema = z.object({
   id: z.string().min(1),
@@ -693,24 +521,18 @@ export const contentScopeSnapshotSchema = z.object({
 export type ContentScopeSnapshot = z.infer<typeof contentScopeSnapshotSchema>;
 
 export const learningSessionStateSchema = z.object({
+  topicId: z.string().nullable().default(null),
   topicTitle: z.string().default(""),
-  runtimeModelId: z.string().nullable().default(null),
-  runtimeModelVersion: z.number().int().positive().default(1),
-  studentModelId: z.string().nullable().default(null),
-  studentModelSnapshotId: z.string().nullable().default(null),
-  frameworkState: frameworkStateSchema.default({}),
+  frameworkVersionId: z.string().nullable().default(null),
+  groundingPackVersion: z.number().int().nonnegative().default(0),
   contentScopeSnapshot: contentScopeSnapshotSchema.nullable().default(null),
-  activeConceptKey: z.string().nullable().default(null),
-  activeConceptTitle: z.string().nullable().default(null),
-  knowledgeFocus: z.array(z.string()).default([]),
-  misconceptionsObserved: z.array(z.string()).default([]),
+  recentMessageSummary: z.string().default(""),
   recentEvidence: z.array(z.string()).default([]),
   tutorNotes: z.array(z.string()).default([]),
   turnCount: z.number().int().nonnegative().default(0),
-  turnsSinceStudentModelRefresh: z.number().int().nonnegative().default(0),
-  lastStudentModelRefreshAt: z.string().nullable().default(null),
   reportReady: z.boolean().default(false),
   completed: z.boolean().default(false),
+  completionRequestedAt: z.string().nullable().default(null),
 });
 
 export type LearningSessionState = z.infer<typeof learningSessionStateSchema>;

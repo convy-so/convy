@@ -11,6 +11,8 @@ import {
   buildTopicGroundingPackPrompt,
 } from "@/lib/learning/prompts/topic-grounding-pack";
 import {
+  type GroundingCitation,
+  type MaterialGroundingMap,
   topicGroundingFormulaSchema,
   topicGroundingPackSchema,
   topicGroundingSectionSchema,
@@ -47,6 +49,27 @@ const topicGroundingPackExtractSchema = topicGroundingPackSchema
 
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function uniqueCitations(citations: GroundingCitation[]) {
+  const seen = new Set<string>();
+  const deduped: GroundingCitation[] = [];
+
+  for (const citation of citations) {
+    const key = JSON.stringify([
+      citation.materialId,
+      citation.segmentId,
+      citation.pageStart,
+      citation.pageEnd,
+      citation.headingPath,
+      citation.snippet,
+    ]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(citation);
+  }
+
+  return deduped;
 }
 
 function mergePackWithBoundary(
@@ -114,6 +137,147 @@ function packToRetrievedContextLines(pack: TopicGroundingPack): string[] {
   }
 
   return lines;
+}
+
+function buildDeterministicTopicGroundingPack(params: {
+  topicTitle: string;
+  topicDescription?: string | null;
+  boundary: TopicSourceBoundary;
+  materialIds: string[];
+  nextVersion: number;
+  materials: Array<{
+    id: string;
+    title: string;
+    groundingMap: MaterialGroundingMap | null;
+  }>;
+}) {
+  const conceptMap = new Map<
+    string,
+    { name: string; summary: string; citations: GroundingCitation[] }
+  >();
+  const formulaMap = new Map<
+    string,
+    {
+      id: string;
+      label: string;
+      expression: string;
+      conditions: string;
+      usageNotes: string;
+      citations: GroundingCitation[];
+    }
+  >();
+  const sectionMap = new Map<
+    string,
+    {
+      id: string;
+      title: string;
+      summary: string;
+      keyPoints: string[];
+      citations: GroundingCitation[];
+    }
+  >();
+
+  const notationRules: string[] = [];
+  const rigorRules: string[] = [];
+  const scopeRules: string[] = [];
+  const explicitlyOutOfScope: string[] = [];
+  const teachingNotes: string[] = [];
+  const digestParts: string[] = [];
+
+  for (const material of params.materials) {
+    const groundingMap = material.groundingMap;
+    if (!groundingMap) continue;
+
+    if (groundingMap.overview.trim()) {
+      digestParts.push(groundingMap.overview.trim());
+    }
+
+    notationRules.push(...groundingMap.notationRules);
+    rigorRules.push(...groundingMap.rigorRules);
+    scopeRules.push(...groundingMap.scopeRules);
+    explicitlyOutOfScope.push(...groundingMap.explicitlyOutOfScope);
+    teachingNotes.push(...groundingMap.teachingNotes, ...groundingMap.ambiguities);
+
+    for (const concept of groundingMap.concepts) {
+      const key = concept.name.trim().toLowerCase();
+      if (!key) continue;
+      const existing = conceptMap.get(key);
+      conceptMap.set(key, {
+        name: existing?.name ?? concept.name.trim(),
+        summary: existing?.summary || concept.summary.trim(),
+        citations: uniqueCitations([
+          ...(existing?.citations ?? []),
+          ...concept.citations,
+        ]),
+      });
+    }
+
+    for (const formula of groundingMap.formulas) {
+      const key = `${formula.label.trim().toLowerCase()}::${formula.expression.trim().toLowerCase()}`;
+      if (!formula.label.trim() || !formula.expression.trim()) continue;
+      const existing = formulaMap.get(key);
+      formulaMap.set(key, {
+        id: existing?.id ?? nanoid(),
+        label: existing?.label ?? formula.label.trim(),
+        expression: existing?.expression ?? formula.expression.trim(),
+        conditions: existing?.conditions || formula.conditions.trim(),
+        usageNotes: existing?.usageNotes || formula.usageNotes.trim(),
+        citations: uniqueCitations([
+          ...(existing?.citations ?? []),
+          ...formula.citations,
+        ]),
+      });
+    }
+
+    for (const section of groundingMap.sections) {
+      const key = section.title.trim().toLowerCase();
+      if (!key) continue;
+      const existing = sectionMap.get(key);
+      sectionMap.set(key, {
+        id: existing?.id ?? section.id?.trim() ?? nanoid(),
+        title: existing?.title ?? section.title.trim(),
+        summary: existing?.summary || section.summary.trim(),
+        keyPoints: uniqueStrings([...(existing?.keyPoints ?? []), ...section.keyPoints]),
+        citations: uniqueCitations([
+          ...(existing?.citations ?? []),
+          ...section.citations,
+        ]),
+      });
+    }
+  }
+
+  const digest = uniqueStrings([
+    params.boundary.teacherSummary,
+    params.topicDescription ?? "",
+    ...digestParts,
+  ])
+    .join(" ")
+    .slice(0, 2_000);
+
+  return mergePackWithBoundary(
+    topicGroundingPackSchema.parse({
+      version: params.nextVersion,
+      builtAt: new Date().toISOString(),
+      materialIds: params.materialIds,
+      topicTitle: params.topicTitle,
+      digest,
+      inScopeConcepts: Array.from(conceptMap.values()),
+      explicitlyOutOfScope: uniqueStrings(explicitlyOutOfScope),
+      formulas: Array.from(formulaMap.values()),
+      sections: Array.from(sectionMap.values()),
+      notationRules: uniqueStrings(notationRules),
+      rigorRules: uniqueStrings(rigorRules),
+      scopeRules: uniqueStrings(scopeRules),
+      teachingNotes: uniqueStrings(teachingNotes),
+      conflictNotes: [],
+      sourceSummaries: params.materials.map((material) => ({
+        materialId: material.id,
+        title: material.title,
+        overview: material.groundingMap?.overview?.trim() ?? "",
+      })),
+    }),
+    params.boundary,
+  );
 }
 
 export function createEmptyTopicGroundingPack(params: {
@@ -271,7 +435,44 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
       topicId,
       ...serializeError(error),
     });
-    throw error;
+
+    const fallbackPack = buildDeterministicTopicGroundingPack({
+      topicTitle: topic.title,
+      topicDescription: topic.description,
+      boundary,
+      materialIds,
+      nextVersion,
+      materials: indexedMaterials,
+    });
+
+    await getDb()
+      .update(learningTopics)
+      .set({
+        topicGroundingPack: fallbackPack,
+        topicGroundingPackBuiltAt: new Date(),
+        updatedAt: new Date(),
+        ...(boundary.teacherSummary.trim()
+          ? {}
+          : fallbackPack.digest.trim()
+            ? {
+                sourceBoundary: {
+                  ...boundary,
+                  teacherSummary: fallbackPack.digest.slice(0, 2_000),
+                },
+              }
+            : {}),
+      })
+      .where(eq(learningTopics.id, topicId));
+
+    log.warn("Fell back to deterministic topic grounding pack", {
+      topicId,
+      version: fallbackPack.version,
+      materialCount: materialIds.length,
+      sectionCount: fallbackPack.sections.length,
+      formulaCount: fallbackPack.formulas.length,
+    });
+
+    return fallbackPack;
   }
 }
 

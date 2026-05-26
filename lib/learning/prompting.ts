@@ -1,6 +1,4 @@
 export { buildStudentTurnSystemPrompt } from "@/lib/learning/prompts/student-turn";
-export { buildFrameworkDecisionPrompt } from "@/lib/learning/prompts/framework-decision";
-export { buildStudentModelUpdatePrompt } from "@/lib/learning/prompts/student-model-update";
 export { buildExpertReviewPrompt } from "@/lib/learning/prompts/expert-review";
 export { buildCrystallizationPrompt } from "@/lib/learning/prompts/crystallization";
 export { buildConflictDetectionPrompt } from "@/lib/learning/prompts/conflict-detection";

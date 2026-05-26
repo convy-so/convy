@@ -4,17 +4,17 @@ import { z } from "zod";
 import * as Sentry from "@sentry/node";
 
 import { getDb } from "@/db";
-import { learningSessions, studentProgressReports } from "@/db/schema";
+import { classroomStudents, learningSessions, studentProgressReports } from "@/db/schema";
+import { buildStudentTeachingPlaybook, captureCompletedSessionPatternMemory } from "@/lib/learning/pattern-memory-service";
 import { generateTeacherProgressReport } from "@/lib/learning/reporting";
 import {
   createStudentProgressReport,
   listLearningInteractions,
   updateLearningSessionState,
-  getStudentModelByClassroomStudentId,
-  getLatestStudentModelSnapshot,
 } from "@/lib/learning/storage";
 import {
   learningSessionStateSchema,
+  studentInterestProfileSchema,
   teacherProgressReportSchema,
 } from "@/lib/learning/types";
 import { type TutoringReportJobData } from "@/lib/queue";
@@ -36,7 +36,10 @@ const tutoringReportJobSchema = z.object({
 function computeMasteryPercent(
   state: ReturnType<typeof learningSessionStateSchema.parse>,
 ) {
-  const progressSignals = state.recentEvidence.length + state.knowledgeFocus.length;
+  const progressSignals =
+    state.recentEvidence.length +
+    Math.min(state.turnCount, 4) +
+    (state.completed ? 2 : 0);
   return Math.max(0, Math.min(100, progressSignals * 10));
 }
 
@@ -74,10 +77,25 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       classroomStudentId: data.classroomStudentId,
       sessionId: data.sessionId,
     });
-    const studentModel = await getStudentModelByClassroomStudentId(data.classroomStudentId);
-    const latestSnapshot = studentModel
-      ? await getLatestStudentModelSnapshot(studentModel.id)
+    const membership = await getDb().query.classroomStudents.findFirst({
+      where: and(
+        eq(classroomStudents.id, data.classroomStudentId),
+        eq(classroomStudents.userId, data.studentUserId),
+      ),
+      with: {
+        interestProfile: true,
+      },
+    });
+    const interestProfile = membership?.interestProfile?.profile
+      ? studentInterestProfileSchema.parse(membership.interestProfile.profile)
       : null;
+    const teachingPlaybook = await buildStudentTeachingPlaybook({
+      studentUserId: data.studentUserId,
+      subjectKey: data.subjectKey ?? null,
+      subjectLabel: data.subjectKey ?? data.topicTitle,
+      topicLocalGaps: [],
+      topicLocalUsedExamples: [],
+    });
 
     const report = await generateTeacherProgressReport({
       studentName: data.studentName,
@@ -91,7 +109,7 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
         metadata: interaction.metadata as Record<string, unknown> | null,
       })),
       previousReport: data.previousReport ?? null,
-      studentModel: latestSnapshot?.snapshot ?? null,
+      teachingPlaybook: teachingPlaybook.playbook,
     });
 
     await createStudentProgressReport({
@@ -112,6 +130,29 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       summary: report.studentSummary,
       expectedStateVersion: tutoringSession.stateVersion ?? 1,
     });
+
+    if (interestProfile) {
+      await captureCompletedSessionPatternMemory({
+        studentName: data.studentName,
+        studentUserId: data.studentUserId,
+        classroomId: data.classroomId,
+        classroomStudentId: data.classroomStudentId,
+        topicId: data.topicId,
+        topicTitle: data.topicTitle,
+        subjectKey: data.subjectKey ?? null,
+        subjectLabel: data.subjectKey ?? data.topicTitle,
+        sessionId: data.sessionId,
+        interestProfile,
+        state,
+        report,
+        transcript: interactions.map((interaction) => ({
+          role: interaction.role,
+          content: interaction.content,
+          metadata: interaction.metadata as Record<string, unknown> | null,
+        })),
+        outOfSessionEvidence: [],
+      });
+    }
 
     await job.updateProgress(100);
     return {

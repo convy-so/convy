@@ -9,7 +9,7 @@ export const DEFAULT_DEEP_FRAMEWORK = expertFrameworkSchema.parse({
   name: "DEEP",
   description:
     "Seed framework for new courses. Experts can edit the description and few-shot examples.",
-  functionalityGuidance: {},
+  toolUsageGuidance: "",
   fewShotExamples: [],
   markdownContent: "",
   metadata: {},
@@ -26,7 +26,7 @@ export function createEmptyExpertFramework(params: {
   return expertFrameworkSchema.parse({
     name: params.name,
     description: params.description ?? "",
-    functionalityGuidance: {},
+    toolUsageGuidance: "",
     fewShotExamples: [],
     markdownContent: "",
     metadata: {},

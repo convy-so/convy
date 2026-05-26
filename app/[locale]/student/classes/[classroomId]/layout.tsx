@@ -1,12 +1,11 @@
 import { getDb } from "@/db";
-import { classrooms, classroomStudents } from "@/db/schema/learning";
+import { classroomStudents } from "@/db/schema/learning";
 import { eq, and } from "drizzle-orm";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { redirect, notFound } from "next/navigation";
 import { Link } from "@/i18n/routing";
-import { GraduationCap, ArrowLeft, BookOpen, BarChart3, Settings2 } from "lucide-react";
+import { GraduationCap, ArrowLeft, BookOpen, BarChart3 } from "lucide-react";
 import { headers } from "next/headers";
-import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
 
 interface ClassroomLayoutProps {
     children: React.ReactNode;
@@ -20,7 +19,6 @@ export default async function ClassroomLayout({ children, params }: ClassroomLay
     if (!session) redirect(`/${locale}/sign-in`);
 
     const userId = session.user.id;
-    const uiLocale = await resolvePreferredUiLocale(session);
 
     // Verify student is actually enrolled in this classroom
     const membership = await getDb().query.classroomStudents.findFirst({
@@ -31,7 +29,6 @@ export default async function ClassroomLayout({ children, params }: ClassroomLay
         ),
         with: {
             classroom: true,
-            interestProfile: true,
         }
     });
 
@@ -40,7 +37,6 @@ export default async function ClassroomLayout({ children, params }: ClassroomLay
     }
 
     const classroom = membership.classroom;
-    const needsOnboarding = !membership.interestProfile;
 
     return (
         <div className="space-y-8 max-w-7xl mx-auto">
@@ -79,9 +75,9 @@ export default async function ClassroomLayout({ children, params }: ClassroomLay
             <div className="border-b border-slate-200">
                 <div className="flex gap-8">
                     <TabLink 
-                        href={`/student/classes/${classroomId}/sessions`}
+                        href={`/student/classes/${classroomId}/lessons`}
                         icon={<BookOpen className="h-4.5 w-4.5" />}
-                        label="Sessions"
+                        label="Lessons"
                     />
                     <TabLink 
                         href={`/student/classes/${classroomId}/progress`}

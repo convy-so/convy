@@ -2,31 +2,47 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import { notifications } from "@/db/schema";
-import { getPrimaryStudentMembership } from "@/lib/learning/access";
+import {
+  getPrimaryStudentMembership,
+  getUniversalStudentInterestProfile,
+} from "@/lib/learning/access";
 import {
   buildOnboardingGreeting,
   runInterestOnboardingTurn,
   shouldRefreshInterestProfile,
+  streamInterestOnboardingTurn,
 } from "@/lib/learning/onboarding";
+import { captureOnboardingPatternMemory } from "@/lib/learning/pattern-memory-service";
 import { generateTeacherOnboardingSummary } from "@/lib/learning/reporting";
 import {
   appendLearningMessage,
   completeLearningSession,
   createLearningSession,
-  createStudentModelSnapshot,
   getActiveLearningSession,
   listLearningMessages,
   markStudentOnboardingComplete,
-  upsertInterestProfile,
 } from "@/lib/learning/storage";
-import { studentModelService } from "@/lib/learning/student-model-service";
+import {
+  markStudentOnboardingCompleteForUser,
+  upsertInterestProfileForUserMemberships,
+} from "@/lib/learning/student-profile-storage";
+import type { StudentInterestProfile } from "@/lib/learning/types";
 
 export async function getOnboardingState(userId: string) {
   const membership = await getPrimaryStudentMembership(userId);
   if (!membership) return { membership: null, completed: false as const };
 
-  if (membership.interestProfile && !shouldRefreshInterestProfile(membership.interestProfile.profile)) {
-    return { membership, completed: true as const, profile: membership.interestProfile.profile };
+  const universalInterestProfile = await getUniversalStudentInterestProfile(userId);
+
+  if (
+    universalInterestProfile &&
+    !shouldRefreshInterestProfile(universalInterestProfile.profile)
+  ) {
+    return {
+      membership,
+      completed: true as const,
+      profile: universalInterestProfile.profile,
+    };
   }
 
   let activeSession = await getActiveLearningSession({
@@ -36,22 +52,43 @@ export async function getOnboardingState(userId: string) {
   });
 
   if (!activeSession) {
-    activeSession = await createLearningSession({ classroomStudentId: membership.id, topicId: null, sessionType: "interest_onboarding" });
-    await appendLearningMessage({ sessionId: activeSession.id, role: "assistant", content: buildOnboardingGreeting(membership.fullName) });
+    activeSession = await createLearningSession({
+      classroomStudentId: membership.id,
+      topicId: null,
+      sessionType: "interest_onboarding",
+    });
+    await appendLearningMessage({
+      sessionId: activeSession.id,
+      role: "assistant",
+      content: buildOnboardingGreeting(membership.fullName),
+    });
   }
 
   const messages = await listLearningMessages(activeSession.id);
-  return { membership, completed: false as const, sessionId: activeSession.id, messages };
+  return {
+    membership,
+    completed: false as const,
+    sessionId: activeSession.id,
+    messages,
+  };
 }
 
 export async function ensureOnboardingSession(classroomStudentId: string) {
   return (
-    (await getActiveLearningSession({ classroomStudentId, topicId: null, sessionType: "interest_onboarding" })) ??
-    (await createLearningSession({ classroomStudentId, topicId: null, sessionType: "interest_onboarding" }))
+    (await getActiveLearningSession({
+      classroomStudentId,
+      topicId: null,
+      sessionType: "interest_onboarding",
+    })) ??
+    (await createLearningSession({
+      classroomStudentId,
+      topicId: null,
+      sessionType: "interest_onboarding",
+    }))
   );
 }
 
-export async function runOnboardingTurn(params: {
+export async function prepareOnboardingTurn(params: {
   userId: string;
   latestUserText: string;
 }) {
@@ -59,48 +96,111 @@ export async function runOnboardingTurn(params: {
   if (!membership) return { membership: null };
 
   const activeSession = await ensureOnboardingSession(membership.id);
-  await appendLearningMessage({ sessionId: activeSession.id, role: "user", content: params.latestUserText });
+  await appendLearningMessage({
+    sessionId: activeSession.id,
+    role: "user",
+    content: params.latestUserText,
+  });
 
   const transcript = await listLearningMessages(activeSession.id);
-  const studentModel = await studentModelService.ensureModel({ classroomStudentId: membership.id, studentUserId: params.userId });
-  const latestSnapshot = await studentModelService.getLatestSnapshot(studentModel.id);
+  const universalInterestProfile =
+    await getUniversalStudentInterestProfile(params.userId);
+
+  return {
+    membership,
+    activeSession,
+    transcript: transcript.map((message) => ({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: message.content,
+    })) as Array<{ role: "assistant" | "user"; content: string }>,
+    existingProfile: universalInterestProfile?.profile ?? null,
+  };
+}
+
+export async function createOnboardingResponseStream(params: {
+  membership: NonNullable<Awaited<ReturnType<typeof getPrimaryStudentMembership>>>;
+  transcript: Array<{ role: "assistant" | "user"; content: string }>;
+  existingProfile: StudentInterestProfile | null;
+}) {
+  return streamInterestOnboardingTurn({
+    studentName: params.membership.fullName,
+    existingProfile: params.existingProfile,
+    messages: params.transcript,
+  });
+}
+
+export async function finalizeOnboardingTurn(params: {
+  membership: NonNullable<Awaited<ReturnType<typeof getPrimaryStudentMembership>>>;
+  activeSessionId: string;
+  expectedStateVersion: number;
+  transcript: Array<{ role: "assistant" | "user"; content: string }>;
+  assistantResponse: string;
+  existingProfile: StudentInterestProfile | null;
+}) {
   const result = await runInterestOnboardingTurn({
-    studentName: membership.fullName,
-    existingProfile: membership.interestProfile?.profile ?? null,
-    existingStudentModel: latestSnapshot?.snapshot ?? null,
-    messages: transcript.map((message) => ({ role: message.role === "assistant" ? "assistant" : "user", content: message.content })),
+    studentName: params.membership.fullName,
+    existingProfile: params.existingProfile,
+    messages: [
+      ...params.transcript,
+      { role: "assistant", content: params.assistantResponse },
+    ],
   });
 
   await appendLearningMessage({
-    sessionId: activeSession.id,
+    sessionId: params.activeSessionId,
     role: "assistant",
-    content: result.response,
+    content: params.assistantResponse,
     metadata: { status: result.status },
   });
 
-  return { membership, activeSession, studentModel, result };
+  if (result.status === "complete" && result.interestProfile) {
+    await finalizeCompletedOnboarding({
+      membership: params.membership,
+      activeSessionId: params.activeSessionId,
+      expectedStateVersion: params.expectedStateVersion,
+      interestProfile: result.interestProfile,
+      transcript: [
+        ...params.transcript,
+        { role: "assistant", content: params.assistantResponse },
+      ],
+    });
+  }
+
+  return result;
 }
 
 export async function finalizeCompletedOnboarding(params: {
   membership: NonNullable<Awaited<ReturnType<typeof getPrimaryStudentMembership>>>;
-  studentModelId: string;
   activeSessionId: string;
   expectedStateVersion: number;
-  interestProfile: Parameters<typeof upsertInterestProfile>[0]["profile"];
-  studentModelSnapshot: Parameters<typeof createStudentModelSnapshot>[0]["snapshot"];
+  interestProfile: StudentInterestProfile;
+  transcript: Array<{ role: "assistant" | "user"; content: string }>;
 }) {
-  await upsertInterestProfile({ classroomStudentId: params.membership.id, profile: params.interestProfile });
-  const snapshot = await createStudentModelSnapshot({
-    studentModelId: params.studentModelId,
-    snapshot: params.studentModelSnapshot,
-    sourceType: "onboarding",
-    sourceId: params.activeSessionId,
-  });
+  if (params.membership.userId) {
+    await upsertInterestProfileForUserMemberships({
+      userId: params.membership.userId,
+      profile: params.interestProfile,
+    });
+    await markStudentOnboardingCompleteForUser(params.membership.userId);
+  } else {
+    await markStudentOnboardingComplete(params.membership.id);
+  }
 
-  await markStudentOnboardingComplete(params.membership.id);
+  if (params.membership.userId) {
+    await captureOnboardingPatternMemory({
+      studentName: params.membership.fullName,
+      studentUserId: params.membership.userId,
+      classroomStudentId: params.membership.id,
+      classroomId: params.membership.classroomId,
+      sessionId: params.activeSessionId,
+      interestProfile: params.interestProfile,
+      transcript: params.transcript,
+    });
+  }
+
   const teacherSummary = await generateTeacherOnboardingSummary({
     studentName: params.membership.fullName,
-    profile: { interestProfile: params.interestProfile, studentModelSnapshot: params.studentModelSnapshot },
+    profile: { interestProfile: params.interestProfile },
   });
 
   await getDb().insert(notifications).values({
@@ -115,7 +215,7 @@ export async function finalizeCompletedOnboarding(params: {
 
   await completeLearningSession({
     sessionId: params.activeSessionId,
-    summary: `Onboarding complete. Student model snapshot ${snapshot.version} created.`,
+    summary: "Onboarding complete. Interest profile captured for future tutoring.",
     expectedStateVersion: params.expectedStateVersion,
   });
 }

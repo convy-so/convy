@@ -52,7 +52,8 @@ export const queryKeys = {
     materials: (topicId: string) => ["learningMaterials", topicId] as const,
     materialUploadAttempts: (topicId: string) =>
       ["learningMaterialUploadAttempts", topicId] as const,
-    readiness: (topicId: string) => ["learningReadiness", topicId] as const,
+    activationState: (topicId: string) =>
+      ["learningActivationState", topicId] as const,
     reports: (topicId: string) => ["learningReports", topicId] as const,
     questions: (topicId: string) => ["learningQuestions", topicId] as const,
     classroomStudentPatterns: (classroomStudentId: string) =>

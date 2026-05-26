@@ -67,7 +67,8 @@ export function StudentProfilePage({
   );
   const profile =
     initialOnboardingState?.completed ? initialOnboardingState.profile ?? null : null;
-  const patterns = initialPatterns.data ?? [];
+  const patterns = initialPatterns.data.profiles ?? [];
+  const memoryState = initialPatterns.data.memoryState;
   const filteredPatterns =
     selectedScope === "all"
       ? patterns
@@ -237,6 +238,11 @@ export function StudentProfilePage({
             </div>
 
             <div className="mt-6 space-y-4">
+              {memoryState.status !== "ready" && memoryState.message ? (
+                <div className="rounded-[20px] border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                  {memoryState.message}
+                </div>
+              ) : null}
               {filteredPatterns.length ? (
                 filteredPatterns.map((pattern) => (
                   <div key={`${pattern.scopeType}-${pattern.subjectKey ?? "global"}`} className="rounded-[20px] border border-white/70 bg-white/75 p-5">

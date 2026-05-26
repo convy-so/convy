@@ -332,13 +332,7 @@ export {
   getLatestStudentProgressReport,
   upsertInterestProfile,
   markStudentOnboardingComplete,
-  ensureStudentModel,
-  getStudentModelByClassroomStudentId,
-  getLatestStudentModelSnapshot,
-  createStudentModelSnapshot,
-  createStudentModelAnalysis,
-  listStudentModelSummaries,
-} from "@/lib/learning/student-model-storage";
+} from "@/lib/learning/student-profile-storage";
 
 export {
   getSubjectFramework,
@@ -347,8 +341,7 @@ export {
   getActiveFrameworkVersion,
   listApprovedCrystallizations,
   listOpenConflicts,
-  createRuntimeModel,
-  getPublishedRuntimeModel,
+  getActiveExpertFrameworkBundle,
 } from "@/lib/learning/framework-runtime-storage";
 
 export {
