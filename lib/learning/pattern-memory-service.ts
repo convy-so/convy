@@ -316,7 +316,7 @@ export async function captureOnboardingPatternMemory(params: {
           text: profile.teacherSummary || profile.studentSummary,
           patternConfidence: Math.min(profile.patternConfidence, 0.25),
           metadata: {
-            subjectLabel: profile.subjectLabel ?? null,
+            subjectLabel: null,
           },
         }));
 

@@ -2,6 +2,11 @@ import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/l
 import { listLearningMessages } from "@/lib/learning/storage";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
+import {
+  logTutoringDebug,
+  summarizeTutoringMessages,
+  summarizeTutoringText,
+} from "@/lib/learning/tutoring-debug";
 
 import type { UIMessage } from "ai";
 import type { PrepareTutoringTurnParams } from "@/lib/learning/tutoring-turn-types";
@@ -12,9 +17,23 @@ export function getLatestUserText(messages: UIMessage[]) {
 }
 
 export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
+  logTutoringDebug("turn:prepare:start", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    studyLanguage: params.studyLanguage,
+    messageCount: params.messages.length,
+    latestUserText: summarizeTutoringText(params.latestUserText, 180),
+  });
   const previousAssistant = [...(await listLearningMessages(params.tutorSessionId))]
     .reverse()
     .find((message) => message.role === "assistant");
+  logTutoringDebug("turn:prepare:previous-assistant", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    previousAssistant: previousAssistant
+      ? summarizeTutoringText(previousAssistant.content, 180)
+      : null,
+  });
 
   const prepared = await tutorRuntimeService.prepareTurn({
     topicId: params.topicId,
@@ -33,6 +52,11 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
     topicTitle: params.access.topic.title,
     studentContext: "Student learning " + params.access.topic.title,
   });
+  logTutoringDebug("turn:prepare:tools", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    toolNames: Object.keys(tools),
+  });
 
   const sanitizedMessages = toUIMessages(
     toPersistedUIChatMessages(params.messages).map((m) =>
@@ -41,6 +65,11 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
         : m,
     ),
   );
+  logTutoringDebug("turn:prepare:sanitized-messages", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    messages: summarizeTutoringMessages(sanitizedMessages.slice(-4)),
+  });
 
   const fewShotExamples = prepared.activeFramework.framework.fewShotExamples.map(
     (example, index) => ({
@@ -48,6 +77,11 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
       content: example,
     }),
   );
+  logTutoringDebug("turn:prepare:few-shot", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    fewShotExampleCount: fewShotExamples.length,
+  });
 
   return { previousAssistant, prepared, fewShotExamples, tools, sanitizedMessages };
 }

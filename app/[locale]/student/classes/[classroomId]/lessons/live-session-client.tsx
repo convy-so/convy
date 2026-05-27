@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Send,
   Sparkles,
+  Square,
   XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -19,12 +20,14 @@ import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import { useStudentTutoringWorkspace } from "@/components/learning/hooks/use-student-tutoring-workspace";
 import { QuizCard } from "@/components/learning/generative/quiz-card";
 import { GradeCard } from "@/components/learning/generative/grade-card";
+import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { Link, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import type { LearningMeData } from "@/lib/api/learning";
 import type {
   getStudentLearningWorkspaceInitialData,
 } from "@/lib/server/app-queries";
+import { logTutoringDebug, summarizeTutoringText } from "@/lib/learning/tutoring-debug";
 
 type LiveMessage = UIMessage & {
   metadata: Record<string, unknown>;
@@ -83,10 +86,10 @@ export function LiveSessionClient({
     addTutoringToolResult,
     completeTutoringMutation,
     selectedLesson,
-    selectedMembership,
     sessionState,
     tutoringInitializationState,
     canUseTutoringChat,
+    tutoringChatStatus,
   } = useStudentTutoringWorkspace({
     classroomId,
     lessonId,
@@ -98,10 +101,15 @@ export function LiveSessionClient({
   const {
     isSupported: isVoiceInputSupported,
     activeTarget: transcriptionTarget,
+    phase: transcriptionPhase,
     startTranscription,
+    stopRecording,
   } = useAudioTranscription({
     onError: (message) => toast.error(message),
   });
+
+  const isRecording = transcriptionPhase === "recording" && transcriptionTarget === "student-session";
+  const isTranscribing = transcriptionPhase === "transcribing" && transcriptionTarget === "student-session";
 
   const liveMessages = useMemo<LiveMessage[]>(
     () =>
@@ -115,8 +123,18 @@ export function LiveSessionClient({
           ? message.annotations?.find((ann) => ann.type === "metadata")
           : undefined;
 
+        const messageRecord = message as unknown as Record<string, unknown>;
+        const messageText = typeof messageRecord.text === "string" ? messageRecord.text : typeof messageRecord.content === "string" ? messageRecord.content : undefined;
+        const parts =
+          message.parts && message.parts.length > 0
+            ? message.parts
+            : messageText
+              ? [{ type: "text" as const, text: messageText }]
+              : [];
+
         return {
           ...message,
+          parts,
           metadata: metadataAnnotation?.data ?? {},
         } as LiveMessage;
       }),
@@ -143,98 +161,97 @@ export function LiveSessionClient({
     }
   };
 
-  const sessionFocus = sessionState?.knowledgeFocus?.slice(0, 4) ?? [];
+  const sessionFocus = useMemo(() => {
+    return (
+      sessionState?.contentScopeSnapshot?.learningOutcomes
+        ?.map((o) => o.title)
+        .slice(0, 4) ?? []
+    );
+  }, [sessionState?.contentScopeSnapshot?.learningOutcomes]);
   const showEmptyReadyState =
     tutoringInitializationState.status === "ready" && liveMessages.length === 0;
-  const composerDisabled =
-    !canUseTutoringChat || completeTutoringMutation.isPending;
-  const addTutoringToolResultInput = addTutoringToolResult as (
-    input: {
-      toolCallId: string;
-      result: Record<string, unknown>;
-      output: Record<string, unknown>;
-    },
-  ) => void;
-  const sendTutoringMessageWithAttachments = sendTutoringChatMessage as (
-    input: {
-      text: string;
-      experimental_attachments: unknown;
-      attachments: unknown;
-    },
-  ) => void;
+  const composerDisabled = !canUseTutoringChat || completeTutoringMutation.isPending;
+
+  useEffect(() => {
+    logTutoringDebug("client:live-session:state", {
+      classroomId,
+      lessonId,
+      canUseTutoringChat,
+      composerDisabled,
+      chatStatus: tutoringChatStatus,
+      messageCount: tutoringChatMessages.length,
+      sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+      initialStatus: tutoringInitializationState.status,
+    });
+  }, [
+    classroomId,
+    canUseTutoringChat,
+    composerDisabled,
+    lessonId,
+    tutoringChatMessages.length,
+    tutoringChatStatus,
+    tutoringInitializationState.status,
+    tutoringSessionQuery.data?.data.sessionId,
+  ]);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fcfcfb_0%,#f6f6f3_100%)] pb-10">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pt-6 md:px-6">
-        <div className="flex items-center justify-between gap-4">
+    <div className="flex h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 md:px-6">
+        <div className="flex items-center gap-4">
           <Link
             href={`/student/classes/${classroomId}/lessons`}
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 transition-colors hover:text-slate-900"
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to sessions
+            <span className="hidden sm:inline">Back to sessions</span>
           </Link>
-
-          {selectedLesson && tutoringSessionQuery.data?.data.sessionId ? (
-            <button
-              onClick={handleEndSession}
-              disabled={completeTutoringMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50"
-            >
-              {completeTutoringMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <XCircle className="h-4 w-4" />
-              )}
-              End session
-            </button>
-          ) : null}
-        </div>
-
-        <section className="rounded-[28px] border border-[#e7e5df] bg-white px-5 py-6 shadow-[0_20px_60px_-48px_rgba(15,23,42,0.24)] md:px-7">
-          <div className="flex flex-col gap-5">
-            <div className="space-y-3">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-800">
-                <Sparkles className="h-3.5 w-3.5" />
-                Tutoring session
-              </div>
-              <div className="space-y-2">
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-4xl">
-                  {selectedLesson?.title ?? "Lesson tutoring session"}
-                </h1>
-                <p className="max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
-                  {selectedLesson?.description ??
-                    "Ask questions, work through confusion, and let the tutor guide this lesson from here."}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-              {selectedMembership ? (
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
-                  {selectedMembership.classroom.title}
-                </span>
-              ) : null}
-              {sessionFocus.map((concept) => (
+          <div className="h-4 w-px bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-emerald-600" />
+            <h1 className="text-sm font-semibold text-slate-900 line-clamp-1">
+              {selectedLesson?.title ?? "Lesson tutoring session"}
+            </h1>
+          </div>
+          {sessionFocus.length > 0 && (
+            <div className="hidden items-center gap-2 md:flex">
+              <div className="mx-2 h-4 w-px bg-slate-200" />
+              {sessionFocus.slice(0, 3).map((concept: string) => (
                 <span
                   key={concept}
-                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-emerald-800"
+                  className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600"
                 >
                   {concept}
                 </span>
               ))}
             </div>
-          </div>
-        </section>
+          )}
+        </div>
 
-        <section className="overflow-hidden rounded-[30px] border border-[#e7e5df] bg-white shadow-[0_24px_64px_-52px_rgba(15,23,42,0.3)]">
-          <div
-            ref={chatContainerRef}
-            className="flex min-h-[58vh] flex-col gap-6 bg-[linear-gradient(180deg,#fffdf9_0%,#ffffff_100%)] px-5 py-6 md:px-7"
+        {selectedLesson && tutoringSessionQuery.data?.data.sessionId ? (
+          <button
+            onClick={handleEndSession}
+            disabled={completeTutoringMutation.isPending}
+            className="inline-flex items-center gap-2 rounded-md bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-100 disabled:opacity-50"
           >
+            {completeTutoringMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <XCircle className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">End session</span>
+          </button>
+        ) : null}
+      </header>
+
+      <main className="flex min-h-0 flex-1 flex-col">
+        <div
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto px-4 py-8 md:px-8 lg:px-24"
+        >
+          <div className="mx-auto flex max-w-4xl flex-col gap-6">
             {tutoringInitializationState.status === "loading" ? (
               <SessionStatusCard
-                icon={<Loader2 className="h-7 w-7 animate-spin text-amber-700" />}
+                icon={<Loader2 className="h-6 w-6 animate-spin text-slate-400" />}
                 title={tutoringInitializationState.title}
                 message={tutoringInitializationState.message}
               />
@@ -242,7 +259,7 @@ export function LiveSessionClient({
 
             {tutoringInitializationState.status === "blocked" ? (
               <SessionStatusCard
-                icon={<AlertCircle className="h-7 w-7 text-amber-700" />}
+                icon={<AlertCircle className="h-6 w-6 text-amber-500" />}
                 title={tutoringInitializationState.title}
                 message={tutoringInitializationState.message}
                 action={
@@ -250,7 +267,7 @@ export function LiveSessionClient({
                   tutoringInitializationState.ctaLabel ? (
                     <Link
                       href={tutoringInitializationState.ctaHref}
-                      className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                      className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
                     >
                       {tutoringInitializationState.ctaLabel}
                     </Link>
@@ -261,7 +278,7 @@ export function LiveSessionClient({
 
             {tutoringInitializationState.status === "error" ? (
               <SessionStatusCard
-                icon={<AlertCircle className="h-7 w-7 text-rose-700" />}
+                icon={<AlertCircle className="h-6 w-6 text-rose-500" />}
                 title={tutoringInitializationState.title}
                 message={tutoringInitializationState.message}
                 action={
@@ -270,7 +287,7 @@ export function LiveSessionClient({
                     onClick={() => {
                       void tutoringSessionQuery.refetch();
                     }}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                   >
                     <RefreshCw className="h-4 w-4" />
                     Retry
@@ -281,7 +298,7 @@ export function LiveSessionClient({
 
             {showEmptyReadyState ? (
               <SessionStatusCard
-                icon={<MessageSquare className="h-7 w-7 text-emerald-700" />}
+                icon={<MessageSquare className="h-6 w-6 text-emerald-600" />}
                 title="Your tutor is ready"
                 message="Start with what feels unclear, what you want to practice, or the exact question you need help with."
               />
@@ -292,30 +309,34 @@ export function LiveSessionClient({
                   <div
                     key={message.id}
                     className={cn(
-                      "flex items-start gap-3",
+                      "flex items-start gap-4",
                       message.role === "assistant" ? "justify-start" : "justify-end",
                     )}
                   >
                     {message.role === "assistant" ? (
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                        <Sparkles className="h-4.5 w-4.5" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                        <Sparkles className="h-4 w-4" />
                       </div>
                     ) : null}
 
-                    <div className="flex max-w-[84%] flex-col gap-3">
+                    <div className="flex max-w-[85%] flex-col gap-3 lg:max-w-[75%]">
                       {message.parts?.map((part, index) => {
                         if (part.type === "text" && part.text.trim().length > 0) {
                           return (
                             <div
                               key={index}
                               className={cn(
-                                "w-fit rounded-[22px] px-5 py-4 text-sm leading-7",
+                                "w-fit px-5 py-3.5 text-[15px] leading-relaxed",
                                 message.role === "assistant"
-                                  ? "rounded-tl-md border border-slate-200 bg-slate-50 text-slate-800"
-                                  : "ml-auto rounded-tr-md bg-slate-900 text-white",
+                                  ? "rounded-2xl rounded-tl-sm border border-slate-100 bg-white text-slate-800"
+                                  : "ml-auto rounded-2xl rounded-tr-sm bg-slate-900 text-white",
                               )}
-                            >
-                              {part.text}
+                              >
+                              {message.role === "assistant" ? (
+                                <MarkdownMessage content={part.text} />
+                              ) : (
+                                part.text
+                              )}
                             </div>
                           );
                         }
@@ -375,25 +396,24 @@ export function LiveSessionClient({
                                 }
                                 acceptsImageUpload={args?.acceptsImageUpload === true}
                                 onSubmit={({ answerText, attachments }) => {
-                                  addTutoringToolResultInput({
+                                  addTutoringToolResult({
                                     toolCallId: resolvedToolCallId,
-                                    result: {
-                                      answerText,
-                                      hasAttachments: !!attachments,
-                                    },
+                                    tool: toolName ?? "administer_quiz",
+                                    state: "output-available",
                                     output: {
                                       answerText,
                                       hasAttachments: !!attachments,
                                     },
-                                  });
+                                  } as Parameters<typeof addTutoringToolResult>[0]);
+                                  
+                                  const baseMessage = { role: "user" as const, parts: [{ type: "text" as const, text: answerText }] };
                                   if (attachments) {
-                                    sendTutoringMessageWithAttachments({
-                                      text: answerText,
+                                    sendTutoringChatMessage({
+                                      ...baseMessage,
                                       experimental_attachments: attachments,
-                                      attachments,
-                                    });
+                                    } as Parameters<typeof sendTutoringChatMessage>[0]);
                                   } else {
-                                    sendTutoringChatMessage({ text: answerText });
+                                    sendTutoringChatMessage(baseMessage as Parameters<typeof sendTutoringChatMessage>[0]);
                                   }
                                 }}
                               />
@@ -430,73 +450,183 @@ export function LiveSessionClient({
                   </div>
                 ))
               : null}
+            {tutoringChatStatus === "submitted" ? (
+              <div className="flex items-start gap-4 justify-start">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div className="w-fit px-5 py-3.5 rounded-2xl rounded-tl-sm border border-slate-100 bg-white text-slate-800 flex items-center gap-1.5 h-[52px]">
+                  <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]"></div>
+                  <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]"></div>
+                  <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400"></div>
+                </div>
+              </div>
+            ) : null}
           </div>
+        </div>
 
-          <div className="border-t border-[#ece9e1] bg-[#fcfbf8] px-5 py-5 md:px-7">
+        <div
+          className={cn(
+            "shrink-0 border-t px-4 py-4 transition-colors duration-300 md:px-8",
+            isRecording
+              ? "border-rose-200 bg-rose-50/40"
+              : "border-slate-200 bg-slate-50/50",
+          )}
+        >
+          <div className="mx-auto max-w-4xl">
             <form
-              className="space-y-3"
+              className="space-y-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!sessionInput.trim() || !canUseTutoringChat) return;
-                sendTutoringChatMessage({ text: sessionInput.trim() });
+                if (!sessionInput.trim() || !canUseTutoringChat) {
+                  logTutoringDebug("client:live-session:submit-blocked", {
+                    lessonId,
+                    canUseTutoringChat,
+                    hasInput: Boolean(sessionInput.trim()),
+                    sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+                  });
+                  return;
+                }
+                logTutoringDebug("client:live-session:submit", {
+                  lessonId,
+                  sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+                  text: summarizeTutoringText(sessionInput.trim(), 180),
+                });
+                sendTutoringChatMessage({ role: "user", parts: [{ type: "text", text: sessionInput.trim() }] } as Parameters<typeof sendTutoringChatMessage>[0]);
                 setSessionInput("");
               }}
             >
-              <div className="flex items-end gap-3">
-                <div className="relative flex-1">
-                  <textarea
-                    value={sessionInput}
-                    onChange={(event) => setSessionInput(event.target.value)}
-                    placeholder="Ask the tutor what you want to understand, practise, or challenge."
-                    disabled={composerDisabled}
-                    rows={3}
-                    className="min-h-[112px] w-full resize-none rounded-[22px] border border-slate-200 bg-white px-5 py-4 pr-14 text-sm leading-7 text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                  />
-                  {isVoiceInputSupported ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        startTranscription({
-                          target: "student-session",
-                          language: "multi",
-                          onTranscript: (transcript) =>
-                            setSessionInput((current) =>
-                              appendTranscript(current, transcript),
-                            ),
-                        })
-                      }
-                      disabled={composerDisabled}
-                      className={cn(
-                        "absolute bottom-4 right-4 rounded-full p-2 transition-colors",
-                        transcriptionTarget === "student-session"
-                          ? "bg-rose-50 text-rose-600"
-                          : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-                        composerDisabled && "cursor-not-allowed opacity-50",
-                      )}
-                    >
-                      <Mic className="h-4.5 w-4.5" />
-                    </button>
-                  ) : null}
+              {/* ── VOICE RECORDING STATE ── */}
+              {isRecording ? (
+                <div className="flex flex-col items-center gap-4 rounded-2xl border border-rose-200 bg-white px-6 py-5">
+                  {/* mic + animated waveform */}
+                  <div className="flex items-center gap-4">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500">
+                      <Mic className="h-5 w-5 text-white" />
+                      <span className="absolute inset-0 animate-ping rounded-full bg-rose-400 opacity-30" />
+                    </div>
+                    {/* waveform bars */}
+                    <div className="flex h-8 items-center gap-[3px]">
+                      {([0.55, 0.8, 1, 0.65, 0.9, 0.5, 0.75, 0.4, 0.85, 0.6] as number[]).map((delay, i) => (
+                        <div
+                          key={i}
+                          className="w-[3px] rounded-full bg-rose-400 origin-bottom"
+                          style={{
+                            height: "32px",
+                            animation: `voice-bar ${0.6 + delay * 0.4}s ease-in-out ${i * 0.07}s infinite`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-sm font-medium text-rose-600 tracking-wide">Listening…</span>
+                  </div>
+
+                  {/* live transcript preview */}
+                  <div className="w-full min-h-[40px] text-center">
+                    {sessionInput ? (
+                      <p className="text-[15px] leading-relaxed text-slate-700">
+                        {sessionInput}
+                        <span className="ml-1 inline-block h-4 w-[2px] animate-pulse bg-rose-400 align-middle" />
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-400">Start speaking — your words will appear here…</p>
+                    )}
+                  </div>
+
+                  {/* stop button */}
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-600 active:scale-95"
+                  >
+                    <Square className="h-3.5 w-3.5 fill-white" />
+                    Stop recording
+                  </button>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={composerDisabled || !sessionInput.trim()}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  <Send className="h-4.5 w-4.5" />
-                </button>
-              </div>
+              ) : isTranscribing ? (
+                /* ── PROCESSING STATE ── */
+                <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-5">
+                  <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                  <span className="text-sm text-slate-500">Processing your speech…</span>
+                </div>
 
-              <p className="text-sm text-slate-500">
-                {canUseTutoringChat
-                  ? "Use this space for the tutoring conversation only. Ask directly, show your reasoning, or request another explanation."
-                  : tutoringInitializationState.message}
-              </p>
+              ) : (
+                /* ── NORMAL COMPOSER ── */
+                <div className="flex items-end gap-3">
+                  <div className="relative flex-1">
+                    <textarea
+                      value={sessionInput}
+                      onChange={(event) => setSessionInput(event.target.value)}
+                      placeholder="Ask the tutor what you want to understand, practise, or challenge."
+                      disabled={composerDisabled}
+                      rows={1}
+                      className="max-h-[200px] min-h-[56px] w-full resize-none rounded-2xl border border-slate-200 bg-white px-5 py-4 pr-12 text-[15px] leading-tight text-slate-900 outline-none transition-all focus:border-slate-300 focus:ring-4 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (sessionInput.trim() && canUseTutoringChat) {
+                            logTutoringDebug("client:live-session:keyboard-submit", {
+                              lessonId,
+                              sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+                              text: summarizeTutoringText(sessionInput.trim(), 180),
+                            });
+                            sendTutoringChatMessage({ role: "user", parts: [{ type: "text", text: sessionInput.trim() }] } as Parameters<typeof sendTutoringChatMessage>[0]);
+                            setSessionInput("");
+                          }
+                        }
+                      }}
+                    />
+                    {isVoiceInputSupported ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          startTranscription({
+                            target: "student-session",
+                            language: "multi",
+                            onTranscript: (transcript) =>
+                              setSessionInput((current) =>
+                                appendTranscript(current, transcript),
+                              ),
+                          })
+                        }
+                        disabled={composerDisabled}
+                        className={cn(
+                          "absolute bottom-2.5 right-2.5 rounded-xl p-2 transition-colors",
+                          "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+                          composerDisabled && "cursor-not-allowed opacity-50",
+                        )}
+                      >
+                        <Mic className="h-5 w-5" />
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={composerDisabled || !sessionInput.trim()}
+                    className="inline-flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  >
+                    <Send className="h-5 w-5" />
+                  </button>
+                </div>
+              )}
+
+              <div className="px-1">
+                <p className="text-xs text-slate-500">
+                  {canUseTutoringChat
+                    ? isRecording
+                      ? "Tap 'Stop recording' when you're done speaking — then review and send."
+                      : isTranscribing
+                        ? "Converting your speech to text…"
+                        : "Press Enter to send · Shift + Enter for a new line."
+                    : tutoringInitializationState.message}
+                </p>
+              </div>
             </form>
           </div>
-        </section>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -513,19 +643,19 @@ function SessionStatusCard({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-[280px] flex-col items-center justify-center gap-4 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
+    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-slate-400 ring-1 ring-slate-100">
         {icon}
       </div>
-      <div className="space-y-2">
-        <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold text-slate-900">
           {title}
         </h2>
-        <p className="max-w-md text-sm leading-7 text-slate-600">
+        <p className="max-w-xs text-sm text-slate-500">
           {message}
         </p>
       </div>
-      {action ? <div className="pt-1">{action}</div> : null}
+      {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );
 }

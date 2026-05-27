@@ -115,7 +115,7 @@ export default async function StudentProgressPage(props: {
 
                         {latestModel && latestModel.knowledgeStateModel && latestModel.knowledgeStateModel.length > 0 ? (
                             <div className="space-y-6">
-                                {latestModel.knowledgeStateModel.map((node: KnowledgeStateNode) => {
+                                {latestModel.knowledgeStateModel.map((node) => {
                                     const pct = node.masteryLevel === 'generative' ? 100 : node.masteryLevel === 'applied' ? 66 : 33;
                                     const label = masteryLabelForStudent(String(node.masteryLevel));
                                     return (

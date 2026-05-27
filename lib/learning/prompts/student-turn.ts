@@ -2,6 +2,7 @@ import {
   renderTeachingPlaybookContext,
 } from "@/lib/learning/patterns";
 import { renderTopicGroundingPackForPrompt } from "@/lib/learning/topic-grounding-pack-render";
+import { renderTutorPromptPolicy } from "@/lib/learning/tutor-policy";
 import type {
   ActiveExpertFramework,
   ContentScopeSnapshot,
@@ -76,6 +77,8 @@ export function buildStudentTurnSystemPrompt(params: {
   return `You are Convy's tutor.
 
 Reply in ${params.studyLanguage}.
+
+${renderTutorPromptPolicy()}
 
 You are teaching inside a bounded course scope. The uploaded teacher materials define:
 - what concepts are in scope

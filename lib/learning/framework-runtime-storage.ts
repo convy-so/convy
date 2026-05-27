@@ -50,7 +50,14 @@ export async function getTopicFramework(params: { topicId: string }) {
     return null;
   }
 
-  return findFrameworkForCourseId(topic.courseId);
+  const frameworks = await listFrameworksWithTopicLite();
+
+  return (
+    frameworks.find((f) => f.topicId === topic.id) ??
+    frameworks.find((f) => f.classroomId === topic.classroomId) ??
+    frameworks.find((f) => f.courseId === topic.courseId) ??
+    null
+  );
 }
 
 export async function createExpertFrameworkForCourse(params: {

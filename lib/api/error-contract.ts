@@ -11,7 +11,6 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "VALIDATION_ERROR"
   | "CONFLICT"
-  | "RATE_LIMITED"
   | "SERVICE_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
@@ -40,13 +39,11 @@ export function apiError(
       : code === "UNAUTHORIZED"
         ? 403
         : code === "NOT_FOUND"
-          ? 404
-          : code === "VALIDATION_ERROR"
-            ? 400
-            : code === "CONFLICT"
-              ? 409
-              : code === "RATE_LIMITED"
-                ? 429
+              ? 404
+              : code === "VALIDATION_ERROR"
+                ? 400
+              : code === "CONFLICT"
+                ? 409
                 : code === "SERVICE_UNAVAILABLE"
                   ? 503
                 : 500);

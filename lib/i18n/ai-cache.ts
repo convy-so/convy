@@ -1,10 +1,15 @@
 import { Redis } from "@upstash/redis";
 import { env } from "@/lib/env";
 
-const redis = new Redis({
-  url: env.UPSTASH_REDIS_REST_URL,
-  token: env.UPSTASH_REDIS_REST_TOKEN,
-});
+const memoryCache = new Map<string, string>();
+
+const redis =
+  env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url: env.UPSTASH_REDIS_REST_URL,
+        token: env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : null;
 
 const CACHE_PREFIX = "intl:translation:";
 const CACHE_TTL = 30 * 24 * 60 * 60; // 30 days in seconds
@@ -18,6 +23,10 @@ export async function getCachedTranslation(
 ): Promise<string | null> {
   const key = `${CACHE_PREFIX}${targetLanguage}:${Buffer.from(text).toString("base64")}`;
   try {
+    if (!redis) {
+      return memoryCache.get(key) ?? null;
+    }
+
     return await redis.get<string>(key);
   } catch {
     return null;
@@ -34,6 +43,11 @@ export async function setCachedTranslation(
 ): Promise<void> {
   const key = `${CACHE_PREFIX}${targetLanguage}:${Buffer.from(text).toString("base64")}`;
   try {
+    if (!redis) {
+      memoryCache.set(key, translation);
+      return;
+    }
+
     await redis.set(key, translation, { ex: CACHE_TTL });
   } catch {
   }

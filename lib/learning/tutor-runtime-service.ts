@@ -10,6 +10,9 @@ import {
   type StudentInterestProfile,
   type TopicSourceBoundary,
 } from "@/lib/learning/types";
+import {
+  logTutoringDebug,
+} from "@/lib/learning/tutoring-debug";
 
 function isContentScopeCurrent(params: {
   snapshot: LearningSessionState["contentScopeSnapshot"];
@@ -33,6 +36,12 @@ export class TutorRuntimeService {
   }) {
     const topic = await getTopicWithMaterials(params.topicId);
     const packVersion = topic?.topicGroundingPack?.version ?? 0;
+    logTutoringDebug("runtime:resolve-content-scope:start", {
+      topicId: params.topicId,
+      studyLanguage: params.studyLanguage,
+      packVersion,
+      hasExistingSnapshot: Boolean(params.existingSnapshot),
+    });
 
     if (
       isContentScopeCurrent({
@@ -41,14 +50,25 @@ export class TutorRuntimeService {
         packVersion,
       })
     ) {
+      logTutoringDebug("runtime:resolve-content-scope:reuse-snapshot", {
+        topicId: params.topicId,
+        packVersion,
+      });
       return params.existingSnapshot!;
     }
 
-    return await contentScopeService.buildScopeFromPack({
+    const scope = await contentScopeService.buildScopeFromPack({
       topicId: params.topicId,
       sourceBoundary: params.sourceBoundary,
       contentLocale: params.studyLanguage,
     });
+    logTutoringDebug("runtime:resolve-content-scope:built", {
+      topicId: params.topicId,
+      packVersion: scope.groundingPackVersion,
+      materialIds: scope.materialIds,
+      learningOutcomes: scope.learningOutcomes.length,
+    });
+    return scope;
   }
 
   async initializeSessionState(params: {
@@ -57,6 +77,11 @@ export class TutorRuntimeService {
     sourceBoundary: TopicSourceBoundary;
     studyLanguage: string;
   }): Promise<LearningSessionState> {
+    logTutoringDebug("runtime:initialize-session-state:start", {
+      topicId: params.topicId,
+      topicTitle: params.topicTitle,
+      studyLanguage: params.studyLanguage,
+    });
     const [activeFramework, contentScope] = await Promise.all([
       getActiveExpertFrameworkBundle(params.topicId),
       contentScopeService.buildScopeFromPack({
@@ -65,6 +90,12 @@ export class TutorRuntimeService {
         contentLocale: params.studyLanguage,
       }),
     ]);
+    logTutoringDebug("runtime:initialize-session-state:resolved", {
+      topicId: params.topicId,
+      frameworkVersionId: activeFramework.frameworkVersionId,
+      contentScopeVersion: contentScope.groundingPackVersion,
+      materialIds: contentScope.materialIds,
+    });
 
     return learningSessionStateSchema.parse({
       ...createDefaultLearningSessionState(),
@@ -91,6 +122,13 @@ export class TutorRuntimeService {
     state: LearningSessionState;
     interestProfile: StudentInterestProfile | null;
   }) {
+    logTutoringDebug("runtime:prepare-turn:start", {
+      topicId: params.topicId,
+      topicTitle: params.topicTitle,
+      studyLanguage: params.studyLanguage,
+      turnCount: params.state.turnCount,
+      hasInterestProfile: Boolean(params.interestProfile),
+    });
     const activeFramework = await getActiveExpertFrameworkBundle(params.topicId);
     const contentScope = await this.resolveContentScope({
       topicId: params.topicId,
@@ -113,6 +151,11 @@ export class TutorRuntimeService {
             message: "Long-horizon memory is unavailable for this session.",
           },
         };
+    logTutoringDebug("runtime:prepare-turn:playbook", {
+      topicId: params.topicId,
+      playbookState: playbookResult.memoryState.status,
+      hasPlaybook: Boolean(playbookResult.playbook),
+    });
 
     const systemPrompt = tutoringPromptService.buildStudentTurnPrompt({
       contentScope,
@@ -130,6 +173,13 @@ export class TutorRuntimeService {
       frameworkVersionId: activeFramework.frameworkVersionId,
       groundingPackVersion: contentScope.groundingPackVersion,
       contentScopeSnapshot: contentScope,
+    });
+    logTutoringDebug("runtime:prepare-turn:done", {
+      topicId: params.topicId,
+      frameworkVersionId: activeFramework.frameworkVersionId,
+      contentScopeVersion: contentScope.groundingPackVersion,
+      systemPromptLength: systemPrompt.length,
+      nextTurnCount: nextState.turnCount,
     });
 
     return {

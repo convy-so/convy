@@ -2,11 +2,19 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { buildScopeRedirectResponse, logUserTurn } from "@/lib/learning/tutoring-turn-logging";
+import {
+  logTutoringDebug,
+  summarizeTutoringText,
+} from "@/lib/learning/tutoring-debug";
 
 export async function evaluateTutoringScope(params: {
   topicTitle: string;
   latestUserText: string;
 }) {
+  logTutoringDebug("scope:evaluate:start", {
+    topicTitle: params.topicTitle,
+    latestUserText: summarizeTutoringText(params.latestUserText, 180),
+  });
   return evaluateScopePolicy({
     feature: "tutoring_chat",
     objective: `Help the student learn ${params.topicTitle} using uploaded course materials`,
@@ -20,6 +28,14 @@ export async function evaluateTutoringScope(params: {
       "asking what a current term means",
       "replying in another supported language while staying on lesson",
     ],
+  }).then((decision) => {
+    logTutoringDebug("scope:evaluate:done", {
+      topicTitle: params.topicTitle,
+      shouldRedirect: decision.shouldRedirect,
+      classification: decision.classification,
+      redirectMessage: summarizeTutoringText(decision.redirectMessage, 180),
+    });
+    return decision;
   });
 }
 
@@ -33,6 +49,13 @@ export async function maybeHandleScopeRedirect(params: {
   redirectMessage: string;
 }) {
   if (!params.shouldRedirect) return null;
+  logTutoringDebug("scope:redirect:start", {
+    sessionId: params.sessionId,
+    topicId: params.topicId,
+    classroomStudentId: params.classroomStudentId,
+    classification: params.classification,
+    redirectMessage: summarizeTutoringText(params.redirectMessage, 180),
+  });
 
   await logUserTurn({
     sessionId: params.sessionId,
@@ -52,10 +75,14 @@ export async function maybeHandleScopeRedirect(params: {
 
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
-      execute: async ({ writer }) => {
-        writer.write({ type: "text-delta", id: redirect.streamId, delta: redirect.text });
-        await redirect.persist();
-      },
-    }),
+    execute: async ({ writer }) => {
+      writer.write({ type: "text-delta", id: redirect.streamId, delta: redirect.text });
+      await redirect.persist();
+      logTutoringDebug("scope:redirect:stream-complete", {
+        sessionId: params.sessionId,
+        topicId: params.topicId,
+      });
+    },
+  }),
   });
 }

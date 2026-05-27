@@ -7,6 +7,8 @@ import type { SpeechToTextLanguage } from "@/lib/voice/voice-locales";
 type SupportedRecordingMimeType = "audio/webm;codecs=opus" | "audio/webm";
 type TranscriptionPhase = "recording" | "transcribing" | null;
 
+import toast from "react-hot-toast";
+
 type StartTranscriptionParams = {
   target: string;
   language: SpeechToTextLanguage;
@@ -38,11 +40,16 @@ export function useAudioTranscription(params?: {
   const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const [phase, setPhase] = useState<TranscriptionPhase>(null);
 
-  const isSupported =
-    typeof window !== "undefined" &&
-    typeof navigator !== "undefined" &&
-    typeof navigator.mediaDevices?.getUserMedia === "function" &&
-    typeof MediaRecorder !== "undefined";
+  const [isSupported, setIsSupported] = useState(false);
+
+  useEffect(() => {
+    setIsSupported(
+      typeof window !== "undefined" &&
+      typeof navigator !== "undefined" &&
+      typeof navigator.mediaDevices?.getUserMedia === "function" &&
+      typeof MediaRecorder !== "undefined"
+    );
+  }, []);
 
   const clearStream = useCallback(() => {
     if (!mediaStreamRef.current) {
@@ -91,6 +98,18 @@ export function useAudioTranscription(params?: {
       }
 
       try {
+        try {
+          const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          if (permissionStatus.state === 'denied') {
+            onError?.("Microphone access is blocked. Please allow microphone access in your browser settings (usually a 🔒 icon in the URL bar) and try again.");
+            return;
+          } else if (permissionStatus.state === 'prompt') {
+            toast("Please click 'Allow' in the browser prompt above.", { icon: "🎤" });
+          }
+        } catch (e) {
+          // Browser may not support navigator.permissions for microphone, safely ignore
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
