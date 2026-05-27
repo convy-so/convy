@@ -1,6 +1,10 @@
 import { logBraintrustTrace } from "@/lib/ai/braintrust";
 import { persistTutorTurnOutcome } from "@/lib/learning/storage";
 import {
+  formatTutorResponseWarnings,
+  normalizeTutorResponseText,
+} from "@/lib/learning/tutor-response-format";
+import {
   logTutoringDebug,
   logTutoringWarn,
   summarizeTutoringText,
@@ -28,12 +32,14 @@ function getLatestAssessmentResult(
 
 export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   const lastStep = params.result.steps.at(-1);
-  const assistantText = lastStep?.text?.trim();
+  const assistantText = normalizeTutorResponseText(lastStep?.text ?? "");
+  const formatWarnings = formatTutorResponseWarnings(assistantText);
   logTutoringDebug("turn:finalize:start", {
     topicId: params.topicId,
     tutorSessionId: params.tutorSessionId,
     stepCount: params.result.steps.length,
     assistantText: assistantText ? summarizeTutoringText(assistantText, 180) : null,
+    formatWarnings,
     previousAssistantText: params.previousAssistantText
       ? summarizeTutoringText(params.previousAssistantText, 180)
       : null,
@@ -45,6 +51,15 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
       stepCount: params.result.steps.length,
     });
     return;
+  }
+
+  if (formatWarnings.length > 0) {
+    logTutoringWarn("turn:finalize:format-warning", {
+      topicId: params.topicId,
+      tutorSessionId: params.tutorSessionId,
+      formatWarnings,
+      assistantText: summarizeTutoringText(assistantText, 180),
+    });
   }
 
   const latestAssessment = getLatestAssessmentResult(params.result.steps);
