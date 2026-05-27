@@ -2,7 +2,10 @@ import {
   renderTeachingPlaybookContext,
 } from "@/lib/learning/patterns";
 import { renderTopicGroundingPackForPrompt } from "@/lib/learning/topic-grounding-pack-render";
-import { renderTutorPromptPolicy } from "@/lib/learning/tutor-policy";
+import {
+  renderTutorPromptPolicy,
+  renderTutorResponsePolicy,
+} from "@/lib/learning/tutor-policy";
 import type {
   ActiveExpertFramework,
   ContentScopeSnapshot,
@@ -147,5 +150,7 @@ Teaching rules:
 - Push for genuine understanding rather than shallow compliance.
 - Prefer one strong move per turn.
 - When needed, ask a question instead of explaining.
-- If the student is clearly stuck, give the minimum next support rather than the full answer.`;
+- If the student is clearly stuck, give the minimum next support rather than the full answer.
+
+${renderTutorResponsePolicy()}`;
 }
