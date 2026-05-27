@@ -599,51 +599,53 @@ Why that still matters:
 
 Primary files:
 
-- `app/api/learning/expert/assets/[packId]/activate/route.ts`
+- `app/api/learning/expert/frameworks/[frameworkId]/activate/route.ts`
 - `lib/learning/framework-runtime-storage.ts`
 
 Execution path:
 
 1. Expert session is validated.
-2. Framework ownership is resolved.
-3. Target version is loaded.
-4. Version row is updated to `published`.
-5. Framework row is updated with `activeVersionId`.
-6. Approved crystallizations and open conflicts are loaded.
-7. Runtime model is assembled.
-8. Runtime model row is inserted.
+2. Framework ownership is resolved via `getExpertAccessibleFramework`.
+3. Target version is loaded from `expertFrameworkVersions`.
+4. Placeholder and empty-content guards reject auto-seeded or blank frameworks.
+5. In one transaction: version row is updated to `published`, framework row is updated with `activeVersionId`.
+6. The response returns `frameworkId` and `versionId`.
 
 Key snippet:
 
 ```ts
-const publishedRuntime = await getDb().transaction(async (tx) => {
-  await tx.update(expertFrameworkVersions).set({ status: "published", ... });
-  await tx.update(expertFrameworks).set({ activeVersionId: version.id, ... });
-  const [createdRuntime] = await tx.insert(expertRuntimeModels).values({ ... }).returning();
-  return createdRuntime;
+await getDb().transaction(async (tx) => {
+  await tx
+    .update(expertFrameworkVersions)
+    .set({ status: "published", publishedAt: new Date(), publishedByUserId: session.user.id, ... })
+    .where(eq(expertFrameworkVersions.id, version.id));
+
+  await tx
+    .update(expertFrameworks)
+    .set({ activeVersionId: version.id, ... })
+    .where(eq(expertFrameworks.id, framework.id));
 });
 ```
 
 Invariant:
 
-- active framework version and published runtime model should represent the same deployment event
+- version publish and framework `activeVersionId` update must be atomic — both succeed or neither does
 
 Why it matters:
 
-- the tutor runtime depends on runtime model state, not just framework/version state
+- `getTopicFramework` in `framework-runtime-storage.ts` resolves the active framework version at tutor-turn time by reading `activeVersionId`
+- if version is published but `activeVersionId` is not yet set (or vice-versa), the tutor runtime uses the wrong instructions
 
-Confirmed problem shape at review time:
+Note on `expertRuntimeModels`:
 
-- the route previously performed separate write phases with no transaction
-
-Classification:
-
-- Confirmed issue pattern at review time
+- this table no longer exists in the schema
+- the runtime model is assembled on demand from the published framework version at tutoring time, not pre-materialized into a separate table
+- any documentation or code references to `expertRuntimeModels` as an active table are stale and should be removed
 
 Fix applied in current working tree:
 
-- version publish, framework activation, and runtime-model insert now happen inside one database transaction
-- activation now also fails cleanly if the framework is not attached to a topic
+- version publish and framework `activeVersionId` update are inside one database transaction
+- placeholder-guard and empty-content-guard added before the transaction to reject uncommitted framework drafts
 
 Related fix:
 
@@ -794,7 +796,7 @@ If you want to continue from this file directly, inspect these next:
 
 1. `app/actions/classroom/intervention-actions.ts`
 2. `lib/learning/intervention-service.ts`
-3. `app/api/learning/expert/assets/[packId]/activate/route.ts`
+3. `app/api/learning/expert/frameworks/[frameworkId]/activate/route.ts`
 4. `lib/learning/framework-runtime-storage.ts`
 5. `app/api/learning/topics/[topicId]/chat/route.ts`
 6. `lib/learning/tutoring-turn-finalization.ts`

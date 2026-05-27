@@ -16,7 +16,6 @@ export type ActionErrorCode =
   | "FORBIDDEN" 
   | "NOT_FOUND" 
   | "VALIDATION_ERROR" 
-  | "RATE_LIMIT_EXCEEDED" 
   | "INTERNAL_ERROR";
 
 export type ActionErrorPayload = {
@@ -65,12 +64,6 @@ export class NotFoundError extends ActionError {
 export class ValidationError extends ActionError {
   constructor(message: string) {
     super(message, "VALIDATION_ERROR", 400);
-  }
-}
-
-export class RateLimitError extends ActionError {
-  constructor(message: string = "Rate limit exceeded") {
-    super(message, "RATE_LIMIT_EXCEEDED", 429);
   }
 }
 
@@ -134,14 +127,6 @@ export async function withErrorHandling<T>(
 
     // Handle standard errors
     if (error instanceof Error) {
-
-      // Rate limit errors
-      if (error.message.startsWith("AI_RATE_LIMIT_EXCEEDED")) {
-        return { 
-          success: false, 
-          error: { code: "RATE_LIMIT_EXCEEDED", message: error.message }
-        };
-      }
 
       // Generic error message (consider hiding this message in production if it exposes internals)
       return { 

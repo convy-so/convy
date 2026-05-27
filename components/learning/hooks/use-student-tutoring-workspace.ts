@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
@@ -21,6 +21,12 @@ import {
 } from "@/lib/i18n/config";
 import { queryKeys } from "@/lib/query-keys";
 import type { getStudentLearningWorkspaceInitialData } from "@/lib/server/app-queries";
+import {
+  logTutoringDebug,
+  logTutoringWarn,
+  summarizeTutoringMessages,
+  summarizeTutoringText,
+} from "@/lib/learning/tutoring-debug";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }>;
 
@@ -57,6 +63,20 @@ function retryTransientLearningApiFailure(failureCount: number, error: Error) {
     error instanceof ApiClientError &&
     error.code === "SERVICE_UNAVAILABLE" &&
     failureCount < 2
+  );
+}
+
+function extractMessageText(message: UIMessage) {
+  const parts = Array.isArray(message.parts) ? message.parts : [];
+  return summarizeTutoringText(
+    parts
+      .map((part) =>
+        part && typeof part === "object" && "text" in part
+          ? String((part as { text?: unknown }).text ?? "")
+          : "",
+      )
+      .join(" "),
+    180,
   );
 }
 
@@ -141,62 +161,53 @@ export function useStudentTutoringWorkspace({
 
   const {
     messages: tutoringChatMessages,
-    sendMessage: sendTutoringChatMessage,
+    sendMessage: sendTutoringChatMessageRaw,
     setMessages: setTutoringChatMessages,
     status: tutoringChatStatus,
-    addToolResult: addTutoringToolResult,
+    addToolResult: addTutoringToolResultRaw,
+    error: tutoringChatError,
   } = useChat({
-    id: `learning-tutoring-${lessonId}-${selectedStudyLanguage}`,
+    id: `learning-tutoring-${lessonId}-${selectedStudyLanguage}-${tutoringSessionQuery.data?.data.sessionId ?? "pending"}`,
     messages: initialTutoringMessages,
     transport: tutoringTransport,
+    onError: (error) => {
+      logTutoringWarn("client:chat:error", {
+        lessonId,
+        sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+        status: tutoringChatStatus,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
   });
 
-  const tutoringSyncRef = useRef(0);
-  const activeTutoringSessionIdRef = useRef<string | null>(null);
+  const sendTutoringChatMessage = async (
+    message: Parameters<typeof sendTutoringChatMessageRaw>[0],
+  ) => {
+    logTutoringDebug("client:chat:send", {
+      lessonId,
+      sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+      status: tutoringChatStatus,
+      text: "parts" in message && Array.isArray(message.parts)
+        ? extractMessageText(message as UIMessage)
+        : null,
+    });
+    return sendTutoringChatMessageRaw(message);
+  };
 
-  useEffect(() => {
-    if (tutoringChatMessages.length === 0 && initialTutoringMessages.length > 0) {
-      setTutoringChatMessages(initialTutoringMessages);
-    }
-  }, [initialTutoringMessages, setTutoringChatMessages, tutoringChatMessages.length]);
+  const addTutoringToolResult = (
+    payload: Parameters<typeof addTutoringToolResultRaw>[0],
+  ) => {
+    logTutoringDebug("client:chat:add-tool-result", {
+      lessonId,
+      sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+      toolCallId: payload.toolCallId,
+      tool: payload.tool,
+      state: payload.state,
+    });
+    return addTutoringToolResultRaw(payload);
+  };
 
-  useEffect(() => {
-    const nextSessionId = tutoringSessionQuery.data?.data.sessionId ?? null;
-    if (!nextSessionId) {
-      activeTutoringSessionIdRef.current = null;
-      return;
-    }
 
-    if (activeTutoringSessionIdRef.current !== nextSessionId) {
-      activeTutoringSessionIdRef.current = nextSessionId;
-      tutoringSyncRef.current = initialTutoringMessages.length;
-      setTutoringChatMessages(initialTutoringMessages);
-    }
-  }, [
-    initialTutoringMessages,
-    setTutoringChatMessages,
-    tutoringSessionQuery.data?.data.sessionId,
-  ]);
-
-  useEffect(() => {
-    if (
-      tutoringChatStatus === "ready" &&
-      tutoringSessionQuery.data?.data.sessionId &&
-      tutoringChatMessages.length > tutoringSyncRef.current
-    ) {
-      tutoringSyncRef.current = tutoringChatMessages.length;
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.tutoring(lessonId, selectedStudyLanguage),
-      });
-    }
-  }, [
-    lessonId,
-    queryClient,
-    selectedStudyLanguage,
-    tutoringChatMessages.length,
-    tutoringChatStatus,
-    tutoringSessionQuery.data?.data.sessionId,
-  ]);
 
   const outOfSessionMutation = useMutation({
     mutationFn: async (input: {
@@ -238,7 +249,6 @@ export function useStudentTutoringWorkspace({
     },
     onSuccess: async () => {
       setTutoringChatMessages([]);
-      tutoringSyncRef.current = 0;
       toast.success("Session finished. The teacher report is being prepared.");
 
       await queryClient.invalidateQueries({
@@ -251,6 +261,48 @@ export function useStudentTutoringWorkspace({
       );
     },
   });
+
+  useEffect(() => {
+    logTutoringDebug("client:session:query-state", {
+      lessonId,
+      selectedStudyLanguage,
+      queryStatus: tutoringSessionQuery.status,
+      isPending: tutoringSessionQuery.isPending,
+      isError: tutoringSessionQuery.isError,
+      sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+      messageCount: tutoringSessionQuery.data?.data.messages.length ?? 0,
+    });
+  }, [
+    lessonId,
+    selectedStudyLanguage,
+    tutoringSessionQuery.data?.data.messages.length,
+    tutoringSessionQuery.data?.data.sessionId,
+    tutoringSessionQuery.isError,
+    tutoringSessionQuery.isPending,
+    tutoringSessionQuery.status,
+  ]);
+
+  useEffect(() => {
+    logTutoringDebug("client:chat:status", {
+      lessonId,
+      sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
+      status: tutoringChatStatus,
+      messageCount: tutoringChatMessages.length,
+      recentMessages: summarizeTutoringMessages(tutoringChatMessages.slice(-3)),
+      lastMessageRole: tutoringChatMessages.at(-1)?.role ?? null,
+      lastMessageText:
+        tutoringChatMessages.at(-1) && tutoringChatMessages.at(-1)?.role
+          ? extractMessageText(tutoringChatMessages.at(-1) as UIMessage)
+          : null,
+      error: tutoringChatError instanceof Error ? tutoringChatError.message : tutoringChatError ? String(tutoringChatError) : null,
+    });
+  }, [
+    lessonId,
+    tutoringChatError,
+    tutoringChatMessages,
+    tutoringChatStatus,
+    tutoringSessionQuery.data?.data.sessionId,
+  ]);
 
   const sessionState = tutoringSessionQuery.data?.data.sessionState ?? null;
   const tutoringInitializationState = useMemo(() => {
@@ -314,6 +366,26 @@ export function useStudentTutoringWorkspace({
     tutoringSessionQuery.error,
     tutoringSessionQuery.isError,
     tutoringSessionQuery.isPending,
+  ]);
+
+  useEffect(() => {
+    logTutoringDebug("client:init-state", {
+      lessonId,
+      status: tutoringInitializationState.status,
+      title: tutoringInitializationState.title,
+      message: tutoringInitializationState.message,
+      canUseTutoringChat: tutoringInitializationState.status === "ready",
+      selectedMembership: Boolean(selectedMembership),
+      selectedLesson: Boolean(selectedLesson),
+      needsOnboarding: selectedMembership?.needsOnboarding ?? null,
+    });
+  }, [
+    lessonId,
+    selectedLesson,
+    selectedMembership,
+    tutoringInitializationState.message,
+    tutoringInitializationState.status,
+    tutoringInitializationState.title,
   ]);
 
   return {

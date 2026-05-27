@@ -18,7 +18,6 @@ import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/survey-access";
-import { getRateLimitKey, apiRateLimiter } from "@/lib/ratelimit";
 import {
   deriveCreationMediaDecision,
 } from "@/lib/education/agent-tools";
@@ -97,18 +96,6 @@ export async function POST(
 ) {
   try {
     const session = await getVerifiedSession();
-    const rateLimitResult = await apiRateLimiter.limit(
-      getRateLimitKey(request, {
-        userId: session.user.id,
-        scope: "survey-create:post",
-      }),
-    );
-    if (!rateLimitResult.success) {
-      return apiError("RATE_LIMITED", "Rate limit exceeded", {
-        details: { retryAfter: rateLimitResult.reset },
-      });
-    }
-
     const { surveyId } = await params;
     const body = await request.json();
     const incomingMessages = Array.isArray(body.messages)

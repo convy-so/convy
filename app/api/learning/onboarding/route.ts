@@ -90,7 +90,6 @@ export async function POST(request: Request) {
       membership: prepared.membership,
       transcript: prepared.transcript,
       existingProfile: prepared.existingProfile,
-      existingStudentModel: prepared.existingStudentModel,
     });
 
     return result.toUIMessageStreamResponse({

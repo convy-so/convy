@@ -241,7 +241,7 @@ export function StudentLearningHome({
                   >
                     <div className="space-y-2">
                       <span className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
-                        {s.classroomStudent?.classroom.title ?? "Tutoring"}
+                        {s.classroomStudent?.classroom?.title ?? "Tutoring"}
                       </span>
                       <h3 className="text-lg font-bold text-slate-800 line-clamp-1">
                         {s.topic?.title || "General check-in"}

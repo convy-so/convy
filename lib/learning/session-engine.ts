@@ -39,16 +39,16 @@ export function buildLearningSessionState(
 
 export async function runTutoringSessionTurn(params: {
   state: LearningSessionState;
-    access: {
-      topic: {
-        id: string;
-        title: string;
-        sourceBoundary: Record<string, unknown>;
-        classroomId?: string | null;
-        classroom: Record<string, never>;
-      };
-      classroomStudent: { id: string; userId?: string | null };
+  access: {
+    topic: {
+      id: string;
+      title: string;
+      sourceBoundary: Record<string, unknown>;
+      classroomId?: string | null;
+      classroom: Record<string, never>;
     };
+    classroomStudent: { id: string; userId?: string | null };
+  };
   userMessage: string;
   runtimeContext?: TutoringRuntimeContext;
 }) {
@@ -56,12 +56,10 @@ export async function runTutoringSessionTurn(params: {
     topicId: params.access.topic.id,
     topicTitle: params.access.topic.title,
     sourceBoundary: params.access.topic.sourceBoundary as never,
-    classroomId: params.access.topic.classroomId,
-    classroomStudentId: params.access.classroomStudent.id,
     studentUserId: params.access.classroomStudent.userId,
     studyLanguage: params.runtimeContext?.studyLanguage ?? "en",
     state: params.state,
-    latestStudentMessage: params.userMessage,
+    interestProfile: null,
   });
 
   return {

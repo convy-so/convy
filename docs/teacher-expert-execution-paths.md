@@ -578,8 +578,7 @@ Entry points:
 
 What it does:
 - drafts versioned framework artifacts
-- publishes one version as active
-- generates runtime model state from the active framework
+- publishes one version as active (setting status to 'published' and updates framework's activeVersionId)
 
 Flow:
 ```mermaid
@@ -591,12 +590,11 @@ flowchart TD
   E --> F[publish version + set active version]
   F --> G[(expert_frameworks)]
   F --> H[(expert_framework_versions)]
-  F --> I[(expert_runtime_models)]
 ```
 
 Main tables:
 - `expertFrameworkVersions` at `db/schema/learning.ts:583`
-- `expertRuntimeModels` at `db/schema/learning.ts:787`
+- `expertFrameworks` at `db/schema/learning.ts:558`
 
 Important fields:
 - `version`
@@ -709,26 +707,15 @@ Review hotspots:
 - runtime validation on approval input
 - auditability of heuristic edits before approval
 
-## 9. Runtime Models and Evals
+## 9. Tutoring Runtime Configuration (Runtime Models)
 
-Entry points:
-- `app/[locale]/expert/runtime-models/page.tsx`
-- `app/[locale]/expert/evals/page.tsx`
-
-What they do:
-- runtime models page is mainly a read surface over generated runtime state
-- evals page is a shell into expert evaluation tooling
-
-Main table:
-- `expertRuntimeModels` at `db/schema/learning.ts:787`
-
-Important fields:
-- runtime model payload
-- framework version linkage
-- topic/classroom linkage
+What it does:
+- Rather than being stored in a separate database table, the runtime framework configuration (formerly `expertRuntimeModels`) is compiled dynamically at runtime when a student starts a tutoring session or a new turn begins.
+- The runtime loads the active framework version via `getTopicFramework` in `lib/learning/framework-runtime-storage.ts`, resolving topics and any classroom-specific framework overrides.
 
 Review hotspots:
-- consistency between active framework version and stored runtime model
+- Framework hierarchy lookup (topic override -> classroom override -> course default)
+- Active version caching or dynamic resolution overhead
 
 ## Cross-Cutting Tables
 

@@ -81,6 +81,7 @@ export const onboardingTurnPromptSpec: PromptSpec = {
   id: "learning-onboarding-turn",
   versionId: "2026-05-26.1",
   label: "Student Interest Onboarding",
+  systemPrompt: "Conduct a conversational interest onboarding intake.",
   description:
     "Production few-shot guidance for a conversational onboarding intake that must drive depth without sounding like a form.",
   constraints: [

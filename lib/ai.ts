@@ -24,6 +24,10 @@ import {
   type ToolLoopAgentOnFinishCallback,
 } from "ai";
 import { logUsage, type UsageLogInput } from "./billing/logger";
+import {
+  logTutoringDebug,
+  summarizeTutoringText,
+} from "@/lib/learning/tutoring-debug";
 
 import type { ContextBundle, PromptSpec } from "./ai-core";
 import type { PromptExample } from "@/lib/ai-core/types";
@@ -93,22 +97,6 @@ function getProviderName(model: LanguageModel) {
     : "google";
 }
 
-async function enforceAiRateLimit(userId?: string) {
-  if (!userId) {
-    return;
-  }
-
-  const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-  const { success, reset } = await expensiveAiRateLimiter.limit(userId);
-  if (success) {
-    return;
-  }
-
-  throw new Error(
-    `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${new Date(reset).toISOString()}`,
-  );
-}
-
 function createUsageLogInput(
   type: UsageLogInput["type"],
   model: LanguageModel,
@@ -157,8 +145,6 @@ export async function generateAIResponse(
     dynamicExamples?: PromptExample[];
   },
 ) {
-  await enforceAiRateLimit(options?.attribution?.userId);
-
   const model = options?.model ?? defaultModel;
   const resolvedPrompt = resolvePromptExecution({
     prompt,
@@ -211,8 +197,6 @@ export function streamAIResponse(
     dynamicExamples?: PromptExample[];
   },
 ) {
-  const rateLimitPromise = enforceAiRateLimit(options?.attribution?.userId);
-
   const model = options?.model ?? defaultModel;
   const resolvedPrompt = resolvePromptExecution({
     systemPrompt,
@@ -243,8 +227,6 @@ export function streamAIResponse(
       },
     },
     prepareStep: async () => {
-      // Ensure rate limit check completes before streaming
-      await rateLimitPromise;
       const preparedCache = await preparedCachePromise;
       return {
         system: preparedCache.systemPrompt,
@@ -271,14 +253,26 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     onFinish?: ToolLoopAgentOnFinishCallback<TOOLS>;
   },
 ) {
-  await enforceAiRateLimit(options.attribution?.userId);
-
   const model = options.model ?? defaultModel;
+  const isTutoringFeature =
+    typeof options.attribution?.feature === "string" &&
+    options.attribution.feature.includes("tutor");
+  if (isTutoringFeature) {
+    logTutoringDebug("ai:agent:start", {
+      feature: options.attribution?.feature ?? null,
+      model: getModelId(model),
+      messageCount: Array.isArray(messages) ? messages.length : null,
+      instructionLength: instructions.length,
+      toolNames: Object.keys(options.tools),
+      dynamicExampleCount: options.dynamicExamples?.length ?? 0,
+      promptPreview: summarizeTutoringText(instructions, 180),
+    });
+  }
 
   // Merge dynamic few-shot examples (from DB) into the instructions string
   const resolvedInstructions = options.dynamicExamples?.length
     ? resolvePromptExecution({
-        systemPrompt: instructions,
+      systemPrompt: instructions,
         dynamicExamples: options.dynamicExamples,
       }).systemPrompt
     : instructions;
@@ -290,6 +284,14 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     temperature: options.temperature ?? 0.3,
     maxOutputTokens: options.maxTokens ?? 1000,
     onFinish: (result) => {
+      if (isTutoringFeature) {
+        logTutoringDebug("ai:agent:finish", {
+          feature: options.attribution?.feature ?? null,
+          model: getModelId(model),
+          stepCount: result.steps.length,
+          totalUsage: result.totalUsage,
+        });
+      }
       logUsage(
         createUsageLogInput(
           "agent_loop",

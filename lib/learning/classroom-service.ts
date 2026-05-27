@@ -1,4 +1,4 @@
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -107,8 +107,8 @@ export async function getClassroomSurveyProgress(params: {
   
   const conversations = await getDb().query.surveyConversations.findMany({
     where: and(
-      sql`${surveyConversations.surveyId} IN ${surveyIds}`,
-      sql`${surveyConversations.participantId} IN ${studentIds}`
+      inArray(surveyConversations.surveyId, surveyIds),
+      inArray(surveyConversations.participantId, studentIds)
     ),
     orderBy: (table, { desc }) => [desc(table.updatedAt)],
   });

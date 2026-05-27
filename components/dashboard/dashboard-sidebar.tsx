@@ -85,20 +85,11 @@ export function DashboardSidebar({
     }
 
     if (isStudent) {
-      const studentNav = [
+      return [
         { name: t("Dashboard"), href: "/student/dashboard", icon: LayoutDashboard, exact: true },
         { name: "My Classes", href: "/student/classes", icon: GraduationCap },
+        { name: "Interests Profile", href: "/student/profile", icon: Settings2 },
       ];
-      
-      if (activeClassroomId) {
-        studentNav.push({
-          name: "Interests Profile",
-          href: "/student/profile",
-          icon: Settings2,
-        });
-      }
-      
-      return studentNav;
     }
 
     return [
@@ -113,7 +104,6 @@ export function DashboardSidebar({
     if (isStudent) {
       return [
         { name: "Notifications", href: "/student/notifications", icon: Bell },
-        { name: t("Profile"), href: studentProfileHref, icon: UserIcon },
         { name: t("Settings"), href: "/student/settings", icon: Settings },
       ];
     }

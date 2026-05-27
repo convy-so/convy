@@ -12,7 +12,6 @@ import {
   toPersistedUIChatMessages,
   toVisibleConversationMessages,
 } from "@/lib/chat-ui-messages";
-import { getRateLimitKey, apiRateLimiter } from "@/lib/ratelimit";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
@@ -63,15 +62,6 @@ export async function POST(
 ) {
   try {
     const session = await getVerifiedSession();
-    const rateLimitResult = await apiRateLimiter.limit(
-      getRateLimitKey(request, { userId: session.user.id, scope: "survey-sample:post" }),
-    );
-    if (!rateLimitResult.success) {
-      return apiError("RATE_LIMITED", "Rate limit exceeded", {
-        details: { retryAfter: rateLimitResult.reset },
-      });
-    }
-
     const { surveyId } = await params;
     const body = parseSampleRouteBody(await request.json());
     return submitSampleTurn({ surveyId, session, body });

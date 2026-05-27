@@ -1,4 +1,5 @@
 import { appendLearningMessage, logLearningInteraction } from "@/lib/learning/storage";
+import { logTutoringDebug } from "@/lib/learning/tutoring-debug";
 
 type BaseTurnLogParams = {
   sessionId: string;
@@ -9,6 +10,12 @@ type BaseTurnLogParams = {
 };
 
 export async function logUserTurn(params: BaseTurnLogParams) {
+  logTutoringDebug("turn-log:user:start", {
+    sessionId: params.sessionId,
+    topicId: params.topicId,
+    contentLength: params.content.length,
+    metadataKeys: Object.keys(params.metadata),
+  });
   await appendLearningMessage({
     sessionId: params.sessionId,
     role: "user",
@@ -24,9 +31,19 @@ export async function logUserTurn(params: BaseTurnLogParams) {
     content: params.content,
     metadata: params.metadata,
   });
+  logTutoringDebug("turn-log:user:done", {
+    sessionId: params.sessionId,
+    topicId: params.topicId,
+  });
 }
 
 export async function logAssistantTurn(params: BaseTurnLogParams) {
+  logTutoringDebug("turn-log:assistant:start", {
+    sessionId: params.sessionId,
+    topicId: params.topicId,
+    contentLength: params.content.length,
+    metadataKeys: Object.keys(params.metadata),
+  });
   await appendLearningMessage({
     sessionId: params.sessionId,
     role: "assistant",
@@ -42,6 +59,10 @@ export async function logAssistantTurn(params: BaseTurnLogParams) {
     content: params.content,
     metadata: params.metadata,
   });
+  logTutoringDebug("turn-log:assistant:done", {
+    sessionId: params.sessionId,
+    topicId: params.topicId,
+  });
 }
 
 export function buildScopeRedirectResponse(params: {
@@ -55,6 +76,11 @@ export function buildScopeRedirectResponse(params: {
     streamId: `redirect-${crypto.randomUUID()}`,
     text: params.redirectMessage,
     async persist() {
+      logTutoringDebug("turn-log:redirect:persist", {
+        sessionId: params.sessionId,
+        topicId: params.topicId,
+        classification: params.classification,
+      });
       await logAssistantTurn({
         sessionId: params.sessionId,
         classroomStudentId: params.classroomStudentId,

@@ -1,5 +1,10 @@
 import { logBraintrustTrace } from "@/lib/ai/braintrust";
 import { persistTutorTurnOutcome } from "@/lib/learning/storage";
+import {
+  logTutoringDebug,
+  logTutoringWarn,
+  summarizeTutoringText,
+} from "@/lib/learning/tutoring-debug";
 
 import type { FinalizeTutoringTurnParams } from "@/lib/learning/tutoring-turn-types";
 
@@ -24,7 +29,23 @@ function getLatestAssessmentResult(
 export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   const lastStep = params.result.steps.at(-1);
   const assistantText = lastStep?.text?.trim();
-  if (!assistantText) return;
+  logTutoringDebug("turn:finalize:start", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    stepCount: params.result.steps.length,
+    assistantText: assistantText ? summarizeTutoringText(assistantText, 180) : null,
+    previousAssistantText: params.previousAssistantText
+      ? summarizeTutoringText(params.previousAssistantText, 180)
+      : null,
+  });
+  if (!assistantText) {
+    logTutoringWarn("turn:finalize:empty-assistant-text", {
+      topicId: params.topicId,
+      tutorSessionId: params.tutorSessionId,
+      stepCount: params.result.steps.length,
+    });
+    return;
+  }
 
   const latestAssessment = getLatestAssessmentResult(params.result.steps);
   const evidence = [...params.prepared.nextState.recentEvidence];
@@ -44,6 +65,13 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     recentMessageSummary: [params.latestUserText, assistantText].join("\n").slice(-1200),
     turnCount: params.state.turnCount + 1,
   };
+  logTutoringDebug("turn:finalize:next-state", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    turnCount: nextState.turnCount,
+    evidenceCount: nextState.recentEvidence.length,
+    frameworkVersionId: params.prepared.activeFramework.frameworkVersionId,
+  });
 
   await persistTutorTurnOutcome({
     sessionId: params.tutorSessionId,
@@ -56,6 +84,11 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     },
     interactionMetadata: {},
     nextState,
+    expectedStateVersion: params.expectedStateVersion,
+  });
+  logTutoringDebug("turn:finalize:persisted", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
     expectedStateVersion: params.expectedStateVersion,
   });
 
@@ -77,4 +110,8 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
       mem0State: params.prepared.teachingPlaybookState.status,
     },
   }).catch(() => undefined);
+  logTutoringDebug("turn:finalize:braintrust-trace-requested", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+  });
 }

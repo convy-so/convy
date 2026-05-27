@@ -5,7 +5,6 @@ import {
   courses,
   expertFrameworks,
   expertFrameworkVersions,
-  expertRuntimeModels,
 } from "@/db/schema";
 
 async function main() {
@@ -33,9 +32,6 @@ async function main() {
   const versions = await db.query.expertFrameworkVersions.findMany({
     where: inArray(expertFrameworkVersions.frameworkId, frameworkIds),
   });
-  const runtimeModels = await db.query.expertRuntimeModels.findMany({
-    where: inArray(expertRuntimeModels.frameworkId, frameworkIds),
-  });
 
   for (const framework of frameworks) {
     const frameworkVersions = versions.filter(
@@ -46,9 +42,6 @@ async function main() {
     );
     const publishedVersions = frameworkVersions.filter(
       (version) => version.status === "published",
-    );
-    const runtimes = runtimeModels.filter(
-      (model) => model.frameworkId === framework.frameworkId,
     );
 
     console.log("---");
@@ -61,7 +54,6 @@ async function main() {
       activeVersionSeed: activeVersion?.seedSource ?? null,
       versionCount: frameworkVersions.length,
       publishedVersionCount: publishedVersions.length,
-      runtimeModelCount: runtimes.length,
       uiWouldShowLive: Boolean(
         activeVersion && activeVersion.status === "published",
       ),

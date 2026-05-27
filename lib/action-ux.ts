@@ -42,9 +42,6 @@ function translateCode(code: string, fallback?: string): string {
       return "You don't have permission for this action.";
     case "NOT_FOUND":
       return "We couldn't find what you were looking for.";
-    case "RATE_LIMIT_EXCEEDED":
-    case "RATE_LIMITED":
-      return fallback || "You're doing that too fast. Please wait a moment.";
     case "SERVICE_UNAVAILABLE":
       return fallback || "A required service is temporarily unavailable. Please try again.";
     case "CONFLICT":
