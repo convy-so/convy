@@ -16,12 +16,12 @@ import {
   Bell,
   Inbox,
   Settings2,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
-import { useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
@@ -54,14 +54,9 @@ export function DashboardSidebar({
 }) {
   const { user } = useAuth();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const selectedClassroomId = searchParams.get("classroomId");
-  
-  const pathnameClassroomIdMatch = pathname.match(/\/student\/classes\/([^/]+)/);
-  const activeClassroomId = selectedClassroomId || (pathnameClassroomIdMatch ? pathnameClassroomIdMatch[1] : null);
 
   const learningMeQuery = useQuery({
     queryKey: queryKeys.learning.me,
@@ -73,8 +68,6 @@ export function DashboardSidebar({
 
   const isStudent = viewerAccess.authRole === "student" || learningMeQuery.data?.role === "student";
   const isAdminOrExpert = viewerAccess.authRole === "admin" || viewerAccess.authRole === "expert";
-
-  const studentProfileHref = "/student/profile";
 
   const navigation = useMemo(() => {
     if (isAdminOrExpert) {
@@ -89,6 +82,7 @@ export function DashboardSidebar({
         { name: t("Dashboard"), href: "/student/dashboard", icon: LayoutDashboard, exact: true },
         { name: "My Classes", href: "/student/classes", icon: GraduationCap },
         { name: "Interests Profile", href: "/student/profile", icon: Settings2 },
+        { name: "Surveys", href: "/student/surveys", icon: ClipboardList },
       ];
     }
 
@@ -98,7 +92,7 @@ export function DashboardSidebar({
       { name: "Surveys", href: "/dashboard/surveys", icon: MessageSquare },
       { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
     ];
-  }, [activeClassroomId, isAdminOrExpert, isStudent, t]);
+  }, [isAdminOrExpert, isStudent, t]);
 
   const bottomNavigation = useMemo(() => {
     if (isStudent) {
@@ -114,7 +108,7 @@ export function DashboardSidebar({
       { name: t("Profile"), href: "/dashboard/profile", icon: UserIcon },
       { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
     ];
-  }, [isStudent, studentProfileHref, t]);
+  }, [isStudent, t]);
 
   const handleSignOut = async () => {
     await authClient.signOut({

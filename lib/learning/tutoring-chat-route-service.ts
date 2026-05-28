@@ -5,38 +5,32 @@ import { buildScopeRedirectResponse, logUserTurn } from "@/lib/learning/tutoring
 import {
   logTutoringDebug,
   summarizeTutoringText,
+  measureTutoringStep,
 } from "@/lib/learning/tutoring-debug";
 
 export async function evaluateTutoringScope(params: {
   topicTitle: string;
   latestUserText: string;
 }) {
-  logTutoringDebug("scope:evaluate:start", {
+  return measureTutoringStep("scope:evaluate", {
     topicTitle: params.topicTitle,
     latestUserText: summarizeTutoringText(params.latestUserText, 180),
-  });
-  return evaluateScopePolicy({
-    feature: "tutoring_chat",
-    objective: `Help the student learn ${params.topicTitle} using uploaded course materials`,
-    currentPhase: "active tutoring session",
-    activeTopic: params.topicTitle,
-    latestUserMessage: params.latestUserText,
-    strictMode: true,
-    driftCount: 0,
-    allowedDetours: [
-      "brief clarification of the current concept",
-      "asking what a current term means",
-      "replying in another supported language while staying on lesson",
-    ],
-  }).then((decision) => {
-    logTutoringDebug("scope:evaluate:done", {
-      topicTitle: params.topicTitle,
-      shouldRedirect: decision.shouldRedirect,
-      classification: decision.classification,
-      redirectMessage: summarizeTutoringText(decision.redirectMessage, 180),
-    });
-    return decision;
-  });
+  }, async () =>
+    await evaluateScopePolicy({
+      feature: "tutoring_chat",
+      objective: `Help the student learn ${params.topicTitle} using uploaded course materials`,
+      currentPhase: "active tutoring session",
+      activeTopic: params.topicTitle,
+      latestUserMessage: params.latestUserText,
+      strictMode: true,
+      driftCount: 0,
+      allowedDetours: [
+        "brief clarification of the current concept",
+        "asking what a current term means",
+        "replying in another supported language while staying on lesson",
+      ],
+    }),
+  );
 }
 
 export async function maybeHandleScopeRedirect(params: {

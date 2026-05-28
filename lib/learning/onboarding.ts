@@ -1,7 +1,6 @@
 import type { UIMessage } from "ai";
 import { z } from "zod";
 
-import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
 import { generateStructuredOutput, streamUiText } from "@/lib/ai/runtime";
 import {
   buildInterestOnboardingConversationPrompt,
@@ -53,23 +52,6 @@ export async function runInterestOnboardingTurn(params: {
 }) {
   const transcript = messagesToTranscript(params.messages);
   const now = new Date().toISOString();
-  const latestUserMessage =
-    [...params.messages].reverse().find((message) => message.role === "user")
-      ?.content ?? "";
-  const dynamicExamples = await getDynamicFewShotExamples({
-    feature: "learning_onboarding",
-    limit: 3,
-    context: [
-      params.studentName,
-      latestUserMessage,
-      params.existingProfile?.primaryInterests
-        .map((interest) => interest.label)
-        .join(", "),
-      params.existingProfile?.aspirations.join(", "),
-    ]
-      .filter(Boolean)
-      .join(" | "),
-  });
 
   const raw = await generateStructuredOutput({
     schema: onboardingTurnSchema,
@@ -79,7 +61,6 @@ export async function runInterestOnboardingTurn(params: {
       transcript,
     }),
     promptSpec: onboardingTurnPromptSpec,
-    dynamicExamples,
     maxOutputTokens: 1100,
   });
 
@@ -106,23 +87,6 @@ export async function streamInterestOnboardingTurn(params: {
   messages: OnboardingMessage[];
 }) {
   const transcript = messagesToTranscript(params.messages);
-  const latestUserMessage =
-    [...params.messages].reverse().find((message) => message.role === "user")
-      ?.content ?? "";
-  const dynamicExamples = await getDynamicFewShotExamples({
-    feature: "learning_onboarding",
-    limit: 3,
-    context: [
-      params.studentName,
-      latestUserMessage,
-      params.existingProfile?.primaryInterests
-        .map((interest) => interest.label)
-        .join(", "),
-      params.existingProfile?.aspirations.join(", "),
-    ]
-      .filter(Boolean)
-      .join(" | "),
-  });
 
   return streamUiText({
     messages: toUIMessages(params.messages),
@@ -134,7 +98,6 @@ export async function streamInterestOnboardingTurn(params: {
     maxOutputTokens: 280,
     temperature: 0.4,
     promptSpec: onboardingTurnPromptSpec,
-    dynamicExamples,
   });
 }
 

@@ -1,5 +1,6 @@
 import { and, asc, eq, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { unstable_cache } from "next/cache";
 
 import { getDb } from "@/db";
 import {
@@ -207,4 +208,14 @@ export async function getActiveExpertFrameworkBundle(
         ? "deep_default"
         : "expert_authored",
   });
+}
+
+const cachedGetActiveExpertFrameworkBundle = unstable_cache(
+  async (topicId: string) => await getActiveExpertFrameworkBundle(topicId),
+  ["learning-active-expert-framework-bundle"],
+  { revalidate: 60 },
+);
+
+export async function getCachedActiveExpertFrameworkBundle(topicId: string) {
+  return await cachedGetActiveExpertFrameworkBundle(topicId);
 }

@@ -396,13 +396,30 @@ export function LiveSessionClient({
                                 }
                                 acceptsImageUpload={args?.acceptsImageUpload === true}
                                 onSubmit={({ answerText, attachments }) => {
+                                  const resolvedQuizId =
+                                    typeof args?.quizId === "string"
+                                      ? args.quizId
+                                      : resolvedToolCallId;
+                                  const resolvedConceptKey =
+                                    typeof args?.conceptKey === "string"
+                                      ? args.conceptKey
+                                      : "";
+                                  const resolvedQuestionText =
+                                    typeof args?.questionText === "string"
+                                      ? args.questionText
+                                      : "";
+
                                   addTutoringToolResult({
                                     toolCallId: resolvedToolCallId,
                                     tool: toolName ?? "administer_quiz",
                                     state: "output-available",
                                     output: {
+                                      quizId: resolvedQuizId,
+                                      conceptKey: resolvedConceptKey,
+                                      questionText: resolvedQuestionText,
                                       answerText,
                                       hasAttachments: !!attachments,
+                                      attachmentCount: attachments?.length ?? 0,
                                     },
                                   } as Parameters<typeof addTutoringToolResult>[0]);
                                   
@@ -427,6 +444,11 @@ export function LiveSessionClient({
                           return (
                             <div key={index} className="w-full min-w-[300px]">
                               <GradeCard
+                                conceptKey={
+                                  typeof args?.conceptKey === "string"
+                                    ? args.conceptKey
+                                    : undefined
+                                }
                                 score={
                                   args?.score !== undefined && typeof args.score === "number"
                                     ? args.score

@@ -12,6 +12,7 @@ const rerankSchema = z.object({
 interface BingImageResult {
   name: string;
   hostPageDisplayUrl: string;
+  hostPageUrl?: string;
   contentUrl: string;
   width: number;
   height: number;
@@ -26,6 +27,126 @@ interface YouTubeVideoResult {
     channelTitle: string;
     publishedAt: string;
   };
+}
+
+export type MediaToolErrorCode =
+  | "config_missing"
+  | "provider_request_failed"
+  | "no_results"
+  | "rerank_failed"
+  | "no_suitable_result"
+  | "duplicate_call_blocked"
+  | "pipeline_error";
+
+export type MediaToolFailure = {
+  success: false;
+  mediaType: "image" | "video";
+  errorCode: MediaToolErrorCode;
+  reason: string;
+  retryHint: string;
+  suggestedAction: string;
+  query: string;
+  provider?: string;
+};
+
+export type ImageToolSuccess = {
+  success: true;
+  mediaType: "image";
+  query: string;
+  url: string;
+  reason: string;
+  title: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  provider: "bing";
+  assetId: string;
+  width: number;
+  height: number;
+};
+
+export type VideoToolSuccess = {
+  success: true;
+  mediaType: "video";
+  query: string;
+  url: string;
+  watchUrl: string;
+  reason: string;
+  title: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  provider: "youtube";
+  assetId: string;
+  channelTitle: string;
+  publishedAt: string;
+};
+
+export type MediaToolResult =
+  | MediaToolFailure
+  | ImageToolSuccess
+  | VideoToolSuccess;
+
+function createMediaFailure(input: {
+  mediaType: "image" | "video";
+  errorCode: MediaToolErrorCode;
+  reason: string;
+  retryHint: string;
+  suggestedAction: string;
+  query: string;
+  provider?: string;
+}): MediaToolFailure {
+  return {
+    success: false,
+    mediaType: input.mediaType,
+    errorCode: input.errorCode,
+    reason: input.reason,
+    retryHint: input.retryHint,
+    suggestedAction: input.suggestedAction,
+    query: input.query,
+    provider: input.provider,
+  };
+}
+
+function createMediaFailureFromError(input: {
+  error: unknown;
+  mediaType: "image" | "video";
+  query: string;
+  provider: "bing" | "youtube";
+}): MediaToolFailure {
+  const message = input.error instanceof Error ? input.error.message : "Unknown pipeline error";
+
+  if (message.includes("API_KEY is not set")) {
+    return createMediaFailure({
+      mediaType: input.mediaType,
+      errorCode: "config_missing",
+      reason: `${input.provider} search is unavailable because the provider API key is not configured.`,
+      retryHint: "Continue tutoring without external media for this turn.",
+      suggestedAction: "Do not retry this tool call in this response.",
+      query: input.query,
+      provider: input.provider,
+    });
+  }
+
+  if (message.includes("failed with status")) {
+    return createMediaFailure({
+      mediaType: input.mediaType,
+      errorCode: "provider_request_failed",
+      reason: `${input.provider} search failed while fetching candidates.`,
+      retryHint: "Retry later or continue without media if it is not essential.",
+      suggestedAction: "Avoid repeating the same query immediately.",
+      query: input.query,
+      provider: input.provider,
+    });
+  }
+
+  return createMediaFailure({
+    mediaType: input.mediaType,
+    errorCode: "pipeline_error",
+    reason: `${input.provider} media search could not complete for this query.`,
+    retryHint: "Only retry if showing media is essential and you can reformulate the query more narrowly.",
+    suggestedAction: "If you retry, use a more specific educational query.",
+    query: input.query,
+    provider: input.provider,
+  });
 }
 
 export async function searchBingImages(query: string, imageType: string): Promise<BingImageResult[]> {
@@ -94,7 +215,7 @@ export async function rerankImages(
   concept: string,
   studentContext: string,
   candidates: BingImageResult[]
-): Promise<{ index: number; reason: string }> {
+): Promise<{ index: number; reason: string; errorCode?: "rerank_failed" }> {
   const formatted = candidates
     .map(
       (c, i) =>
@@ -126,7 +247,11 @@ Respond with a JSON object only, no other text:
     });
   } catch (error) {
     log.error("Image reranking failed", serializeError(error));
-    return { index: -1, reason: "Reranking failed" };
+    return {
+      index: -1,
+      reason: "Could not confidently verify a high-quality educational image from the candidates.",
+      errorCode: "rerank_failed",
+    };
   }
 }
 
@@ -134,7 +259,7 @@ export async function rerankVideos(
   concept: string,
   studentContext: string,
   candidates: YouTubeVideoResult[]
-): Promise<{ index: number; reason: string }> {
+): Promise<{ index: number; reason: string; errorCode?: "rerank_failed" }> {
   const formatted = candidates
     .map(
       (c, i) =>
@@ -170,7 +295,11 @@ Respond with JSON only:
     });
   } catch (error) {
     log.error("Video reranking failed", serializeError(error));
-    return { index: -1, reason: "Reranking failed" };
+    return {
+      index: -1,
+      reason: "Could not confidently verify a strong educational video from the candidates.",
+      errorCode: "rerank_failed",
+    };
   }
 }
 
@@ -179,28 +308,63 @@ export async function executeImageSearchPipeline(
   imageType: string,
   concept: string,
   studentContext: string
-) {
+): Promise<MediaToolResult> {
   try {
     const candidates = await searchBingImages(query, imageType);
     if (candidates.length === 0) {
-      return { success: false, reason: "No images found." };
+      return createMediaFailure({
+        mediaType: "image",
+        errorCode: "no_results",
+        reason: "No image candidates matched the query.",
+        retryHint: "Try a more specific educational query with the concept and desired visual type.",
+        suggestedAction: "Add terms like labeled diagram, cross-section, or annotated photo.",
+        query,
+        provider: "bing",
+      });
     }
 
-    const { index, reason } = await rerankImages(concept, studentContext, candidates);
+    const { index, reason, errorCode } = await rerankImages(concept, studentContext, candidates);
     if (index === -1 || !candidates[index]) {
-      return { success: false, reason: "No suitable image found after reranking." };
+      return createMediaFailure({
+        mediaType: "image",
+        errorCode: errorCode ?? "no_suitable_result",
+        reason,
+        retryHint:
+          errorCode === "rerank_failed"
+            ? "Continue without an image unless it is essential."
+            : "Try a narrower query that names the exact concept and visual format.",
+        suggestedAction:
+          errorCode === "rerank_failed"
+            ? "Do not repeat the same tool call immediately."
+            : "Prefer queries such as '<concept> labeled diagram' or '<concept> microscope photo'.",
+        query,
+        provider: "bing",
+      });
     }
 
     const selected = candidates[index];
     return {
       success: true,
+      mediaType: "image",
+      query,
       url: selected.contentUrl,
       reason,
-      mediaType: "image",
+      title: selected.name,
+      sourceLabel: selected.hostPageDisplayUrl,
+      sourceUrl: selected.hostPageUrl ?? selected.contentUrl,
+      provider: "bing",
+      assetId: selected.contentUrl,
+      width: selected.width,
+      height: selected.height,
     };
   } catch (error) {
     log.error("Image search pipeline failed", serializeError(error));
-    return { success: false, reason: "Pipeline error" };
+    return createMediaFailureFromError({
+      error,
+      mediaType: "image",
+      query,
+      provider: "bing",
+    });
   }
 }
 
@@ -208,27 +372,63 @@ export async function executeVideoSearchPipeline(
   query: string,
   concept: string,
   studentContext: string
-) {
+): Promise<MediaToolResult> {
   try {
     const candidates = await searchYouTubeVideos(query);
     if (candidates.length === 0) {
-      return { success: false, reason: "No videos found." };
+      return createMediaFailure({
+        mediaType: "video",
+        errorCode: "no_results",
+        reason: "No video candidates matched the query.",
+        retryHint: "Try a more specific explainer-style query.",
+        suggestedAction: "Add words like explained, tutorial, animation, or experiment.",
+        query,
+        provider: "youtube",
+      });
     }
 
-    const { index, reason } = await rerankVideos(concept, studentContext, candidates);
+    const { index, reason, errorCode } = await rerankVideos(concept, studentContext, candidates);
     if (index === -1 || !candidates[index]) {
-      return { success: false, reason: "No suitable video found after reranking." };
+      return createMediaFailure({
+        mediaType: "video",
+        errorCode: errorCode ?? "no_suitable_result",
+        reason,
+        retryHint:
+          errorCode === "rerank_failed"
+            ? "Continue without a video unless motion is essential for this explanation."
+            : "Try a shorter, more focused query with the exact process or experiment.",
+        suggestedAction:
+          errorCode === "rerank_failed"
+            ? "Do not repeat the same tool call immediately."
+            : "Prefer queries like '<concept> explained', '<concept> animation', or '<concept> experiment'.",
+        query,
+        provider: "youtube",
+      });
     }
 
     const selected = candidates[index];
     return {
       success: true,
-      url: "https://www.youtube.com/embed/" + selected.id.videoId,
-      reason,
       mediaType: "video",
+      query,
+      url: "https://www.youtube.com/embed/" + selected.id.videoId,
+      watchUrl: "https://www.youtube.com/watch?v=" + selected.id.videoId,
+      reason,
+      title: selected.snippet.title,
+      sourceLabel: selected.snippet.channelTitle,
+      sourceUrl: "https://www.youtube.com/watch?v=" + selected.id.videoId,
+      provider: "youtube",
+      assetId: selected.id.videoId,
+      channelTitle: selected.snippet.channelTitle,
+      publishedAt: selected.snippet.publishedAt,
     };
   } catch (error) {
     log.error("Video search pipeline failed", serializeError(error));
-    return { success: false, reason: "Pipeline error" };
+    return createMediaFailureFromError({
+      error,
+      mediaType: "video",
+      query,
+      provider: "youtube",
+    });
   }
 }

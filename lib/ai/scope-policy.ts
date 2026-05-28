@@ -2,6 +2,7 @@ import { Output, generateText } from "ai";
 import { z } from "zod";
 
 import { analysisModel } from "@/lib/ai/language-models";
+import { measureTutoringStep } from "@/lib/learning/tutoring-debug";
 
 export type ScopeClassification =
   | "on_task"
@@ -192,15 +193,24 @@ export async function evaluateScopePolicy(
   }
 
   try {
-    const { output } = await generateText({
-      model: analysisModel,
-      output: Output.object({
-        schema: scopeDecisionSchema,
-      }),
-      temperature: 0,
-      maxOutputTokens: 220,
-      prompt: buildPolicyPrompt(normalizedInput),
-    });
+    const { output } = await measureTutoringStep(
+      "scope:evaluate:model",
+      {
+        feature: normalizedInput.feature,
+        objective: normalizedInput.objective,
+        activeTopic: normalizedInput.activeTopic ?? null,
+      },
+      async () =>
+        await generateText({
+          model: analysisModel,
+          output: Output.object({
+            schema: scopeDecisionSchema,
+          }),
+          temperature: 0,
+          maxOutputTokens: 220,
+          prompt: buildPolicyPrompt(normalizedInput),
+        }),
+    );
 
     return {
       classification: output.classification,
