@@ -1,6 +1,8 @@
 import Navbar from "@/components/navbar";
 import HeroSection from "@/components/hero-section";
-import InsightsSection from "@/components/insights-section";
+import WhyWeWinSection from "@/components/why-we-win-section";
+import VideoSection from "@/components/video-section";
+import VisualShowcaseSection from "@/components/visual-showcase-section";
 import FeaturesSection from "@/components/features-section";
 import TestimonialsSection from "@/components/testimonials-section";
 import FAQSection from "@/components/faq-section";
@@ -12,9 +14,12 @@ export default async function Home() {
     <>
       <Navbar />
       <HeroSection />
-      <InsightsSection />
+      {/* <WhyWeWinSection /> */}
+      <VisualShowcaseSection />
+      <VideoSection />
+
       <FeaturesSection />
-      <TestimonialsSection />
+      {/* <TestimonialsSection /> */}
       <FAQSection />
       <CtaSection />
       <FooterSection />

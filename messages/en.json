@@ -696,7 +696,7 @@
     "Landing":  {
                     "Navbar":  {
                                    "SignIn":  "Sign in",
-                                   "GetStarted":  "Try Convy",
+                                   "GetStarted":  "Get started",
                                    "Dashboard":  "Dashboard"
                                },
                     "Hero":  {
