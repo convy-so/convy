@@ -1,82 +1,58 @@
-import { FaMagic, FaDatabase, FaBrain, FaFileAlt } from "react-icons/fa";
-
-const featureCards = [
-  {
-    icon: FaMagic,
-    iconBg: "bg-[#0BA5EC]",
-    title: "Design learning flows with AI",
-    description:
-      "Describe the topic, goal, or teaching outcome you want and Convyy helps shape the tutoring flow for you.",
-  },
-  {
-    icon: FaDatabase,
-    iconBg: "bg-[#22C55E]",
-    title: "Personalized learning spaces",
-    description:
-      "Create teacher-owned classrooms, invite students, define topics, and support learners with adaptive AI tutoring.",
-  },
-  {
-    icon: FaBrain,
-    iconBg: "bg-[#6366F1]",
-    title: "Expert-guided teaching systems",
-    description:
-      "Combine classroom teaching, expert review, and adaptive tutoring so the system keeps improving with use.",
-  },
-  {
-    icon: FaFileAlt,
-    iconBg: "bg-[#0EA5E9]",
-    title: "Reports that guide intervention",
-    description:
-      "Get summaries, patterns, readiness signals, and next actions from each student conversation without manual review.",
-  },
-];
+import Image from "next/image";
 
 export default function FeaturesSection() {
   return (
-    <section className="bg-[#FAFAFA] p-[12px]">
-      <div className="mx-auto max-w-[1920px] px-4 py-10 sm:px-6 sm:py-12 lg:px-12">
-        <div className="mx-auto max-w-4xl">
-          <div className="mb-12 text-center md:mb-16">
-            <p
-              className="mb-4 text-[20px] font-normal italic leading-[30px] tracking-[-0.24px] text-[#8D8D8D] md:text-[32px] md:leading-[44px] md:tracking-[-0.32px]"
-              style={{ fontFamily: "var(--font-fasthand)" }}
-            >
-              What you get
-            </p>
-            <h2 className="mb-4 text-[28px] font-[500] leading-[36px] tracking-[-0.48px] text-[#080808] md:text-[40px] md:leading-[50px] md:tracking-[-0.64px]">
+    <section id="features" className="bg-white px-4 py-16 sm:px-6 lg:px-12">
+      <div className="mx-auto max-w-[1200px]">
+        <div className="flex flex-col items-center gap-12 lg:flex-row lg:gap-20">
+          {/* Left side: Text */}
+          <div className="w-full lg:w-[45%]">
+            <h2 className="mb-4 text-[32px] font-[500] leading-[40px] tracking-[-1px] text-[#080808] md:text-[44px] md:leading-[52px]">
               Everything you need to deliver adaptive learning.
             </h2>
-            <p className="mx-auto max-w-3xl text-[18px] font-normal leading-[26px] tracking-normal text-[#696969] md:text-[22px] md:leading-[32px]">
-              Build classroom experiences that help students learn in a more
-              personal, responsive, and measurable way.
+            <p className="mb-10 text-[18px] font-normal leading-[28px] text-[#696969] md:text-[20px] md:leading-[30px]">
+              Build classroom experiences that help students learn in a more personal, responsive, and measurable way.
             </p>
+
+            <div className="space-y-6">
+              <div className="flex items-start gap-4">
+                <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#EFF3F7] text-[14px] font-[500] text-[#5A6B7D]">
+                  1
+                </span>
+                <p className="mt-0.5 text-[16px] leading-[24px] text-[#4E5661]">
+                  Design learning flows with AI
+                </p>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#EFF3F7] text-[14px] font-[500] text-[#5A6B7D]">
+                  2
+                </span>
+                <p className="mt-0.5 text-[16px] leading-[24px] text-[#4E5661]">
+                  Personalize learning spaces
+                </p>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#EFF3F7] text-[14px] font-[500] text-[#5A6B7D]">
+                  3
+                </span>
+                <p className="mt-0.5 text-[16px] leading-[24px] text-[#4E5661]">
+                  Gain actionable learning insights
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-6">
-            {featureCards.map((card) => {
-              const Icon = card.icon;
-
-              return (
-                <div
-                  key={card.title}
-                  className="flex flex-col gap-4 rounded-[24px] border border-gray-200 bg-[#FAFAFA] p-6 md:col-span-6"
-                >
-                  <div
-                    className={`flex h-[44px] w-[44px] items-center justify-center rounded-full ${card.iconBg}`}
-                  >
-                    <Icon className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="mb-1 text-[20px] font-[500] leading-[26px] tracking-[-0.24px] text-[#080808]">
-                      {card.title}
-                    </h3>
-                    <p className="text-[16px] font-normal leading-[22px] text-[#696969]">
-                      {card.description}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Right side: Image */}
+          <div className="w-full lg:w-[55%]">
+            <div className="rounded-[24px] bg-[#F7F7F7] p-8 flex items-center justify-center border border-gray-100 shadow-sm overflow-hidden h-[400px]">
+              <Image
+                src="/nexura-integrations-ref.png"
+                alt="Convyy Integrations"
+                width={800}
+                height={600}
+                className="h-full w-full object-contain mix-blend-multiply scale-[1.2]"
+              />
+            </div>
           </div>
         </div>
       </div>
