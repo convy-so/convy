@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 import { generateStructuredOutput } from "@/lib/ai/runtime";
+import { renderGroundingUnits } from "@/lib/learning/prompt-serializers";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
+import { selectGroundingUnitsForPrompt } from "@/lib/learning/grounding-units";
 import { buildAssessmentPreviewPrompt } from "@/lib/learning/prompts/session-engine";
 import {
   createDefaultLearningSessionState,
@@ -60,6 +62,8 @@ export async function runTutoringSessionTurn(params: {
     studyLanguage: params.runtimeContext?.studyLanguage ?? "en",
     state: params.state,
     interestProfile: null,
+    recentMessages: [{ role: "user", content: params.userMessage }],
+    latestUserText: params.userMessage,
   });
 
   return {
@@ -74,17 +78,32 @@ export async function runTutoringSessionTurn(params: {
 export async function previewAssessmentQuestionForTopic(params: {
   topicTitle: string;
   retrievedContext: string[];
+  contentScope?: LearningSessionState["contentScopeSnapshot"] | null;
   runtimeContext?: TutoringRuntimeContext;
   currentStageLabel?: string | null;
   questionType?: string;
   difficulty?: string;
 }) {
+  const groundedContext = params.contentScope
+    ? renderGroundingUnits(
+        selectGroundingUnitsForPrompt({
+          contentScope: params.contentScope,
+          query: [params.questionType, params.difficulty, params.currentStageLabel]
+            .filter(Boolean)
+            .join(" "),
+          recentSummary: params.topicTitle,
+          budgetTokens: 1_000,
+          maxUnits: 6,
+        }),
+      )
+    : params.retrievedContext.map((item) => `- ${item}`).join("\n");
+
   return await generateStructuredOutput({
     schema: assessmentPreviewSchema,
     prompt: buildAssessmentPreviewPrompt({
       topicTitle: params.topicTitle,
       currentStageLabel: params.currentStageLabel,
-      retrievedContext: params.retrievedContext,
+      retrievedContext: groundedContext,
       questionType: params.questionType,
       difficulty: params.difficulty,
     }),

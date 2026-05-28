@@ -1,49 +1,77 @@
+import {
+  buildPromptFrame,
+  renderInterestProfile,
+  renderPreviousReport,
+  renderReportState,
+  renderTaggedSection,
+  renderTranscript,
+} from "@/lib/learning/prompt-serializers";
+import type { LearningSessionState, TeacherProgressReport } from "@/lib/learning/types";
+
 export function buildTeacherOnboardingSummaryPrompt(input: {
   studentName: string;
   profile: Record<string, unknown>;
 }) {
-  return `Write a concise teacher-facing onboarding summary.
+  const profileText =
+    input.profile && typeof input.profile === "object"
+      ? renderInterestProfile(input.profile as never)
+      : "No onboarding profile.";
 
-Student: ${input.studentName}
-Profile:
-${JSON.stringify(input.profile)}
-
-Focus on what the tutor learned about motivation, confidence, and likely teaching entry points.`;
+  return [
+    buildPromptFrame({
+      role: "Write a concise teacher-facing onboarding summary.",
+      goal: `Summarize what Convy learned about ${input.studentName}'s motivation, confidence, and likely teaching entry points.`,
+      constraints: [
+        "Use only the supplied profile.",
+        "Focus on signals a real teacher can act on quickly.",
+      ],
+      outputContract: ["Return a single concise summary field."],
+    }),
+    renderTaggedSection("student", input.studentName),
+    renderTaggedSection("profile", profileText),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function buildReportingPrompt(input: {
   studentName: string;
   topicTitle: string;
-  sessionState: unknown;
+  sessionState: LearningSessionState;
   teachingPlaybook: Record<string, unknown> | null;
   transcript: Array<{
     role: string;
     content: string;
     metadata?: Record<string, unknown> | null;
   }>;
-  previousReport: unknown;
+  previousReport: TeacherProgressReport | null;
 }) {
-  return `Generate a teacher-facing progress report for one tutoring session.
-
-Student: ${input.studentName}
-Topic: ${input.topicTitle}
-Session state:
-${JSON.stringify(input.sessionState)}
-
-Teaching playbook:
-${JSON.stringify(input.teachingPlaybook)}
-
-Previous report:
-${JSON.stringify(input.previousReport)}
-
-Transcript:
-${input.transcript
-    .map((item) => `${item.role}: ${item.content}`)
-    .join("\n\n")}
-
-Rules:
-- Ground claims in the transcript and session state.
-- Be explicit about uncertainty when evidence is limited.
-- Focus on understanding, misconceptions, confidence, and next instructional moves.
-- Use the teaching playbook only as personalization context. Do not claim it as fresh evidence unless the transcript supports it.`;
+  return [
+    buildPromptFrame({
+      role: "Generate a teacher-facing progress report for one tutoring session.",
+      goal: `Explain ${input.studentName}'s progress in ${input.topicTitle} using grounded session evidence.`,
+      constraints: [
+        "Ground claims in the extracted evidence, session state, and transcript.",
+        "Be explicit about uncertainty when evidence is limited.",
+        "Use the teaching playbook only as personalization context, not as fresh evidence.",
+      ],
+      antiRules: [
+        "Do not claim progress that the transcript does not support.",
+        "Do not treat memory or playbook notes as proof.",
+      ],
+      outputContract: [
+        "Return the structured teacher progress report schema only.",
+      ],
+    }),
+    renderTaggedSection("student", input.studentName),
+    renderTaggedSection("topic", input.topicTitle),
+    renderTaggedSection(
+      "session_state",
+      renderReportState(input.sessionState, input.teachingPlaybook),
+    ),
+    renderTaggedSection("previous_report", renderPreviousReport(input.previousReport)),
+    renderTaggedSection("transcript", renderTranscript(input.transcript)),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }

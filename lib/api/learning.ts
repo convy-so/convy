@@ -141,6 +141,7 @@ const learningStudentMembershipSchema = z.object({
       isVoice: z.boolean(),
       shareableLink: z.string(),
       createdAt: z.string().nullable(),
+      latestActivityAt: z.string().nullable(),
       responseStatus: z.enum(["not_started", "in_progress", "completed"]),
       completedAt: z.string().nullable(),
     }),

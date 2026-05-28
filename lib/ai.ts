@@ -27,6 +27,7 @@ import { logUsage, type UsageLogInput } from "./billing/logger";
 import {
   logTutoringDebug,
   summarizeTutoringText,
+  measureTutoringStep,
 } from "@/lib/learning/tutoring-debug";
 
 import type { ContextBundle, PromptSpec } from "./ai-core";
@@ -227,7 +228,14 @@ export function streamAIResponse(
       },
     },
     prepareStep: async () => {
-      const preparedCache = await preparedCachePromise;
+      const preparedCache = await measureTutoringStep(
+        "ai:agent:prepare-cache",
+        {
+          model: getModelId(model),
+          messageCount: Array.isArray(messages) ? messages.length : null,
+        },
+        async () => await preparedCachePromise,
+      );
       return {
         system: preparedCache.systemPrompt,
         providerOptions: preparedCache.providerOptions,
@@ -250,6 +258,7 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     temperature?: number;
     maxTokens?: number;
     dynamicExamples?: PromptExample[];
+    promptCache?: PromptCacheOptions;
     onFinish?: ToolLoopAgentOnFinishCallback<TOOLS>;
   },
 ) {
@@ -272,17 +281,31 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
   // Merge dynamic few-shot examples (from DB) into the instructions string
   const resolvedInstructions = options.dynamicExamples?.length
     ? resolvePromptExecution({
-      systemPrompt: instructions,
+        systemPrompt: instructions,
         dynamicExamples: options.dynamicExamples,
       }).systemPrompt
     : instructions;
+  const preparedCache = await measureTutoringStep(
+    "ai:agent:prepare-cache",
+    {
+      model: getModelId(model),
+      messageCount: Array.isArray(messages) ? messages.length : null,
+    },
+    async () =>
+      await preparePromptCache({
+        model,
+        systemPrompt: resolvedInstructions,
+        promptCache: options.promptCache,
+      }),
+  );
 
   const agent = new ToolLoopAgent({
     model,
     tools: options.tools,
-    instructions: resolvedInstructions,
+    instructions: preparedCache.systemPrompt ?? resolvedInstructions,
     temperature: options.temperature ?? 0.3,
     maxOutputTokens: options.maxTokens ?? 1000,
+    providerOptions: preparedCache.providerOptions,
     onFinish: (result) => {
       if (isTutoringFeature) {
         logTutoringDebug("ai:agent:finish", {

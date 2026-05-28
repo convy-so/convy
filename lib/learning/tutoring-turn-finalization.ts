@@ -8,6 +8,8 @@ import {
   logTutoringDebug,
   logTutoringWarn,
   summarizeTutoringText,
+  createTutoringTimer,
+  measureTutoringStep,
 } from "@/lib/learning/tutoring-debug";
 
 import type { FinalizeTutoringTurnParams } from "@/lib/learning/tutoring-turn-types";
@@ -21,6 +23,9 @@ function getLatestAssessmentResult(
     .map((result) => result.output)
     .filter(
       (output): output is {
+        quizId?: string;
+        conceptKey?: string;
+        studentAnswerSummary?: string;
         score?: number;
         feedback?: string;
         masteryLevel?: string;
@@ -31,6 +36,7 @@ function getLatestAssessmentResult(
 }
 
 export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
+  const timer = createTutoringTimer();
   const lastStep = params.result.steps.at(-1);
   const assistantText = normalizeTutorResponseText(lastStep?.text ?? "");
   const formatWarnings = formatTutorResponseWarnings(assistantText);
@@ -43,6 +49,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     previousAssistantText: params.previousAssistantText
       ? summarizeTutoringText(params.previousAssistantText, 180)
       : null,
+    durationMs: timer.elapsedMs(),
   });
   if (!assistantText) {
     logTutoringWarn("turn:finalize:empty-assistant-text", {
@@ -73,7 +80,12 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   if (latestAssessment?.masteryLevel) {
     evidence.push(`Assessment mastery: ${latestAssessment.masteryLevel}`);
   }
-
+  if (latestAssessment?.conceptKey) {
+    evidence.push(`Assessment concept: ${latestAssessment.conceptKey}`);
+  }
+  if (latestAssessment?.studentAnswerSummary) {
+    evidence.push(`Assessment evidence: ${latestAssessment.studentAnswerSummary}`);
+  }
   const nextState = {
     ...params.prepared.nextState,
     recentEvidence: evidence.slice(-12),
@@ -86,25 +98,36 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     turnCount: nextState.turnCount,
     evidenceCount: nextState.recentEvidence.length,
     frameworkVersionId: params.prepared.activeFramework.frameworkVersionId,
+    durationMs: timer.elapsedMs(),
   });
 
-  await persistTutorTurnOutcome({
-    sessionId: params.tutorSessionId,
-    classroomStudentId: params.access.classroomStudent.id,
-    topicId: params.topicId,
-    assistantText,
-    assistantMetadata: {
-      frameworkVersionId: params.prepared.activeFramework.frameworkVersionId,
-      toolCalls: params.result.steps.flatMap((step) => step.toolCalls),
+  await measureTutoringStep(
+    "turn:finalize:persist",
+    {
+      topicId: params.topicId,
+      tutorSessionId: params.tutorSessionId,
+      expectedStateVersion: params.expectedStateVersion,
     },
-    interactionMetadata: {},
-    nextState,
-    expectedStateVersion: params.expectedStateVersion,
-  });
+    async () =>
+      await persistTutorTurnOutcome({
+        sessionId: params.tutorSessionId,
+        classroomStudentId: params.access.classroomStudent.id,
+        topicId: params.topicId,
+        assistantText,
+        assistantMetadata: {
+          frameworkVersionId: params.prepared.activeFramework.frameworkVersionId,
+          toolCalls: params.result.steps.flatMap((step) => step.toolCalls),
+        },
+        interactionMetadata: {},
+        nextState,
+        expectedStateVersion: params.expectedStateVersion,
+      }),
+  );
   logTutoringDebug("turn:finalize:persisted", {
     topicId: params.topicId,
     tutorSessionId: params.tutorSessionId,
     expectedStateVersion: params.expectedStateVersion,
+    durationMs: timer.elapsedMs(),
   });
 
   await logBraintrustTrace({
@@ -128,5 +151,6 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   logTutoringDebug("turn:finalize:braintrust-trace-requested", {
     topicId: params.topicId,
     tutorSessionId: params.tutorSessionId,
+    durationMs: timer.elapsedMs(),
   });
 }

@@ -1,8 +1,9 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
 import { useState, useRef } from "react";
 import { Camera, Image as ImageIcon, Send, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { getQuizImageGuidance } from "@/lib/learning/quiz-image-guidance";
 
 export function QuizCard({
   quizId,
@@ -21,6 +22,7 @@ export function QuizCard({
   const [files, setFiles] = useState<File[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageGuidance = acceptsImageUpload ? getQuizImageGuidance() : [];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -50,18 +52,24 @@ export function QuizCard({
 
   if (submitted) {
     return (
-      <div className="w-full max-w-md mx-auto my-4 bg-emerald-50 border border-emerald-100 rounded-2xl p-5 shadow-sm">
+      <div
+        className="w-full max-w-md mx-auto my-4 bg-emerald-50 border border-emerald-100 rounded-2xl p-5 shadow-sm"
+        data-quiz-id={quizId}
+      >
         <h4 className="text-emerald-800 font-bold text-sm mb-2">Quiz Submitted</h4>
         <p className="text-emerald-600 text-sm">{questionText}</p>
         <div className="mt-3 text-xs text-emerald-500 font-medium italic">
-          Waiting for the tutor's review...
+          Waiting for the tutor&apos;s review...
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-md mx-auto my-4 bg-white border border-indigo-100 rounded-3xl overflow-hidden shadow-xl shadow-indigo-100/40">
+    <div
+      className="w-full max-w-md mx-auto my-4 bg-white border border-indigo-100 rounded-3xl overflow-hidden shadow-xl shadow-indigo-100/40"
+      data-quiz-id={quizId}
+    >
       <div className="bg-indigo-50/50 p-5 border-b border-indigo-50">
         <div className="flex items-center gap-2 mb-3">
           <div className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
@@ -79,6 +87,23 @@ export function QuizCard({
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
         {acceptsImageUpload && (
           <div className="space-y-3">
+            <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-sky-600" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-sky-700">
+                  Photo tips
+                </p>
+              </div>
+              <ul className="space-y-2">
+                {imageGuidance.map((item) => (
+                  <li key={item.title} className="text-sm text-slate-700">
+                    <span className="font-semibold text-slate-900">{item.title}:</span>{" "}
+                    {item.description}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             {files.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {files.map((file, i) => (
@@ -107,7 +132,7 @@ export function QuizCard({
                 className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-sm font-bold text-slate-400 hover:text-indigo-500 hover:border-indigo-200 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
               >
                 <Camera className="w-4 h-4" />
-                Upload Notebook Photo (Max 3)
+                Upload notebook photo(s) - up to 3
               </button>
             )}
             <input
@@ -125,7 +150,7 @@ export function QuizCard({
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type your answer here..."
+            placeholder={acceptsImageUpload ? "Type your answer or short summary here..." : "Type your answer here..."}
             className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-100 outline-none transition-all resize-none h-24 custom-scrollbar"
           />
         </div>

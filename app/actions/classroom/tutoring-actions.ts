@@ -17,6 +17,8 @@ import {
   answerTeacherStudentQuestion,
   hydrateStudentLearningEvidence,
 } from "@/lib/learning/evidence";
+import { selectGroundingUnitsForPrompt } from "@/lib/learning/grounding-units";
+import { renderGroundingUnits } from "@/lib/learning/prompt-serializers";
 import { getStudentTutoringAccess } from "@/lib/learning/access";
 import { contentScopeService } from "@/lib/learning/content-scope-service";
 import {
@@ -217,7 +219,15 @@ export async function askOutOfSessionQuestionAction(
       gradeBand: access.topic.classroom.gradeBand as GradeBand,
       studentProfile: access.classroomStudent.interestProfile.profile,
       question: body.message,
-      retrievedContext: contentScope.retrievedContext,
+      retrievedContext: renderGroundingUnits(
+        selectGroundingUnitsForPrompt({
+          contentScope,
+          query: body.message,
+          recentSummary: access.topic.title,
+          budgetTokens: 900,
+          maxUnits: 6,
+        }),
+      ),
       language: normalizeAppLocale(body.language ?? access.topic.contentLocale),
     });
 
