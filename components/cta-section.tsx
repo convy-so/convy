@@ -1,34 +1,45 @@
 import { Link } from "@/i18n/routing";
+import Image from "next/image";
 
 export default function CtaSection() {
   return (
-    <section className="bg-[#FAFAFA] px-4 py-12 sm:px-6 sm:py-24 lg:px-12">
-      <div className="mx-auto flex max-w-[1920px] justify-center">
-        <div className="max-w-4xl text-center">
-          <p
-            className="mb-6 text-[24px] font-normal italic leading-[33px] tracking-[-0.24px] text-[#8D8D8D] md:text-[32px] md:leading-[44px] md:tracking-[-0.32px]"
-            style={{ fontFamily: "var(--font-fasthand)" }}
-          >
-            Convyy
-          </p>
-
-          <h2 className="mb-6 text-[36px] font-bold leading-[44px] tracking-[-1.12px] text-[#080808] md:text-[56px] md:leading-[64px] md:tracking-[-1.68px]">
-            Build better learning support.
+    <section id="pricing" className="bg-white px-4 pt-16 pb-12 sm:px-6 sm:pt-24 lg:px-12">
+      <div className="relative mx-auto max-w-[1200px] border border-gray-100 rounded-[32px] overflow-hidden bg-white shadow-sm">
+        {/* Content */}
+        <div className="relative z-10 px-8 pt-10 md:px-16 md:pt-14 max-w-2xl">
+          <h2 className="mb-4 text-[32px] font-[500] leading-[40px] tracking-[-1.12px] text-[#080808] md:text-[48px] md:leading-[56px] md:tracking-[-1.5px]">
+            Your best learning campaign starts here.
           </h2>
 
-          <p className="mx-auto mb-10 max-w-2xl text-[20px] font-[500] leading-[30px] tracking-normal text-[#696969] md:text-[24px] md:leading-[33.6px]">
-            Use Convyy to give every student a more personal, adaptive, and
-            measurable learning experience.
+          <p className="mb-6 text-[18px] font-normal leading-[28px] text-[#696969] md:text-[20px] md:leading-[30px]">
+            Set up in minutes. See results from day one.
           </p>
 
-          <div className="flex justify-center">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               href="/sign-up"
-              className="whitespace-nowrap rounded-full bg-[#292929] px-[32px] py-[14px] text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] shadow-sm transition-all hover:scale-105 hover:bg-[#3a3a3a] hover:shadow-md"
+              className="whitespace-nowrap rounded-full bg-[#080808] px-[32px] py-[14px] text-[16px] font-medium tracking-[-0.2px] text-white shadow-sm transition-all hover:bg-[#222]"
             >
-              Get Started for Free
+              Start for free
             </Link>
+            <a
+              href="mailto:support@convyy.com"
+              className="whitespace-nowrap rounded-full border border-gray-200 bg-white px-[32px] py-[14px] text-[16px] font-medium tracking-[-0.2px] text-[#080808] transition-colors hover:bg-gray-50"
+            >
+              Talk to sales
+            </a>
           </div>
+        </div>
+
+        {/* Bottom illustration */}
+        <div className="relative w-full mt-6 md:mt-[-60px] z-0">
+          <Image
+            src="/banger3.png"
+            alt="Convyy landscape"
+            width={1200}
+            height={300}
+            className="w-full h-[200px] md:h-[300px] object-cover object-bottom"
+          />
         </div>
       </div>
     </section>

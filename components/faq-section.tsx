@@ -35,7 +35,7 @@ const faqs = [
 
 export default function FAQSection() {
   return (
-    <section className="bg-[#FAFAFA] p-[12px]">
+    <section id="faq" className="bg-[#FAFAFA] p-[12px]">
       <div className="mx-auto max-w-[1920px] px-4 py-10 sm:px-6 sm:py-12 lg:px-12">
         <div className="mx-auto max-w-5xl">
           <div className="flex flex-col gap-8 md:flex-row md:gap-16">
