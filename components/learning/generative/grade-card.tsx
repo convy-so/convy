@@ -4,10 +4,12 @@ import { CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function GradeCard({
+  conceptKey,
   score,
   feedback,
   masteryLevel,
 }: {
+  conceptKey?: string;
   score: number;
   feedback: string;
   masteryLevel: "surface" | "applied" | "generative";
@@ -62,6 +64,11 @@ export function GradeCard({
           <div className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/60 text-slate-600 mb-3">
             Mastery: {masteryLevel}
           </div>
+          {conceptKey ? (
+            <div className="mb-3 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/60 text-slate-600">
+              Concept: {conceptKey}
+            </div>
+          ) : null}
           
           <p className="text-sm font-medium text-slate-700 leading-relaxed">
             {feedback}

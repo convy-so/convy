@@ -13,7 +13,6 @@ import {
   getStudentTutoringAccessFailureMessage,
   resolveStudyLanguage,
   resolveStudentTutoringContext,
-  resolveStudentTutoringSessionById,
 } from "@/lib/learning/tutoring-route-orchestrator";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import { getLatestUserText, prepareTutoringTurn } from "@/lib/learning/tutoring-turn-preparation";
@@ -25,6 +24,7 @@ import {
   logTutoringError,
   summarizeTutoringMessages,
   summarizeTutoringText,
+  createTutoringTimer,
 } from "@/lib/learning/tutoring-debug";
 
 const requestSchema = z.object({
@@ -39,6 +39,7 @@ export async function GET(
 ) {
   let topicId = "unknown";
   const requestId = crypto.randomUUID();
+  const timer = createTutoringTimer();
   try {
     const session = await getVerifiedSession();
     topicId = (await params).topicId;
@@ -48,6 +49,7 @@ export async function GET(
       topicId,
       userId: session.user.id,
       language: searchParams.get("language"),
+      durationMs: timer.elapsedMs(),
     });
     const { access, deniedReason, studyLanguage } = await resolveStudentTutoringContext({
       userId: session.user.id,
@@ -79,6 +81,7 @@ export async function GET(
       stateVersion: tutorSession.stateVersion,
       messageCount: messages.length,
       recentMessages: summarizeTutoringMessages(messages.slice(-4)),
+      durationMs: timer.elapsedMs(),
     });
 
     const response = NextResponse.json({
@@ -101,6 +104,7 @@ export async function GET(
       },
     });
     response.headers.set("x-tutoring-request-id", requestId);
+    response.headers.set("x-tutoring-request-ms", String(timer.elapsedMs()));
     return response;
   } catch (error) {
     logTutoringError("chat:get:error", error, { topicId, requestId });
@@ -114,6 +118,7 @@ export async function POST(
 ) {
   let topicId = "unknown";
   const requestId = crypto.randomUUID();
+  const timer = createTutoringTimer();
   try {
     const session = await getVerifiedSession();
     topicId = (await params).topicId;
@@ -125,6 +130,7 @@ export async function POST(
       requestId,
       topicId,
       userId: session.user.id,
+      durationMs: timer.elapsedMs(),
     });
 
     if (!access && deniedReason) {
@@ -149,33 +155,11 @@ export async function POST(
       messageCount: body.messages.length,
       latestUserText: summarizeTutoringText(latestUserText, 180),
       rawMessages: summarizeTutoringMessages(body.messages.slice(-4)),
+      durationMs: timer.elapsedMs(),
     });
 
     if (!latestUserText) {
       return apiError("VALIDATION_ERROR", "Message is required");
-    }
-
-    if (body.sessionId) {
-      const requestedSession = await resolveStudentTutoringSessionById({
-        sessionId: body.sessionId,
-        topicId,
-        classroomStudentId: access.classroomStudent.id,
-      });
-
-      if (!requestedSession) {
-        return apiError("NOT_FOUND", "Tutoring session not found.");
-      }
-
-      if (requestedSession.sessionStatus !== "active") {
-        return apiError("VALIDATION_ERROR", "Tutoring session is no longer active.");
-      }
-
-      if (requestedSession.sessionLocale !== studyLanguage) {
-        return apiError(
-          "VALIDATION_ERROR",
-          "Tutoring session language does not match this lesson workspace.",
-        );
-      }
     }
 
     const scopeDecision = await evaluateTutoringScope({
@@ -188,6 +172,7 @@ export async function POST(
       shouldRedirect: scopeDecision.shouldRedirect,
       classification: scopeDecision.classification,
       redirectMessage: summarizeTutoringText(scopeDecision.redirectMessage, 180),
+      durationMs: timer.elapsedMs(),
     });
 
     const tutorSession = await ensureTutoringSession({
@@ -206,6 +191,7 @@ export async function POST(
       turnCount: state.turnCount,
       frameworkVersionId: state.frameworkVersionId,
       groundingPackVersion: state.groundingPackVersion,
+      durationMs: timer.elapsedMs(),
     });
 
     const scopeRedirectResponse = await maybeHandleScopeRedirect({
@@ -220,7 +206,7 @@ export async function POST(
 
     if (scopeRedirectResponse) return scopeRedirectResponse;
 
-    await logUserTurn({
+    void logUserTurn({
       sessionId: tutorSession.id,
       classroomStudentId: access.classroomStudent.id,
       topicId,
@@ -228,15 +214,22 @@ export async function POST(
       metadata: {
         messageKind: "student_turn",
       },
+    }).catch((error) => {
+      logTutoringError("chat:post:user-log-failed", error, {
+        requestId,
+        topicId,
+        sessionId: tutorSession.id,
+      });
     });
     logTutoringDebug("chat:post:user-logged", {
       requestId,
       topicId,
       sessionId: tutorSession.id,
       latestUserText: summarizeTutoringText(latestUserText, 180),
+      durationMs: timer.elapsedMs(),
     });
 
-    const { previousAssistant, prepared, fewShotExamples, tools, sanitizedMessages } =
+    const { previousAssistant, prepared, tools, sanitizedMessages } =
       await prepareTutoringTurn({
         topicId,
         access,
@@ -251,12 +244,14 @@ export async function POST(
       topicId,
       sessionId: tutorSession.id,
       systemPromptLength: prepared.systemPrompt.length,
-      fewShotExampleCount: fewShotExamples.length,
       toolNames: Object.keys(tools),
       sanitizedMessages: summarizeTutoringMessages(sanitizedMessages),
       previousAssistant: previousAssistant ? summarizeTutoringText(previousAssistant.content, 180) : null,
       activeFrameworkVersionId: prepared.activeFramework.frameworkVersionId,
       contentScopeVersion: prepared.contentScope.groundingPackVersion,
+      contextBundleVersionId: prepared.contextBundle.versionId,
+      groundingUnitCount: prepared.groundingUnits.length,
+      durationMs: timer.elapsedMs(),
     });
 
     const { streamAgentResponse } = await import("@/lib/ai");
@@ -265,6 +260,7 @@ export async function POST(
       topicId,
       sessionId: tutorSession.id,
       model: "flashModel",
+      durationMs: timer.elapsedMs(),
     });
 
     const response = await streamAgentResponse(sanitizedMessages, prepared.systemPrompt, {
@@ -276,7 +272,7 @@ export async function POST(
       tools,
       maxTokens: 1000,
       temperature: 0.3,
-      dynamicExamples: fewShotExamples,
+      promptCache: prepared.promptCache,
       onFinish: async (result) => {
         await finalizeTutoringTurn({
           topicId,
@@ -299,6 +295,7 @@ export async function POST(
       },
     });
     response.headers.set("x-tutoring-request-id", requestId);
+    response.headers.set("x-tutoring-request-ms", String(timer.elapsedMs()));
     return response;
   } catch (error) {
     logTutoringError("chat:post:error", error, { topicId, requestId });

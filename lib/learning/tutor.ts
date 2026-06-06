@@ -7,6 +7,7 @@ import {
   buildTutorOpeningBase,
   normalizeTutorOpening,
 } from "@/lib/learning/tutor-policy";
+import { measureTutoringStep } from "@/lib/learning/tutoring-debug";
 
 const tutorReplySchema = z.object({
   response: z.string(),
@@ -26,7 +27,10 @@ export async function generateSessionOpening(params: {
     return baseOpening;
   }
 
-  const result = await generateStructuredOutput({
+  const result = await measureTutoringStep("session:opening-translate", {
+    topicTitle: params.topicTitle,
+    studyLanguage: params.studyLanguage,
+  }, async () => await generateStructuredOutput({
     schema: tutorReplySchema,
     prompt: `Translate the following tutoring opening into ${params.studyLanguage}.
 
@@ -39,7 +43,7 @@ Rules:
 - Do not add examples, explanations, motivations, or claims of importance.
 - Do not add claims about careers, society, nature, technology, AI, or the future.
 - Return only the translated opening text.`,
-  });
+  }));
 
   return normalizeTutorOpening(result.response);
 }

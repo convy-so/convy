@@ -1,5 +1,5 @@
 import { appendLearningMessage, logLearningInteraction } from "@/lib/learning/storage";
-import { logTutoringDebug } from "@/lib/learning/tutoring-debug";
+import { measureTutoringStep } from "@/lib/learning/tutoring-debug";
 
 type BaseTurnLogParams = {
   sessionId: string;
@@ -10,58 +10,52 @@ type BaseTurnLogParams = {
 };
 
 export async function logUserTurn(params: BaseTurnLogParams) {
-  logTutoringDebug("turn-log:user:start", {
+  return measureTutoringStep("turn-log:user", {
     sessionId: params.sessionId,
     topicId: params.topicId,
     contentLength: params.content.length,
     metadataKeys: Object.keys(params.metadata),
-  });
-  await appendLearningMessage({
-    sessionId: params.sessionId,
-    role: "user",
-    content: params.content,
-    metadata: params.metadata,
-  });
-  await logLearningInteraction({
-    classroomStudentId: params.classroomStudentId,
-    topicId: params.topicId,
-    sessionId: params.sessionId,
-    role: "user",
-    interactionType: "student_message",
-    content: params.content,
-    metadata: params.metadata,
-  });
-  logTutoringDebug("turn-log:user:done", {
-    sessionId: params.sessionId,
-    topicId: params.topicId,
+  }, async () => {
+    await appendLearningMessage({
+      sessionId: params.sessionId,
+      role: "user",
+      content: params.content,
+      metadata: params.metadata,
+    });
+    await logLearningInteraction({
+      classroomStudentId: params.classroomStudentId,
+      topicId: params.topicId,
+      sessionId: params.sessionId,
+      role: "user",
+      interactionType: "student_message",
+      content: params.content,
+      metadata: params.metadata,
+    });
   });
 }
 
 export async function logAssistantTurn(params: BaseTurnLogParams) {
-  logTutoringDebug("turn-log:assistant:start", {
+  return measureTutoringStep("turn-log:assistant", {
     sessionId: params.sessionId,
     topicId: params.topicId,
     contentLength: params.content.length,
     metadataKeys: Object.keys(params.metadata),
-  });
-  await appendLearningMessage({
-    sessionId: params.sessionId,
-    role: "assistant",
-    content: params.content,
-    metadata: params.metadata,
-  });
-  await logLearningInteraction({
-    classroomStudentId: params.classroomStudentId,
-    topicId: params.topicId,
-    sessionId: params.sessionId,
-    role: "assistant",
-    interactionType: "tutor_message",
-    content: params.content,
-    metadata: params.metadata,
-  });
-  logTutoringDebug("turn-log:assistant:done", {
-    sessionId: params.sessionId,
-    topicId: params.topicId,
+  }, async () => {
+    await appendLearningMessage({
+      sessionId: params.sessionId,
+      role: "assistant",
+      content: params.content,
+      metadata: params.metadata,
+    });
+    await logLearningInteraction({
+      classroomStudentId: params.classroomStudentId,
+      topicId: params.topicId,
+      sessionId: params.sessionId,
+      role: "assistant",
+      interactionType: "tutor_message",
+      content: params.content,
+      metadata: params.metadata,
+    });
   });
 }
 

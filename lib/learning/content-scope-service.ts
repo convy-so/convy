@@ -1,7 +1,7 @@
 import type { TopicSourceBoundary } from "@/lib/learning/types";
 import { contentScopeSnapshotSchema, type ContentScopeSnapshot } from "@/lib/learning/types";
 import { buildContentScopeFromPack } from "@/lib/learning/topic-grounding-pack-service";
-import { getTopicWithMaterials } from "@/lib/learning/storage";
+import { getCachedTopicWithMaterials } from "@/lib/learning/storage";
 
 export class ContentScopeService {
   /**
@@ -12,7 +12,7 @@ export class ContentScopeService {
     sourceBoundary: TopicSourceBoundary;
     contentLocale?: string | null;
   }): Promise<ContentScopeSnapshot> {
-    const topic = await getTopicWithMaterials(params.topicId);
+    const topic = await getCachedTopicWithMaterials(params.topicId);
     if (!topic) {
       throw new Error("Topic not found.");
     }

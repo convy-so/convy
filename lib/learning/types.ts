@@ -524,6 +524,7 @@ export const learningSessionStateSchema = z.object({
   topicId: z.string().nullable().default(null),
   topicTitle: z.string().default(""),
   frameworkVersionId: z.string().nullable().default(null),
+  activeFrameworkSnapshot: activeExpertFrameworkSchema.nullable().default(null),
   groundingPackVersion: z.number().int().nonnegative().default(0),
   contentScopeSnapshot: contentScopeSnapshotSchema.nullable().default(null),
   recentMessageSummary: z.string().default(""),
