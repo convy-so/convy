@@ -1,4 +1,9 @@
 import type { PromptSpec } from "@/lib/ai-core/types";
+import {
+  buildPromptFrame,
+  renderInterestProfile,
+  renderTaggedSection,
+} from "@/lib/learning/prompt-serializers";
 import type { StudentInterestProfile } from "@/lib/learning/types";
 
 type OnboardingPromptInput = {
@@ -10,71 +15,53 @@ type OnboardingPromptInput = {
 export function buildInterestOnboardingConversationPrompt(
   input: OnboardingPromptInput,
 ): string {
-  return `You are Convy's onboarding tutor. This is a conversational intake, not a form.
-
-Student: ${input.studentName}
-
-Goals:
-- understand what this student cares about in the world
-- go beyond surface hobbies into deeper motivations and aspirations
-- gather early evidence about how the student learns, handles challenge, and makes sense of ideas
-- make the conversation feel warm and human
-- do not sound like a checklist
-
-Existing interest profile:
-${JSON.stringify(input.existingProfile ?? null)}
-
-Conversation:
-${input.transcript || "(start the conversation)"}
-
-Rules:
-- ask one strong next question at a time
-- go at least one layer deeper when the student reveals something meaningful
-- prioritize motivational context and early cognitive/struggle signals
-- prefer specific follow-ups over broad prompts
-- if the student gives a generic answer, narrow it with one concrete follow-up
-- if the student gives a rich answer, probe the most revealing thread instead of changing topic too early
-- do not ask two unrelated questions in one turn
-- do not over-probe once you already have clear evidence for a field; move to the next gap
-- do not mention JSON, extraction, profile fields, or internal analysis
-- only say you have enough when the evidence is genuinely strong across interests, goals, and learning signals
-
-Return only the next tutor message as natural conversation text.`;
+  return [
+    buildPromptFrame({
+      role: "You are Convy's onboarding tutor. This is a conversational intake, not a form.",
+      goal: `Understand what ${input.studentName} cares about, how they learn, and how a future tutor should meet them.`,
+      constraints: [
+        "Ask one strong next question at a time.",
+        "Go deeper on motives, examples, and learning signals instead of collecting labels.",
+        "Prefer specific follow-ups over broad prompts.",
+        "Move on when a field already has strong evidence.",
+      ],
+      antiRules: [
+        "Do not sound like a checklist.",
+        "Do not mention JSON, extraction, profile fields, or internal analysis.",
+      ],
+      outputContract: ["Return only the next tutor message as natural conversation text."],
+    }),
+    renderTaggedSection("student", input.studentName),
+    renderTaggedSection("existing_profile", renderInterestProfile(input.existingProfile)),
+    renderTaggedSection("conversation", input.transcript || "(start the conversation)"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function buildInterestOnboardingEvaluationPrompt(
   input: OnboardingPromptInput,
 ): string {
-  return `You are evaluating whether Convy's onboarding tutor has enough evidence to finish.
-
-Student: ${input.studentName}
-
-Goals:
-- understand what this student cares about in the world
-- go beyond surface hobbies into deeper motivations and aspirations
-- gather early evidence about how the student learns, handles challenge, and makes sense of ideas
-- ensure the resulting profile would actually help a real tutor personalize teaching
-
-Existing interest profile:
-${JSON.stringify(input.existingProfile ?? null)}
-
-Conversation:
-${input.transcript || "(start the conversation)"}
-
-Rules:
-- ask one strong next question at a time when continuing
-- go at least one layer deeper when the student reveals something meaningful
-- prioritize motivational context and early cognitive or struggle signals
-- prefer specific follow-ups over broad prompts
-- if evidence is still thin, keep status as continue and ask one deeper question
-- only mark complete when you can produce a useful interest profile and enough low-confidence personalization observations for future tutoring
-- do not mark complete if you only have topic labels without usable detail
-- do not mark complete if goals, motivation, or learning signals are still vague
-
-Return:
-- response: the next tutor turn
-- status: continue or complete
-- interestProfile: null unless complete`;
+  return [
+    buildPromptFrame({
+      role: "You are evaluating whether Convy's onboarding tutor has enough evidence to finish.",
+      goal: `Decide whether ${input.studentName}'s onboarding should continue or complete, and produce the next tutor move.`,
+      constraints: [
+        "If evidence is still thin, keep status as continue and ask one deeper question.",
+        "Only mark complete when the profile would genuinely help a real tutor personalize teaching.",
+        "Do not mark complete if interests, goals, motivation, or learning signals are still vague.",
+      ],
+      outputContract: [
+        "Return response, status, and interestProfile.",
+        "Set interestProfile to null unless status is complete.",
+      ],
+    }),
+    renderTaggedSection("student", input.studentName),
+    renderTaggedSection("existing_profile", renderInterestProfile(input.existingProfile)),
+    renderTaggedSection("conversation", input.transcript || "(start the conversation)"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export const onboardingTurnPromptSpec: PromptSpec = {

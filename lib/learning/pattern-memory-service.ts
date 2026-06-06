@@ -21,6 +21,8 @@ import type {
   TeacherProgressReport,
 } from "@/lib/learning/types";
 import { createLogger, serializeError } from "@/lib/logger";
+import { createTutoringTimer, measureTutoringStep } from "@/lib/learning/tutoring-debug";
+import { unstable_cache } from "next/cache";
 
 type MemoryStateStatus = "ready" | "degraded" | "unavailable";
 
@@ -171,12 +173,39 @@ async function safelyAddObservations(
 export async function summarizeStudentPatternMemory(params: {
   studentUserId: string;
 }): Promise<PatternSummaryResult> {
-  const { memories, memoryState } = await safelyListMemories({
-    studentUserId: params.studentUserId,
-    limit: 100,
-  });
+  return await cachedSummarizeStudentPatternMemory(params.studentUserId);
+}
+
+const cachedSummarizeStudentPatternMemory = unstable_cache(
+  async (studentUserId: string) =>
+    await summarizeStudentPatternMemoryImpl({ studentUserId }),
+  ["learning-student-pattern-memory"],
+  { revalidate: 60 },
+);
+
+async function summarizeStudentPatternMemoryImpl(params: {
+  studentUserId: string;
+}): Promise<PatternSummaryResult> {
+  const timer = createTutoringTimer();
+  const { memories, memoryState } = await measureTutoringStep(
+    "pattern-memory:summarize:list",
+    {
+      studentUserId: params.studentUserId,
+      limit: 100,
+    },
+    async () =>
+      await safelyListMemories({
+        studentUserId: params.studentUserId,
+        limit: 100,
+      }),
+  );
 
   if (memoryState.status !== "ready") {
+    log.warn("Student pattern memory unavailable", {
+      studentUserId: params.studentUserId,
+      status: memoryState.status,
+      durationMs: timer.elapsedMs(),
+    });
     return {
       profiles: [],
       memoryState,
@@ -225,6 +254,12 @@ export async function summarizeStudentPatternMemory(params: {
     );
   }
 
+  log.debug("Student pattern memory summarized", {
+    studentUserId: params.studentUserId,
+    profileCount: profiles.length,
+    durationMs: timer.elapsedMs(),
+  });
+
   return {
     profiles: profiles.sort((left, right) => {
       if (left.scopeType !== right.scopeType) {
@@ -236,6 +271,23 @@ export async function summarizeStudentPatternMemory(params: {
   };
 }
 
+const cachedBuildStudentTeachingPlaybook = unstable_cache(
+  async (
+    studentUserId: string,
+    subjectKey: string | null,
+    subjectLabel: string | null,
+  ) =>
+    await buildStudentTeachingPlaybookImpl({
+      studentUserId,
+      subjectKey,
+      subjectLabel,
+      topicLocalGaps: [],
+      topicLocalUsedExamples: [],
+    }),
+  ["learning-student-teaching-playbook"],
+  { revalidate: 300 },
+);
+
 export async function buildStudentTeachingPlaybook(params: {
   studentUserId: string;
   subjectKey?: string | null;
@@ -243,11 +295,33 @@ export async function buildStudentTeachingPlaybook(params: {
   topicLocalGaps?: string[];
   topicLocalUsedExamples?: string[];
 }): Promise<TeachingPlaybookResult> {
-  const summaries = await summarizeStudentPatternMemory({
-    studentUserId: params.studentUserId,
-  });
+  if ((params.topicLocalGaps?.length ?? 0) === 0 && (params.topicLocalUsedExamples?.length ?? 0) === 0) {
+    return await cachedBuildStudentTeachingPlaybook(
+      params.studentUserId,
+      params.subjectKey ?? null,
+      params.subjectLabel ?? null,
+    );
+  }
+
+  return await buildStudentTeachingPlaybookImpl(params);
+}
+
+async function buildStudentTeachingPlaybookImpl(params: {
+  studentUserId: string;
+  subjectKey?: string | null;
+  subjectLabel?: string | null;
+  topicLocalGaps?: string[];
+  topicLocalUsedExamples?: string[];
+}): Promise<TeachingPlaybookResult> {
+  const timer = createTutoringTimer();
+  const summaries = await cachedSummarizeStudentPatternMemory(params.studentUserId);
 
   if (summaries.memoryState.status !== "ready") {
+    log.debug("Student teaching playbook unavailable", {
+      studentUserId: params.studentUserId,
+      status: summaries.memoryState.status,
+      durationMs: timer.elapsedMs(),
+    });
     return {
       playbook: null,
       memoryState: summaries.memoryState,
@@ -267,13 +341,21 @@ export async function buildStudentTeachingPlaybook(params: {
         profile.subjectKey === subjectInfo.subjectKey,
     ) ?? null;
 
+  const playbook = buildTeachingPlaybook({
+    globalProfile,
+    subjectProfile,
+    topicLocalGaps: params.topicLocalGaps ?? [],
+    topicLocalUsedExamples: params.topicLocalUsedExamples ?? [],
+  });
+  log.debug("Student teaching playbook built", {
+    studentUserId: params.studentUserId,
+    durationMs: timer.elapsedMs(),
+    hasGlobalProfile: Boolean(globalProfile),
+    hasSubjectProfile: Boolean(subjectProfile),
+  });
+
   return {
-    playbook: buildTeachingPlaybook({
-      globalProfile,
-      subjectProfile,
-      topicLocalGaps: params.topicLocalGaps ?? [],
-      topicLocalUsedExamples: params.topicLocalUsedExamples ?? [],
-    }),
+    playbook,
     memoryState: summaries.memoryState,
   };
 }

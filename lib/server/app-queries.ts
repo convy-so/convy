@@ -232,6 +232,7 @@ export async function getLearningMeDataForSession(session: VerifiedSession): Pro
               isVoice: survey.isVoice,
               shareableLink: survey.shareableLink,
               createdAt: survey.createdAt?.toISOString() ?? null,
+              latestActivityAt: latestConversation?.updatedAt.toISOString() ?? null,
               responseStatus,
               completedAt:
                 latestConversation?.completed

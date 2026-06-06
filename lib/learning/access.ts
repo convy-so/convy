@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 
 import { getDb } from "@/db";
 import {
@@ -137,13 +138,26 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
   };
 }
 
+const cachedGetStudentTopicAccess = unstable_cache(
+  async (userId: string, topicId: string) => await getStudentTopicAccess(userId, topicId),
+  ["learning-student-topic-access"],
+  { revalidate: 60 },
+);
+
+const cachedGetStudentTutoringAccessState = unstable_cache(
+  async (userId: string, topicId: string) =>
+    await getStudentTutoringAccessStateImpl(userId, topicId),
+  ["learning-student-tutoring-access-state"],
+  { revalidate: 60 },
+);
+
 export async function getStudentTutoringAccess(userId: string, topicId: string) {
-  const result = await getStudentTutoringAccessState(userId, topicId);
+  const result = await cachedGetStudentTutoringAccessState(userId, topicId);
   return result.access;
 }
 
-export async function getStudentTutoringAccessState(userId: string, topicId: string) {
-  const access = await getStudentTopicAccess(userId, topicId);
+async function getStudentTutoringAccessStateImpl(userId: string, topicId: string) {
+  const access = await cachedGetStudentTopicAccess(userId, topicId);
   if (!access) {
     return {
       access: null,
@@ -162,6 +176,10 @@ export async function getStudentTutoringAccessState(userId: string, topicId: str
     access,
     reason: null,
   };
+}
+
+export async function getStudentTutoringAccessState(userId: string, topicId: string) {
+  return await cachedGetStudentTutoringAccessState(userId, topicId);
 }
 
 export const getTeacherSessionAccess = getTeacherTopicAccess;

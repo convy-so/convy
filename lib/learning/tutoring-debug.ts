@@ -1,5 +1,7 @@
 type DebugValue = unknown;
 
+type TimedStepPayload = Record<string, unknown>;
+
 function isDebugEnabled() {
   return (
     process.env.NODE_ENV !== "production" ||
@@ -11,6 +13,16 @@ function trimText(value: string, maxLength = 220) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength)}…`;
+}
+
+function nowMs() {
+  return typeof globalThis.performance?.now === "function"
+    ? globalThis.performance.now()
+    : Date.now();
+}
+
+function elapsedMs(startedAt: number) {
+  return Math.round(nowMs() - startedAt);
 }
 
 export function summarizeTutoringText(value: DebugValue, maxLength = 220) {
@@ -63,4 +75,36 @@ export function logTutoringError(event: string, error: unknown, payload?: Record
     ...(payload ?? {}),
     error,
   });
+}
+
+export async function measureTutoringStep<T>(
+  event: string,
+  payload: TimedStepPayload,
+  step: () => Promise<T> | T,
+) {
+  const startedAt = nowMs();
+  logTutoringDebug(`${event}:start`, payload);
+
+  try {
+    const result = await step();
+    logTutoringDebug(`${event}:done`, {
+      ...payload,
+      durationMs: elapsedMs(startedAt),
+    });
+    return result;
+  } catch (error) {
+    logTutoringError(`${event}:error`, error, {
+      ...payload,
+      durationMs: elapsedMs(startedAt),
+    });
+    throw error;
+  }
+}
+
+export function createTutoringTimer() {
+  const startedAt = nowMs();
+
+  return {
+    elapsedMs: () => elapsedMs(startedAt),
+  };
 }

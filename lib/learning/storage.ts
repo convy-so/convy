@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { unstable_cache } from "next/cache";
 
 import { getDb } from "@/db";
 import {
@@ -29,6 +30,16 @@ export async function getTopicWithMaterials(topicId: string) {
       },
     },
   });
+}
+
+const cachedGetTopicWithMaterials = unstable_cache(
+  async (topicId: string) => await getTopicWithMaterials(topicId),
+  ["learning-topic-with-materials"],
+  { revalidate: 60 },
+);
+
+export async function getCachedTopicWithMaterials(topicId: string) {
+  return await cachedGetTopicWithMaterials(topicId);
 }
 
 export async function createLearningSession(params: {
@@ -199,6 +210,16 @@ export async function listLearningMessages(sessionId: string) {
   return await getDb().query.learningMessages.findMany({
     where: eq(learningMessages.sessionId, sessionId),
     orderBy: [asc(learningMessages.createdAt)],
+  });
+}
+
+export async function getLatestAssistantLearningMessage(sessionId: string) {
+  return await getDb().query.learningMessages.findFirst({
+    where: and(
+      eq(learningMessages.sessionId, sessionId),
+      eq(learningMessages.role, "assistant"),
+    ),
+    orderBy: [desc(learningMessages.createdAt)],
   });
 }
 
