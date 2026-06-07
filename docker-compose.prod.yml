@@ -1,0 +1,59 @@
+# Production overrides + auto-sync from the production branch.
+#
+# Server setup (one time):
+#   git clone -b production https://github.com/YOUR_ORG/convy.git /opt/convy
+#   cd /opt/convy
+#   cp .env.docker.example .env.docker   # fill in real secrets
+#
+# Start stack with auto-sync:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     --env-file .env.docker up -d --build
+#
+# Flow:
+#   1. Push/merge to `production` branch
+#   2. GitHub Actions runs lint + build (must pass)
+#   3. deploy-sync polls origin/production every DEPLOY_INTERVAL_SECONDS
+#   4. When a new commit is found AND CI is green → rebuild + restart app
+#   5. Post-deploy health check; rollback if it fails
+
+services:
+  postgres:
+    ports: !override []
+
+  redis:
+    ports: !override []
+
+  app:
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  deploy-sync:
+    build:
+      context: ./docker/deploy
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/repo
+    working_dir: /repo
+    env_file:
+      - path: .env.docker
+        required: false
+    environment:
+      REPO_DIR: /repo
+      DEPLOY_BRANCH: ${DEPLOY_BRANCH:-production}
+      DEPLOY_ENV_FILE: .env.docker
+      DEPLOY_COMPOSE_FILES: docker-compose.yml:docker-compose.prod.yml
+      DEPLOY_INTERVAL_SECONDS: ${DEPLOY_INTERVAL_SECONDS:-300}
+      REQUIRE_CI_PASS: ${REQUIRE_CI_PASS:-true}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-convy}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:?Set GITHUB_REPOSITORY in .env.docker}
+      GITHUB_DEPLOY_TOKEN: ${GITHUB_DEPLOY_TOKEN:?Set GITHUB_DEPLOY_TOKEN in .env.docker}
+      HEALTHCHECK_URL: http://app:3000/api/health
+    depends_on:
+      app:
+        condition: service_started
