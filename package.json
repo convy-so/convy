@@ -14,6 +14,7 @@
     "websocket:build": "tsc -p websocket/tsconfig.json",
     "websocket:start": "node dist/websocket/server.js",
     "dev:all": "pnpm exec concurrently \"pnpm dev\" \"pnpm workers:dev\" \"pnpm websocket:dev\"",
+    "start:all": "pnpm exec concurrently -k \"pnpm start\" \"pnpm exec tsx workers/index.ts\" \"pnpm exec tsx websocket/server.ts\"",
     "db:diagnose": "tsx --env-file=.env scripts/db-diagnostics.ts",
     "admin:promote": "tsx --env-file=.env scripts/promote-admin.ts",
     "materials:cleanup-failed": "tsx --env-file=.env scripts/cleanup-failed-learning-materials.ts",
