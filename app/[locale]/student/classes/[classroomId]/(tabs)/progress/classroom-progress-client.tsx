@@ -6,6 +6,12 @@ import type { KnowledgeStateNode } from "@/lib/learning/types";
 import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 import { cn } from "@/lib/utils";
 
+type ProgressReportContent = {
+    studentSummary?: string;
+    identifiedGaps?: string[];
+    conceptProgress?: KnowledgeStateNode[];
+};
+
 type ReportRecord = {
     id: string;
     topicId: string;
@@ -16,11 +22,15 @@ type ReportRecord = {
         subject: string | null;
         subjectKey: string | null;
     } | null;
-    report: any; // studentSummary, identifiedGaps, etc.
+    report: ProgressReportContent | null;
 };
 
+type LatestModel = {
+    knowledgeStateModel: KnowledgeStateNode[];
+} | null;
+
 type Props = {
-    latestModel: any;
+    latestModel: LatestModel;
     progressReports: ReportRecord[];
 };
 

@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Dev / scratch — not part of production deploy
+    "scratch/**",
+    "test.js",
+    "app/test-types.ts",
   ]),
 ]);
 
