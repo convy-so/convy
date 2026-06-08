@@ -47,6 +47,9 @@ ENV RESEND_API_KEY=re_build_placeholder
 ENV RESEND_FROM_EMAIL=build@localhost
 ENV GOOGLE_GENERATIVE_AI_API_KEY=build-placeholder
 ENV convy_supabase_secret_key=build-placeholder
+ENV VOICE_AGENT_INTERNAL_KEY=build-time-voice-internal-key
+ENV NEXT_PUBLIC_SUPABASE_URL=https://build.placeholder.supabase.co
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=build-placeholder
 
 RUN pnpm build
 
