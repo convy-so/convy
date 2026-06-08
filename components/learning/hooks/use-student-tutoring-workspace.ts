@@ -187,9 +187,12 @@ export function useStudentTutoringWorkspace({
       lessonId,
       sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
       status: tutoringChatStatus,
-      text: "parts" in message && Array.isArray(message.parts)
-        ? extractMessageText(message as UIMessage)
-        : null,
+      text:
+        message != null &&
+        "parts" in message &&
+        Array.isArray(message.parts)
+          ? extractMessageText(message as UIMessage)
+          : null,
     });
     return sendTutoringChatMessageRaw(message);
   };
