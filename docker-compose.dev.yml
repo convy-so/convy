@@ -1,0 +1,21 @@
+# Local dev port mappings (not used on EC2 production).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#     --profile local-db --env-file .env.docker up --build
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  app:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_HOST: postgres
+      SKIP_DB_WAIT: "false"

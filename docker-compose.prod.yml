@@ -1,30 +1,27 @@
-# Production overrides + auto-sync from the production branch.
+# Production overrides for EC2 (prod2 branch, .env.prod).
 #
-# Server setup (one time):
-#   git clone -b production https://github.com/YOUR_ORG/convy.git /opt/convy
-#   cd /opt/convy
-#   cp .env.docker.example .env.docker   # fill in real secrets
+# Uses Supabase for Postgres — bundled postgres is disabled by default.
+# Redis runs in Docker on the EC2 instance.
 #
-# Start stack with auto-sync:
+# Start:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-#     --env-file .env.docker up -d --build
-#
-# Flow:
-#   1. Push/merge to `production` branch
-#   2. GitHub Actions runs lint + build (must pass)
-#   3. deploy-sync polls origin/production every DEPLOY_INTERVAL_SECONDS
-#   4. When a new commit is found AND CI is green → rebuild + restart app
-#   5. Post-deploy health check; rollback if it fails
+#     --env-file .env.prod up -d --build
 
 services:
-  postgres:
-    ports: !override []
-
-  redis:
-    ports: !override []
-
   app:
     restart: always
+    env_file:
+      - .env.prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      SKIP_DB_WAIT: "true"
+      DATABASE_HOST: ""
+      DATABASE_DIRECT_URL: ""
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      NODE_ENV: production
     logging:
       driver: json-file
       options:
@@ -32,6 +29,7 @@ services:
         max-file: "5"
 
   deploy-sync:
+    profiles: ["auto-sync"]
     build:
       context: ./docker/deploy
       dockerfile: Dockerfile
@@ -41,18 +39,17 @@ services:
       - .:/repo
     working_dir: /repo
     env_file:
-      - path: .env.docker
-        required: false
+      - .env.prod
     environment:
       REPO_DIR: /repo
-      DEPLOY_BRANCH: ${DEPLOY_BRANCH:-production}
-      DEPLOY_ENV_FILE: .env.docker
+      DEPLOY_BRANCH: prod2
+      DEPLOY_ENV_FILE: .env.prod
       DEPLOY_COMPOSE_FILES: docker-compose.yml:docker-compose.prod.yml
       DEPLOY_INTERVAL_SECONDS: ${DEPLOY_INTERVAL_SECONDS:-300}
       REQUIRE_CI_PASS: ${REQUIRE_CI_PASS:-true}
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-convy}
-      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:?Set GITHUB_REPOSITORY in .env.docker}
-      GITHUB_DEPLOY_TOKEN: ${GITHUB_DEPLOY_TOKEN:?Set GITHUB_DEPLOY_TOKEN in .env.docker}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-convy-so/convy}
+      GITHUB_DEPLOY_TOKEN: ${GITHUB_DEPLOY_TOKEN:-}
       HEALTHCHECK_URL: http://app:3000/api/health
     depends_on:
       app:

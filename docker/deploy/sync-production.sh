@@ -3,9 +3,9 @@
 set -e
 
 REPO_DIR="${REPO_DIR:-/repo}"
-BRANCH="${DEPLOY_BRANCH:-production}"
+BRANCH="${DEPLOY_BRANCH:-prod2}"
 COMPOSE_FILES="${DEPLOY_COMPOSE_FILES:-docker-compose.yml:docker-compose.prod.yml}"
-ENV_FILE="${DEPLOY_ENV_FILE:-.env.docker}"
+ENV_FILE="${DEPLOY_ENV_FILE:-.env.prod}"
 LOCK_FILE="${DEPLOY_LOCK_FILE:-/tmp/convy-deploy.lock}"
 
 cd "$REPO_DIR"
