@@ -10,11 +10,15 @@ concurrency:
   group: prod2-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/convy-so/convy
+
 jobs:
-  validate:
-    name: Lint and build
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -37,29 +41,55 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Build
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-          CI: true
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
-          BETTER_AUTH_SECRET: ci-build-placeholder-min-32-chars-long
-          GOOGLE_CLIENT_ID: ci-placeholder
-          GOOGLE_CLIENT_SECRET: ci-placeholder
-          RESEND_API_KEY: re_ci_placeholder
-          RESEND_FROM_EMAIL: ci@localhost
-          GOOGLE_GENERATIVE_AI_API_KEY: ci-placeholder
-          convy_supabase_secret_key: ci-placeholder
-          NEXT_PUBLIC_APP_URL: https://example.com
-          NEXT_PUBLIC_BETTER_AUTH_URL: https://example.com
-          NEXT_PUBLIC_WEBSOCKET_URL: wss://example.com
-        run: pnpm build
-
-  deploy:
-    name: Deploy to EC2
-    needs: validate
+  build-push:
+    name: Build and push Docker image
+    needs: lint
     if: github.event_name == 'push' && github.ref == 'refs/heads/prod2'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:prod2
+            ${{ env.IMAGE_NAME }}:prod2-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_APP_URL=${{ vars.PROD_APP_URL || 'http://54.227.226.100:3000' }}
+            NEXT_PUBLIC_BETTER_AUTH_URL=${{ vars.PROD_BETTER_AUTH_URL || 'http://54.227.226.100:3000' }}
+            NEXT_PUBLIC_WEBSOCKET_URL=${{ vars.PROD_WEBSOCKET_URL || 'ws://54.227.226.100:3001' }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.PROD_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ vars.PROD_SUPABASE_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_GDPR_EU_MODE=false
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.PROD_SENTRY_DSN }}
+
+  deploy:
+    name: Deploy to EC2
+    needs: build-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Deploy over SSH
@@ -68,13 +98,16 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 40m
+          command_timeout: 15m
           script: |
             set -e
             cd /opt/convy
             git fetch origin prod2
             git checkout prod2
             git reset --hard origin/prod2
+            echo "${{ secrets.GHCR_READ_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-              --env-file .env.prod up -d --build --remove-orphans
+              --env-file .env.prod pull app
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              --env-file .env.prod up -d --no-build --remove-orphans
             wget -qO- http://127.0.0.1:3000/api/health

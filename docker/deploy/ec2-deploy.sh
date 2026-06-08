@@ -14,7 +14,11 @@ git reset --hard "origin/${BRANCH}"
 
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-convy}" \
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  --env-file "$ENV_FILE" up -d --build --remove-orphans
+  --env-file "$ENV_FILE" pull app
+
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-convy}" \
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  --env-file "$ENV_FILE" up -d --no-build --remove-orphans
 
 wget -qO- http://127.0.0.1:3000/api/health
 echo ""

@@ -9,6 +9,8 @@
 
 services:
   app:
+    image: ghcr.io/convy-so/convy:prod2
+    pull_policy: always
     restart: always
     env_file:
       - .env.prod
