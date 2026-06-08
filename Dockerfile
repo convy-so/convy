@@ -62,13 +62,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV WEBSOCKET_PORT=3001
+ENV HOME=/app
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 --ingroup nodejs convy
 
 COPY --from=builder --chown=convy:nodejs /app ./
 
-RUN chmod +x /app/docker/entrypoint.sh
+RUN chmod +x /app/docker/entrypoint.sh \
+  && mkdir -p /app/.cache \
+  && chown -R convy:nodejs /app/.cache
 
 USER convy
 
