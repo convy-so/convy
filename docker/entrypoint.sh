@@ -25,7 +25,9 @@ DB_PORT="${DATABASE_PORT:-5432}"
 REDIS_HOST="${REDIS_HOST:-redis}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 
-wait_for "$DB_HOST" "$DB_PORT" "PostgreSQL"
+if [ "${SKIP_DB_WAIT:-false}" != "true" ]; then
+  wait_for "$DB_HOST" "$DB_PORT" "PostgreSQL"
+fi
 wait_for "$REDIS_HOST" "$REDIS_PORT" "Redis"
 
 # Optional first-time schema sync for self-hosted Postgres.
