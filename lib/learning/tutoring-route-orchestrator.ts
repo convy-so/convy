@@ -94,15 +94,16 @@ export async function ensureTutoringSession(input: {
     studyLanguage: input.studyLanguage,
   });
   if (input.sessionId) {
+    const sessionId = input.sessionId;
     const requestedSession = await measureTutoringStep(
       "session:ensure:lookup-requested",
       {
         topicId: input.topicId,
-        sessionId: input.sessionId,
+        sessionId,
         classroomStudentId: input.access.classroomStudent.id,
         studyLanguage: input.studyLanguage,
       },
-      async () => await getLearningSessionById(input.sessionId),
+      async () => await getLearningSessionById(sessionId),
     );
 
     if (

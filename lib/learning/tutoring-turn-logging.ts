@@ -1,5 +1,5 @@
 import { appendLearningMessage, logLearningInteraction } from "@/lib/learning/storage";
-import { measureTutoringStep } from "@/lib/learning/tutoring-debug";
+import { measureTutoringStep, logTutoringDebug } from "@/lib/learning/tutoring-debug";
 
 type BaseTurnLogParams = {
   sessionId: string;
