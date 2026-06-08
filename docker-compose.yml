@@ -53,6 +53,8 @@ services:
       retries: 10
 
   app:
+    image: ${DOCKER_IMAGE:-ghcr.io/example-org/example-app:prod2}
+    pull_policy: always
     build:
       context: .
       dockerfile: Dockerfile
