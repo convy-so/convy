@@ -30,8 +30,15 @@ if [ "${SKIP_DB_WAIT:-false}" != "true" ]; then
 fi
 wait_for "$REDIS_HOST" "$REDIS_PORT" "Redis"
 
-# Optional first-time schema sync for self-hosted Postgres.
-# Set RUN_DB_PUSH=true on first deploy, then disable.
+# Apply pending Drizzle SQL migrations before starting app processes.
+# Set RUN_DB_MIGRATE=false to skip (not recommended in production).
+if [ "${RUN_DB_MIGRATE:-true}" = "true" ]; then
+  echo "Running database migrations (RUN_DB_MIGRATE=true)..."
+  node ./node_modules/tsx/dist/cli.mjs scripts/run-db-migrate.ts
+fi
+
+# Legacy schema sync — only when no migration files exist yet.
+# Prefer `pnpm db:generate` + committed migrations in db/migrations/.
 if [ "${RUN_DB_PUSH:-false}" = "true" ]; then
   echo "Running drizzle-kit push (RUN_DB_PUSH=true)..."
   node ./node_modules/drizzle-kit/bin.cjs push

@@ -106,6 +106,8 @@ jobs:
             echo "${{ secrets.GHCR_READ_TOKEN || vars.GHCR_READ_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.yml -f docker-compose.prod.yml \
               --env-file .env.prod pull app
+            chmod +x docker/deploy/db-migrate.sh
+            ./docker/deploy/db-migrate.sh
             docker compose -f docker-compose.yml -f docker-compose.prod.yml \
               --env-file .env.prod up -d --no-build --remove-orphans
             wget -qO- http://127.0.0.1:3000/api/health
