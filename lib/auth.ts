@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { betterAuth, InferSession, InferUser } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -34,6 +35,55 @@ function readLocaleField(
 
 function isMutableRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+async function readSignupRoleIntent(requestHeaders?: Headers | null) {
+  const intent = await readAuthIntentFromRequestHeaders(requestHeaders);
+  if (
+    !intent ||
+    (intent.kind !== "direct-signup" && intent.kind !== "invite-signup") ||
+    !intent.desiredRole
+  ) {
+    return null;
+  }
+
+  return {
+    kind: intent.kind,
+    desiredRole: intent.desiredRole,
+  };
+}
+
+async function reconcileSignupRoleFromIntent(params: {
+  userId: string;
+  requestHeaders?: Headers | null;
+}) {
+  const signupIntent = await readSignupRoleIntent(params.requestHeaders);
+  if (!signupIntent) {
+    return;
+  }
+
+  const user = await getDb().query.users.findFirst({
+    where: eq(users.id, params.userId),
+  });
+  if (!user || user.role === signupIntent.desiredRole) {
+    return;
+  }
+
+  if (user.role === "admin" || user.role === "expert") {
+    return;
+  }
+
+  if (Date.now() - user.createdAt.getTime() > 60_000) {
+    return;
+  }
+
+  await getDb()
+    .update(users)
+    .set({
+      role: signupIntent.desiredRole,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, params.userId));
 }
 
 export const auth = betterAuth({
@@ -84,11 +134,10 @@ export const auth = betterAuth({
         }
         const body = ctx.body;
         if (isMutableRecord(body)) {
-          Reflect.set(body, "initialRole", intent.desiredRole);
+          Reflect.set(body, "role", intent.desiredRole);
           if (typeof Reflect.get(body, "email") === "string") {
             Reflect.set(body, "email", normalizeIdentityEmail(String(Reflect.get(body, "email"))));
           }
-          Reflect.deleteProperty(body, "role");
         }
       }
 
@@ -113,12 +162,9 @@ export const auth = betterAuth({
       }
     }),
     after: createAuthMiddleware(async (ctx) => {
-      if (!ctx.path.startsWith("/callback/")) {
-        return;
-      }
-
-      const intent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
-      if (!intent || intent.kind !== "direct-signup" || intent.desiredRole !== "teacher") {
+      const isOAuthCallback = ctx.path.startsWith("/callback/");
+      const isEmailSignup = ctx.path === "/sign-up/email";
+      if (!isOAuthCallback && !isEmailSignup) {
         return;
       }
 
@@ -128,25 +174,10 @@ export const auth = betterAuth({
         return;
       }
 
-      const user = await getDb().query.users.findFirst({
-        where: eq(users.id, userId),
+      await reconcileSignupRoleFromIntent({
+        userId,
+        requestHeaders: ctx.request?.headers ?? null,
       });
-
-      if (!user || user.role !== "student") {
-        return;
-      }
-
-      if (Date.now() - user.createdAt.getTime() > 60_000) {
-        return;
-      }
-
-      await getDb()
-        .update(users)
-        .set({
-          role: "teacher",
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userId));
     }),
   },
   plugins: [
@@ -279,8 +310,9 @@ export const auth = betterAuth({
             user.email = normalizeIdentityEmail(user.email);
           }
 
-          if (user.initialRole) {
-            user.role = user.initialRole;
+          const signupIntent = await readSignupRoleIntent(await headers());
+          if (signupIntent) {
+            user.role = signupIntent.desiredRole;
           }
 
           if (user.role === "expert" || user.role === "admin") {
