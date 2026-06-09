@@ -31,6 +31,7 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-convy}" \
   docker compose $COMPOSE_ARGS --env-file "$ENV_FILE" \
   run --rm --no-deps --entrypoint "" \
   -v "$REPO_DIR/db/migrations:/app/db/migrations:ro" \
+  -v "$REPO_DIR/scripts/run-db-migrate.ts:/app/scripts/run-db-migrate.ts:ro" \
   app \
   node ./node_modules/tsx/dist/cli.mjs scripts/run-db-migrate.ts
 
