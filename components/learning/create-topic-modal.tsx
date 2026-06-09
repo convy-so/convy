@@ -9,6 +9,7 @@ import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { TextareaField } from "@/components/auth/textarea-field";
+import { FormDropdown } from "@/components/ui/form-dropdown";
 import { cn } from "@/lib/utils";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import { useRouter } from "@/i18n/routing";
@@ -103,7 +104,7 @@ export function CreateTopicModal({
                 onClick={handleClose}
             />
 
-            <div className="relative mx-4 w-full max-w-xl animate-in zoom-in-95 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl duration-300">
+            <div className="relative mx-4 w-full max-w-xl animate-in zoom-in-95 rounded-3xl border border-gray-100 bg-white shadow-2xl duration-300">
                 <button
                         type="button"
                         onClick={handleClose}
@@ -148,26 +149,20 @@ export function CreateTopicModal({
                             required
                         />
 
-                        <div className="grid gap-4 ">
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-[#292929]">
-                                    Course
-                                </label>
-                                <div className="relative">
-                                    <Hash className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#696969]" />
-                                    <select
-                                        value={courseId}
-                                        onChange={(e) => setCourseId(e.target.value)}
-                                        className="w-full rounded-xl border border-gray-200 bg-white py-3 pr-4 pl-10 text-sm text-[#292929] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#292929]"
-                                    >
-                                        {availableCourses.map((course) => (
-                                            <option key={course.id} value={course.id}>
-                                                {course.title}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
+                        <div className="grid gap-4">
+                            <FormDropdown
+                                id="topic-course"
+                                label="Course"
+                                icon={Hash}
+                                value={courseId}
+                                onChange={setCourseId}
+                                placeholder="Select a course"
+                                options={availableCourses.map((course) => ({
+                                    value: course.id,
+                                    label: course.title,
+                                }))}
+                                menuZIndex={120}
+                            />
 
                             <TextareaField
                                 label="Session overview"
