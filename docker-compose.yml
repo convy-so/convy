@@ -78,7 +78,6 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DATABASE_HOST: ${DATABASE_HOST:-}
       REDIS_HOST: ${REDIS_HOST:-redis}
-      HOSTNAME: 0.0.0.0
       PORT: 3000
       WEBSOCKET_PORT: ${WEBSOCKET_PORT:-3001}
       NODE_ENV: production

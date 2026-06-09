@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { clearAuthIntentCookie } from "@/lib/auth/auth-intent";
+import { resolvePublicRedirectUrl } from "@/lib/auth/public-url";
 import { sanitizeReturnTo } from "@/lib/auth/redirect";
 
 export async function GET(request: NextRequest) {
@@ -9,5 +10,5 @@ export async function GET(request: NextRequest) {
 
   await clearAuthIntentCookie();
 
-  return NextResponse.redirect(new URL(target, request.url));
+  return NextResponse.redirect(resolvePublicRedirectUrl(target));
 }
