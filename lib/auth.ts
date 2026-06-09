@@ -134,10 +134,10 @@ export const auth = betterAuth({
         }
         const body = ctx.body;
         if (isMutableRecord(body)) {
-          Reflect.set(body, "role", intent.desiredRole);
           if (typeof Reflect.get(body, "email") === "string") {
             Reflect.set(body, "email", normalizeIdentityEmail(String(Reflect.get(body, "email"))));
           }
+          Reflect.deleteProperty(body, "role");
         }
       }
 
@@ -271,7 +271,7 @@ export const auth = betterAuth({
       role: {
         type: "string",
         required: false,
-        input: true,
+        input: false,
         returned: false,
       },
       banned: {

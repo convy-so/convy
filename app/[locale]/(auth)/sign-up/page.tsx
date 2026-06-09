@@ -73,7 +73,6 @@ export default function SignUpPage() {
         email: formData.email,
         password: formData.password,
         name: formData.name,
-        role: isInviteFlow ? "student" : formData.role,
         callbackURL,
         fetchOptions: {
           onError: (ctx) => {
