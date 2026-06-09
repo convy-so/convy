@@ -20,7 +20,6 @@ services:
     environment:
       SKIP_DB_WAIT: "true"
       DATABASE_HOST: ""
-      DATABASE_DIRECT_URL: ""
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       NODE_ENV: production

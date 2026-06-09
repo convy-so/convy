@@ -75,9 +75,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            NEXT_PUBLIC_APP_URL=${{ vars.PROD_APP_URL || 'http://54.227.226.100:3000' }}
-            NEXT_PUBLIC_BETTER_AUTH_URL=${{ vars.PROD_BETTER_AUTH_URL || 'http://54.227.226.100:3000' }}
-            NEXT_PUBLIC_WEBSOCKET_URL=${{ vars.PROD_WEBSOCKET_URL || 'ws://54.227.226.100:3001' }}
+            NEXT_PUBLIC_APP_URL=${{ vars.PROD_APP_URL || 'http://44.207.198.43:3000' }}
+            NEXT_PUBLIC_BETTER_AUTH_URL=${{ vars.PROD_BETTER_AUTH_URL || 'http://44.207.198.43:3000' }}
+            NEXT_PUBLIC_WEBSOCKET_URL=${{ vars.PROD_WEBSOCKET_URL || 'ws://44.207.198.43:3001' }}
             NEXT_PUBLIC_SUPABASE_URL=${{ vars.PROD_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ vars.PROD_SUPABASE_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_GDPR_EU_MODE=false
