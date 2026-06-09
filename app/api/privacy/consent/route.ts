@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     maxAge: 60 * 60 * 24 * 180,
     httpOnly: false,
     sameSite: "lax",
-    secure: env.NODE_ENV === "production",
+    secure: env.COOKIE_SECURE,
   });
 
   return response;

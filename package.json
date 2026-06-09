@@ -21,6 +21,7 @@
     "materials:prune-attempts": "tsx --env-file=.env scripts/prune-learning-material-upload-attempts.ts",
     "email:dev": "email dev --dir components/emails",
     "db:generate": "drizzle-kit generate",
+    "db:generate:initial": "drizzle-kit generate --name initial_schema",
     "db:migrate": "tsx scripts/run-db-migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"

@@ -57,7 +57,7 @@ export function getRespondentSessionCookieOptions() {
     maxAge: RESPONDENT_SESSION_TTL_DAYS * 24 * 60 * 60,
     httpOnly: true,
     sameSite: "strict" as const,
-    secure: env.NODE_ENV === "production",
+    secure: env.COOKIE_SECURE,
   };
 }
 
