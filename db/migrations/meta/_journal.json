@@ -113,6 +113,13 @@
       "when": 1779802915306,
       "tag": "0015_many_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1780994762861,
+      "tag": "0016_fresh_santa_claus",
+      "breakpoints": true
     }
   ]
 }

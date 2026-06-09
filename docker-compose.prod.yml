@@ -23,6 +23,7 @@ services:
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       NODE_ENV: production
+      RUN_DB_MIGRATE: "true"
     logging:
       driver: json-file
       options:
