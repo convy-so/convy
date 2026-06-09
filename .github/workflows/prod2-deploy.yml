@@ -93,9 +93,9 @@ jobs:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.EC2_HOST || vars.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ secrets.EC2_SSH_KEY || vars.EC2_SSH_KEY }}
           command_timeout: 15m
           script: |
             set -e
@@ -103,7 +103,7 @@ jobs:
             git fetch origin prod2
             git checkout prod2
             git reset --hard origin/prod2
-            echo "${{ secrets.GHCR_READ_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_READ_TOKEN || vars.GHCR_READ_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.yml -f docker-compose.prod.yml \
               --env-file .env.prod pull app
             docker compose -f docker-compose.yml -f docker-compose.prod.yml \

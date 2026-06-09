@@ -2,7 +2,7 @@
 
 FROM node:20-bookworm-slim AS base
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends dumb-init netcat-openbsd wget \
+  && apt-get install -y --no-install-recommends dumb-init netcat-openbsd wget procps \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@10.10.0 --activate
 WORKDIR /app
@@ -51,7 +51,9 @@ ENV VOICE_AGENT_INTERNAL_KEY=build-time-voice-internal-key
 ENV NEXT_PUBLIC_SUPABASE_URL=https://build.placeholder.supabase.co
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=build-placeholder
 
-RUN pnpm build
+RUN pnpm build \
+  && cp -r .next/static .next/standalone/.next/static \
+  && cp -r public .next/standalone/public
 
 # ── Production runtime (single container: Next + workers + WebSocket) ──
 FROM base AS runner
