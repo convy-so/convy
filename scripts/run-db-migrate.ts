@@ -34,9 +34,9 @@ function resolveDatabaseUrl(): string {
   return url;
 }
 
-function countMigrationFiles(): number {
+function listSqlMigrationFiles(): string[] {
   if (!fs.existsSync(MIGRATIONS_FOLDER)) {
-    return 0;
+    return [];
   }
 
   return fs
@@ -46,19 +46,47 @@ function countMigrationFiles(): number {
         entry.isFile() &&
         entry.name.endsWith(".sql") &&
         !entry.name.startsWith("."),
-    ).length;
+    )
+    .map((entry) => entry.name)
+    .sort();
+}
+
+function validateJournalMatchesFiles() {
+  const journalPath = path.join(MIGRATIONS_FOLDER, "meta", "_journal.json");
+  if (!fs.existsSync(journalPath)) {
+    return;
+  }
+
+  const journal = JSON.parse(fs.readFileSync(journalPath, "utf-8")) as {
+    entries?: Array<{ tag: string }>;
+  };
+
+  const expected = (journal.entries ?? []).map((entry) => `${entry.tag}.sql`);
+  const missing = expected.filter(
+    (filename) => !fs.existsSync(path.join(MIGRATIONS_FOLDER, filename)),
+  );
+
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        "Migration journal references SQL files that are not in db/migrations/.",
+        `Missing: ${missing.join(", ")}`,
+        "Commit all migration SQL files, or squash meta/_journal.json to match the files you ship.",
+      ].join(" "),
+    );
+  }
 }
 
 async function main() {
   const databaseUrl = resolveDatabaseUrl();
   const connectionInfo = getDatabaseConnectionInfo(databaseUrl);
-  const migrationCount = countMigrationFiles();
+  const migrationFiles = listSqlMigrationFiles();
 
   console.log("[db-migrate] connection:", maskConnectionString(databaseUrl));
   console.log("[db-migrate] mode:", connectionInfo.mode);
   console.log("[db-migrate] migrations folder:", MIGRATIONS_FOLDER);
 
-  if (migrationCount === 0) {
+  if (migrationFiles.length === 0) {
     console.log(
       "[db-migrate] No SQL migration files found. Skipping.",
       "Run `pnpm db:generate` locally after schema changes, commit db/migrations/, then redeploy.",
@@ -66,7 +94,12 @@ async function main() {
     return;
   }
 
-  console.log(`[db-migrate] Found ${migrationCount} migration file(s). Applying pending…`);
+  validateJournalMatchesFiles();
+
+  console.log(
+    `[db-migrate] Found ${migrationFiles.length} migration file(s): ${migrationFiles.join(", ")}`,
+  );
+  console.log("[db-migrate] Applying pending migrations…");
 
   const shouldUseInsecureTls =
     process.env.ALLOW_INSECURE_TLS === "true" && !connectionInfo.isLocal;
