@@ -43,11 +43,15 @@ export const auth = betterAuth({
     useSecureCookies: env.COOKIE_SECURE,
   },
   trustedOrigins: (() => {
-    try {
-      return [new URL(env.BETTER_AUTH_URL).origin];
-    } catch {
-      return [env.BETTER_AUTH_URL];
+    const origins = new Set<string>();
+    for (const value of [env.BETTER_AUTH_URL, env.APP_BASE_URL]) {
+      try {
+        origins.add(new URL(value).origin);
+      } catch {
+        origins.add(value);
+      }
     }
+    return [...origins];
   })(),
   secret: env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDb(), {

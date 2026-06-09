@@ -44,7 +44,6 @@ if [ "${RUN_DB_PUSH:-false}" = "true" ]; then
   node ./node_modules/drizzle-kit/bin.cjs push
 fi
 
-export HOSTNAME="${HOSTNAME:-0.0.0.0}"
 export PORT="${PORT:-3000}"
 export WEBSOCKET_PORT="${WEBSOCKET_PORT:-3001}"
 
