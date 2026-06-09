@@ -12,6 +12,7 @@ type PrepareAuthIntentInput = {
 export async function prepareAuthIntent(input: PrepareAuthIntentInput): Promise<string> {
   const response = await fetch("/api/auth/intent", {
     method: "POST",
+    credentials: "include",
     headers: {
       "content-type": "application/json",
     },

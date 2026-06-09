@@ -39,6 +39,9 @@ function isMutableRecord(value: unknown): value is Record<string, unknown> {
 export const auth = betterAuth({
   appName: "Convyy",
   baseURL: env.BETTER_AUTH_URL,
+  advanced: {
+    useSecureCookies: env.COOKIE_SECURE,
+  },
   trustedOrigins: (() => {
     try {
       return [new URL(env.BETTER_AUTH_URL).origin];
