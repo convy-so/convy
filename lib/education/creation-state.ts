@@ -13,9 +13,7 @@ export function buildCreationCollectedInfo(input: {
   validation: BriefValidationResult;
   mediaDecision: CreationMediaDecision;
 }): CreationCollectedInfo {
-  const readyForSampling =
-    input.validation.isReady &&
-    isCreationMediaDecisionResolved(input.mediaDecision);
+  const readyForSampling = input.validation.isReady;
 
   return {
     objective: Boolean(input.brief.researchGoal),
@@ -40,9 +38,7 @@ export function buildCreationExtractedData(input: {
   validation: BriefValidationResult;
   mediaDecision: CreationMediaDecision;
 }) {
-  const readyForSampling =
-    input.validation.isReady &&
-    isCreationMediaDecisionResolved(input.mediaDecision);
+  const readyForSampling = input.validation.isReady;
 
   return {
     programId: input.brief.programId,
@@ -59,7 +55,7 @@ export function buildCreationExtractedData(input: {
     scope: {
       breadthVsDepth: "balanced",
       mainTopics: input.brief.requiredTopics,
-      boundaries: input.brief.deliveryContext,
+      boundaries: input.brief.studyContext,
     },
     successCriteria: {
       insightTypes: ["behavioral", "rational"],
@@ -76,7 +72,11 @@ export function buildCreationExtractedData(input: {
     metrics: input.brief.metrics,
     personalInfo: input.brief.personalInfo,
     brief: input.brief,
+    creationController: input.brief.creationController,
     missingFields: input.validation.missingFields,
+    fieldQuality: input.validation.fieldQuality,
+    nextAction: input.validation.nextAction,
+    targetField: input.validation.targetField,
     briefReadyForSampling: input.validation.isReady,
     readyForSampling,
     mediaDecision: input.mediaDecision,

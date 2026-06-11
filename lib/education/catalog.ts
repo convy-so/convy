@@ -165,9 +165,10 @@ export function classifyEducationProgramHeuristically(input: string): {
   const best = scores.sort((a, b) => b.score - a.score)[0];
   if (!best || best.score <= 0) {
     return {
-      programId: "education.course_efficacy",
+      programId: "education.institutional_experience",
       confidence: 0.3,
-      rationale: "No strong program signals found; defaulted to course efficacy.",
+      rationale:
+        "No strong program signals found; defaulted to the broader institutional-experience lens until the creator narrows scope.",
     };
   }
 

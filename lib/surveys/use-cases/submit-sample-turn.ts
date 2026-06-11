@@ -22,6 +22,7 @@ import {
   toPersistedUIChatMessages,
   toVisibleConversationMessages,
 } from "@/lib/chat-ui-messages";
+import { SURVEY_COMPLETION_TAG } from "@/lib/chat-ui-signals";
 import {
   acquireSurveyLease,
   getActiveSurveyLease,
@@ -31,7 +32,11 @@ import {
 import {
   buildConductingSystemPromptParts,
   createInitialSessionState,
-  finalizeConductingTurn,
+  evaluateConductingTurnState,
+  persistConductingTurnTranscript,
+  planConductingTurn,
+  resolveActiveCoverageNode,
+  resolveConductingTurnPlan,
 } from "@/lib/education/conducting-runtime";
 import { getSampleFinishSurveyToolDefinition } from "@/lib/education/agent-tools";
 import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
@@ -147,7 +152,7 @@ export async function submitSampleTurn(input:{surveyId:string;session:AuthSessio
       );
     }
 
-    const [activeSampleProfile, runtimeLayers, fewShotExamples] = await Promise.all([
+    const [activeSampleProfile, runtimeLayers] = await Promise.all([
       getActiveConductingProfile(surveyId, "sample"),
       getConductingRuntimeLayers({
         surveyId,
@@ -155,11 +160,6 @@ export async function submitSampleTurn(input:{surveyId:string;session:AuthSessio
         programId: survey.programId,
         language: getSurveyLanguage(survey.language),
         mode: "sample",
-      }),
-      getDynamicFewShotExamples({
-        feature: "survey_conducting",
-        limit: 3,
-        context: [survey.title, planRow.plan.nodes[0]?.label].filter(Boolean).join(" | "),
       }),
     ]);
 
@@ -223,31 +223,12 @@ export async function submitSampleTurn(input:{surveyId:string;session:AuthSessio
         }),
       });
     }
-
-    const promptParts = buildConductingSystemPromptParts({
-      brief: briefRow.brief,
-      coveragePlan: planRow.plan,
-      sessionState: sessionRow.sessionState,
-      sessionType: "sample",
-      conductingProfile: activeSampleProfile?.profile ?? null,
-      expertGuidanceContext: runtimeLayers.expertGuidanceContext,
-      toolContext: {
-        canFinishSurvey: true,
-        canShowMedia: false,
-      },
-    });
-    const systemPrompt = `${promptParts.dynamicSystemPrompt}
-
-Additional sample-session rules:
-- Treat the creator exactly like a participant so they can feel the real interview flow.
-- Honor the approved sample conducting profile precisely when it is present.
-- Close naturally once the required education evidence is covered.
-- Keep the exchange realistic and participant-centered.
-
-Respond to the user in the language they are speaking to you in. Match the language of each user message naturally.`;
+    const activeNode = resolveActiveCoverageNode(
+      sessionRow.sessionState,
+      planRow.plan,
+    );
 
     let currentSessionState = sessionRow.sessionState;
-    let completedByTool = false;
 
     const tools = {
       finishSurvey: tool({
@@ -276,7 +257,6 @@ Respond to the user in the language they are speaking to you in. Match the langu
             await updateSessionState(sessionRow.id, currentSessionState);
           }
 
-          completedByTool = true;
           return { success: true, message: "Survey marked as complete" };
         },
       }),
@@ -297,7 +277,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
         feature: "survey_sample",
         objective: briefRow.brief.researchGoal,
         currentPhase: "sample review",
-        activeTopic: briefRow.brief.title,
+        activeTopic: activeNode?.label ?? briefRow.brief.title,
         latestUserMessage,
         strictMode: true,
         driftCount: priorDriftCount,
@@ -334,8 +314,16 @@ Respond to the user in the language they are speaking to you in. Match the langu
             execute: async ({ writer }) => {
               writer.write({
                 id: redirectMessage.id,
+                type: "text-start",
+              });
+              writer.write({
+                id: redirectMessage.id,
                 type: "text-delta",
                 delta: scopeDecision.redirectMessage,
+              });
+              writer.write({
+                id: redirectMessage.id,
+                type: "text-end",
               });
             },
           }),
@@ -345,6 +333,161 @@ Respond to the user in the language they are speaking to you in. Match the langu
         return response;
       }
     }
+
+    if (latestUserMessage) {
+      const { nextState } = await evaluateConductingTurnState({
+        surveyId,
+        sessionId: sessionRow.id,
+        brief: briefRow.brief,
+        coveragePlan: planRow.plan,
+        sessionState: currentSessionState,
+        messages: canonicalTurn.canonicalMessages,
+      });
+      currentSessionState = nextState;
+    }
+
+    const planningActiveNode = resolveActiveCoverageNode(
+      currentSessionState,
+      planRow.plan,
+    );
+    const rawTurnPlan = await planConductingTurn({
+      surveyId,
+      brief: briefRow.brief,
+      coveragePlan: planRow.plan,
+      sessionState: currentSessionState,
+      messages: canonicalTurn.canonicalMessages,
+    });
+    const turnPlan = resolveConductingTurnPlan({
+      coveragePlan: planRow.plan,
+      sessionState: currentSessionState,
+      messages: canonicalTurn.canonicalMessages,
+      plan: rawTurnPlan,
+    });
+    const promptSessionState =
+      turnPlan?.action === "advance_to_node" && turnPlan.targetNodeId
+        ? {
+            ...currentSessionState,
+            currentNodeId: turnPlan.targetNodeId,
+          }
+        : currentSessionState;
+    const plannedActiveNode =
+      turnPlan?.action === "advance_to_node" && turnPlan.targetNodeId
+        ? planRow.plan.nodes.find((node) => node.id === turnPlan.targetNodeId) ??
+          planningActiveNode
+        : planningActiveNode;
+
+    if (turnPlan?.action === "close") {
+      const completionText = `${SURVEY_COMPLETION_TAG} ${turnPlan.assistantMessage.trim() || "Thank you. That gives me enough to stop this rehearsal."}`.trim();
+      const completionMessage: ChatMessage = {
+        id: nanoid(),
+        role: "assistant",
+        content: completionText,
+        parts: [
+          { type: "text", text: completionText },
+          {
+            type: "tool-result",
+            toolCallId: `finish-survey-${nanoid(8)}`,
+            toolName: "finishSurvey",
+            result: { success: true, message: "Survey marked as complete" },
+          },
+        ],
+        timestamp: new Date().toISOString(),
+      };
+      currentSessionState = {
+        ...currentSessionState,
+        status: "completed",
+        stopReason: "planned_finish_signal",
+        activeWorkflowDecision: {
+          activeNodeId: null,
+          rationale: turnPlan.reason,
+          shouldStop: true,
+        },
+      };
+      await updateSessionState(sessionRow.id, currentSessionState);
+      const completedMessages = toVisibleConversationMessages([
+        ...canonicalTurn.canonicalMessages,
+        completionMessage,
+      ]);
+      await getDb()
+        .update(sampleConversations)
+        .set({
+          messages: completedMessages,
+          updatedAt: new Date(),
+        })
+        .where(eq(sampleConversations.id, sampleConversation.id));
+      await purgeSessionAnalyticsArtifacts({
+        surveyId,
+        sessionId: sessionRow.id,
+      }).catch((error) => {
+        console.error(
+          "[Sample Route] Failed to purge rehearsal analytics artifacts:",
+          error,
+        );
+      });
+      const revision = await incrementSurveyRevision(surveyId);
+
+      const response = createUIMessageStreamResponse({
+        stream: createUIMessageStream({
+          execute: async ({ writer }) => {
+            writer.write({
+              id: completionMessage.id,
+              type: "text-start",
+            });
+            writer.write({
+              id: completionMessage.id,
+              type: "text-delta",
+              delta: completionText,
+            });
+            writer.write({
+              id: completionMessage.id,
+              type: "text-end",
+            });
+          },
+        }),
+      });
+      response.headers.set("X-Survey-Revision", String(revision));
+      response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
+      response.headers.set(
+        "X-Conversation-Number",
+        conversationNumber.toString(),
+      );
+      response.headers.set(
+        "X-Remaining-Samples",
+        (MAX_SAMPLE_CONVERSATIONS - conversationNumber).toString(),
+      );
+      return response;
+    }
+
+    const fewShotExamples = await getDynamicFewShotExamples({
+      feature: "survey_conducting",
+      limit: 3,
+      context: [survey.title, plannedActiveNode?.label, latestUserMessage]
+        .filter(Boolean)
+        .join(" | "),
+    });
+
+    const promptParts = buildConductingSystemPromptParts({
+      brief: briefRow.brief,
+      coveragePlan: planRow.plan,
+      sessionState: promptSessionState,
+      sessionType: "sample",
+      turnPlan,
+      conductingProfile: activeSampleProfile?.profile ?? null,
+      expertGuidanceContext: runtimeLayers.expertGuidanceContext,
+      toolContext: {
+        canFinishSurvey: true,
+        canShowMedia: false,
+      },
+    });
+    const systemPrompt = `${promptParts.dynamicSystemPrompt}
+
+Additional sample-session rules:
+- Treat the creator exactly like a participant so they can feel the real interview flow.
+- Honor the approved sample conducting profile precisely when it is present.
+- Close naturally once the required education evidence is covered.
+- Keep the exchange realistic and participant-centered.
+
+Respond to the user in the language they are speaking to you in. Match the language of each user message naturally.`;
 
     const sanitizedCanonicalMessages = canonicalTurn.canonicalMessages.map((message) => {
       if (message.role !== "user") {
@@ -408,17 +551,11 @@ Respond to the user in the language they are speaking to you in. Match the langu
         });
 
         if (persistedMessages.some((message) => message.role === "user")) {
-          if (!completedByTool) {
-            const { nextState } = await finalizeConductingTurn({
-              surveyId,
-              sessionId: sessionRow.id,
-              brief: briefRow.brief,
-              coveragePlan: planRow.plan,
-              sessionState: currentSessionState,
-              messages: persistedMessages,
-            });
-            currentSessionState = nextState;
-          }
+          await persistConductingTurnTranscript({
+            surveyId,
+            sessionId: sessionRow.id,
+            messages: persistedMessages,
+          });
 
           await purgeSessionAnalyticsArtifacts({
             surveyId,

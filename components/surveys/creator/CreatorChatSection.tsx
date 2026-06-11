@@ -1,15 +1,14 @@
 "use client";
 
-import {
-  Send,
-  Mic,
-  Loader2,
-  Sparkles,
-} from "lucide-react";
+import { Loader2, Mic, Send } from "lucide-react";
 import type { UIMessage } from "ai";
-import { cn } from "@/lib/utils";
+
 import { MarkdownMessage } from "@/components/ui/markdown-message";
-import { getDisplayedMessageText } from "@/lib/surveys/message-normalizer";
+import { cn } from "@/lib/utils";
+import {
+  getDisplayedMessageText,
+  isInternalSurveyCreateMessageText,
+} from "@/lib/surveys/message-normalizer";
 
 interface CreatorChatSectionProps {
   messages: UIMessage[];
@@ -40,111 +39,136 @@ export function CreatorChatSection({
   setCreationVoiceMode,
   messagesEndRef,
 }: CreatorChatSectionProps) {
-  return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white">
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {messages.map((message, idx) => {
-          const isUser = message.role === "user";
-          const text = getDisplayedMessageText(message);
-          
-          if (!text && !message.parts?.some((p) => p.type === "tool-call")) return null;
+  const visibleMessages = messages.filter((message) => {
+    const text = getDisplayedMessageText(message);
+    return !isInternalSurveyCreateMessageText(text);
+  });
 
-          return (
-            <div
-              key={message.id || idx}
-              className={cn(
-                "flex flex-col max-w-[85%] lg:max-w-[75%] animate-in fade-in slide-in-from-bottom-2 duration-300",
-                isUser ? "ml-auto items-end" : "mr-auto items-start",
-              )}
-            >
-              <div
-                className={cn(
-                  "p-4 rounded-2xl text-sm leading-relaxed",
-                  isUser
-                    ? "bg-gray-900 text-white rounded-tr-none"
-                    : "bg-gray-50 text-gray-800 border border-gray-100 rounded-tl-none",
-                )}
-              >
-                {text ? (
-                  <MarkdownMessage content={text} />
-                ) : (
-                  <div className="flex items-center gap-2 text-gray-400 italic">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Processing...
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 overflow-y-auto border-t border-slate-200">
+        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-4 py-6 sm:px-6">
+          {visibleMessages.length === 0 ? (
+            <div className="py-12 text-sm text-slate-500">
+              Describe the survey objective, audience, and constraints to begin.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {visibleMessages.map((message, idx) => {
+                const isUser = message.role === "user";
+                const text = getDisplayedMessageText(message);
+
+                if (!text && !message.parts?.some((part) => part.type === "tool-call")) {
+                  return null;
+                }
+
+                return (
+                  <div
+                    key={message.id || idx}
+                    className={cn("flex", isUser ? "justify-end" : "justify-start")}
+                  >
+                    <div className="max-w-[46rem] min-w-0">
+                      <p className="mb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                        {isUser ? "You" : "Assistant"}
+                      </p>
+                      <div
+                        className={cn(
+                          "border px-4 py-3 text-sm leading-7 text-slate-900",
+                          isUser ? "border-slate-900 bg-white" : "border-slate-200 bg-slate-50",
+                        )}
+                      >
+                        {text ? (
+                          <MarkdownMessage
+                            content={text}
+                            className={
+                              isUser
+                                ? "[&_a]:text-slate-900 [&_blockquote]:border-slate-300 [&_blockquote]:bg-transparent [&_blockquote]:text-slate-900 [&_code]:border-slate-300 [&_code]:bg-slate-100 [&_code]:text-slate-900 [&_em]:!text-slate-900 [&_h1]:!text-slate-950 [&_h2]:!text-slate-950 [&_h3]:!text-slate-950 [&_li]:text-slate-900 [&_ol]:!text-slate-900 [&_p]:!text-slate-900 [&_strong]:!text-slate-950 [&_table]:text-slate-900 [&_tbody]:!text-slate-900 [&_td]:!text-slate-900 [&_thead]:!text-slate-900 [&_tr]:!text-slate-900 [&_ul]:!text-slate-900"
+                                : undefined
+                            }
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Processing...
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
+
+              {isResearching ? (
+                <div className="flex justify-start">
+                  <div className="max-w-[46rem] min-w-0">
+                    <p className="mb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      Assistant
+                    </p>
+                    <div className="border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-500">
+                      Researching educational best practices...
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          );
-        })}
-        {isResearching && (
-          <div className="flex flex-col mr-auto items-start max-w-[85%] animate-pulse">
-            <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-tl-none flex items-center gap-3">
-              <Sparkles className="w-4 h-4 animate-bounce" />
-              <span className="text-sm font-medium">Researching educational best practices...</span>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      {/* Input area */}
-      {!isReadOnly && (
-        <div className="p-4 bg-white border-t border-gray-100">
-          <form
-            onSubmit={handleSubmit}
-            className="max-w-4xl mx-auto relative group"
-          >
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                isVoiceMode
-                  ? "Listening..."
-                  : "Explain what you want to achieve..."
-              }
-              className={cn(
-                "w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 pl-4 pr-32 focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-gray-900 transition-all resize-none min-h-[60px] max-h-[200px]",
-                isVoiceMode && "bg-indigo-50/50 border-indigo-200 ring-indigo-500/10",
-              )}
-              rows={1}
-              disabled={isLoading || isInitializing}
-            />
-            <div className="absolute right-2 bottom-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setCreationVoiceMode(!isVoiceMode)}
-                className={cn(
-                  "p-2 rounded-xl transition-all duration-200",
-                  isVoiceMode
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-110"
-                    : "text-gray-400 hover:text-gray-900 hover:bg-gray-100",
-                )}
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading || isInitializing}
-                className={cn(
-                  "p-2 rounded-xl bg-black text-white transition-all duration-200 disabled:opacity-30",
-                  input.trim() && !isLoading && "hover:bg-gray-800 scale-105 shadow-md",
-                )}
-              >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Send className="w-5 h-5" />
-                )}
-              </button>
+      {isReadOnly ? null : (
+        <div className="border-t border-slate-200">
+          <form onSubmit={handleSubmit} className="mx-auto w-full max-w-4xl px-4 py-4 sm:px-6">
+            <div className="flex flex-col gap-3">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={isVoiceMode ? "Listening..." : "Type your next instruction..."}
+                className="min-h-[96px] w-full resize-none border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-950 outline-none transition focus:border-slate-950"
+                rows={3}
+                disabled={isLoading || isInitializing}
+              />
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  <button
+                    type="button"
+                    onClick={() => setCreationVoiceMode(!isVoiceMode)}
+                    className={cn(
+                      "inline-flex h-9 items-center gap-2 border px-3 text-sm transition",
+                      isVoiceMode
+                        ? "border-slate-950 bg-slate-950 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-950",
+                    )}
+                  >
+                    <Mic className="h-4 w-4" />
+                    {isVoiceMode ? "Voice on" : "Voice"}
+                  </button>
+                  <span>Enter sends. Shift+Enter adds a new line.</span>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!input.trim() || isLoading || isInitializing}
+                  className={cn(
+                    "inline-flex h-10 items-center gap-2 border px-4 text-sm font-medium transition",
+                    !input.trim() || isLoading || isInitializing
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                      : "border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
+                  )}
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  Send
+                </button>
+              </div>
             </div>
           </form>
-          <div className="mt-2 text-center">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-medium">
-              Press Enter to send • Shift+Enter for new line
-            </p>
-          </div>
         </div>
       )}
     </div>

@@ -15,6 +15,18 @@ type StoredCreateMessage = {
   timestamp?: string;
 };
 
+const INTERNAL_CREATE_MESSAGE_PATTERNS = [
+  /^start the conversation now\./i,
+  /system prompt instructions/i,
+];
+
+const LEGACY_SURVEY_CREATE_GREETING_PATTERNS = [
+  /^hello!\s*i(?:'|’)m here to help you design a study to see how well your course is building real mastery\.\s*to get us started, could you tell me what specific skill or task you want your students to be able to perform confidently by the end of the course\?\s*$/i,
+  /^hi\.\s*i(?:'|’)ll help you shape this education study\.\s*what part of the student, learner, or school experience do you want to understand better\?\s*$/i,
+  /^bonjour\.\s*je vais vous aider a cadrer cette etude\.\s*quelle partie de l'experience des eleves, des apprenants ou de l'ecole voulez-vous mieux comprendre\s*\?\s*$/i,
+  /^hallo\.\s*ich helfe ihnen dabei, diese studie zu strukturieren\.\s*welchen teil der lern-, schul- oder studierendenerfahrung moechten sie besser verstehen\?\s*$/i,
+];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -39,6 +51,18 @@ export function getDisplayedMessageText(message: {
   parts?: SDKMessage["parts"];
 }): string {
   return message.displayedContent || getTextFromChatParts(message.parts);
+}
+
+export function isInternalSurveyCreateMessageText(text: string): boolean {
+  const normalized = text.trim();
+  return INTERNAL_CREATE_MESSAGE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+export function isLegacySurveyCreateGreetingText(text: string): boolean {
+  const normalized = text.trim();
+  return LEGACY_SURVEY_CREATE_GREETING_PATTERNS.some((pattern) =>
+    pattern.test(normalized),
+  );
 }
 
 export function normalizeChatMessageParts(
@@ -123,10 +147,23 @@ function normalizeCreateMessage(
         ? [{ type: "text" as const, text: message.content }]
         : [];
 
+  const displayedContent = message.content || getTextFromChatParts(parts);
+
+  if (isInternalSurveyCreateMessageText(displayedContent)) {
+    return null;
+  }
+
+  if (
+    message.role === "assistant" &&
+    isLegacySurveyCreateGreetingText(displayedContent)
+  ) {
+    return null;
+  }
+
   return {
     id: message.id || `msg-${index}-${Date.now()}`,
     role: message.role,
-    displayedContent: message.content || getTextFromChatParts(parts),
+    displayedContent,
     isTyping: false,
     parts,
     timestamp: message.timestamp

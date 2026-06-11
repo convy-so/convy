@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { authSchema, users } from "@/db/schema";
 import {
+  type AuthIntent,
   normalizeIdentityEmail,
   readAuthIntentFromRequestHeaders,
   validateSignupIntent,
@@ -36,6 +37,24 @@ function isMutableRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function resolvePublicSignupRoleFromIntent(
+  intent: AuthIntent | null | undefined,
+): "student" | "teacher" | null {
+  if (!intent) {
+    return null;
+  }
+
+  if (intent.kind === "invite-signup") {
+    return "student";
+  }
+
+  if (intent.kind === "direct-signup") {
+    return intent.desiredRole;
+  }
+
+  return null;
+}
+
 export const auth = betterAuth({
   appName: "Convyy",
   baseURL: env.BETTER_AUTH_URL,
@@ -59,9 +78,8 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path === "/sign-up/email") {
         const rawIntent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
-        let intent;
         try {
-          intent = validateSignupIntent(rawIntent);
+          validateSignupIntent(rawIntent);
         } catch (error) {
           logAuthAuditEvent("invalid_auth_intent", {
             path: ctx.path,
@@ -77,7 +95,6 @@ export const auth = betterAuth({
         }
         const body = ctx.body;
         if (isMutableRecord(body)) {
-          Reflect.set(body, "initialRole", intent.desiredRole);
           if (typeof Reflect.get(body, "email") === "string") {
             Reflect.set(body, "email", normalizeIdentityEmail(String(Reflect.get(body, "email"))));
           }
@@ -111,7 +128,7 @@ export const auth = betterAuth({
       }
 
       const intent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
-      if (!intent || intent.kind !== "direct-signup" || intent.desiredRole !== "teacher") {
+      if (!intent || resolvePublicSignupRoleFromIntent(intent) !== "teacher") {
         return;
       }
 
@@ -140,6 +157,13 @@ export const auth = betterAuth({
           updatedAt: new Date(),
         })
         .where(eq(users.id, userId));
+
+      logAuthAuditEvent("role_assignment_applied", {
+        path: ctx.path,
+        userId,
+        assignedRole: "teacher",
+        source: "social_callback",
+      });
     }),
   },
   plugins: [
@@ -267,18 +291,46 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => {
+        before: async (user, ctx) => {
           if (typeof user.email === "string") {
             user.email = normalizeIdentityEmail(user.email);
           }
 
-          if (user.initialRole) {
-            user.role = user.initialRole;
+          if (ctx?.path === "/sign-up/email") {
+            const rawIntent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
+            const intent = (() => {
+              try {
+                return validateSignupIntent(rawIntent);
+              } catch (error) {
+                logAuthAuditEvent("invalid_auth_intent", {
+                  path: ctx.path,
+                  reason: error instanceof Error ? error.message : "Unknown auth intent failure",
+                  hasIntent: Boolean(rawIntent),
+                  kind: rawIntent?.kind ?? null,
+                  desiredRole: rawIntent?.desiredRole ?? null,
+                  invitationId: rawIntent?.invitationId ?? null,
+                });
+                throw new Error("Missing or invalid authentication intent.");
+              }
+            })();
+
+            const assignedRole = resolvePublicSignupRoleFromIntent(intent);
+            if (!assignedRole) {
+              throw new Error("Missing or invalid authentication intent.");
+            }
+
+            user.role = assignedRole;
+            logAuthAuditEvent("role_assignment_applied", {
+              path: ctx.path,
+              email: user.email ?? null,
+              assignedRole: user.role,
+              source: "email_signup",
+            });
           }
 
-          if (user.role === "expert" || user.role === "admin") {
+          if (ctx?.path === "/sign-up/email" && (user.role === "expert" || user.role === "admin")) {
             logAuthAuditEvent("role_assignment_rejected", {
-              path: "/sign-up/email",
+              path: ctx.path,
               attemptedRole: user.role,
               email: user.email ?? null,
             });

@@ -13,7 +13,40 @@ export type SessionType = "sample" | "live";
 export type SessionStatus = "active" | "completed" | "paused" | "flagged";
 export type CreationCollectedInfo = Record<string, boolean>;
 
-export const researchBriefSchema = z.object({
+export const creationFieldQualitySchema = z.object({
+  field: z.string(),
+  status: z.enum(["missing", "thin", "sufficient", "conflicting"]),
+  valueSummary: z.string().default(""),
+  evidence: z.string().default(""),
+  confidence: z.number().min(0).max(1).default(0),
+  specificity: z.number().min(0).max(1).default(0),
+  unresolvedIssue: z.string().default(""),
+  lastAskedQuestion: z.string().default(""),
+});
+
+export type CreationFieldQuality = z.infer<typeof creationFieldQualitySchema>;
+
+export const creationControllerStateSchema = z.object({
+  version: z.literal(1).default(1),
+  action: z.enum(["ask", "clarify", "confirm", "complete"]).default("ask"),
+  targetField: z.string().nullable().default(null),
+  fieldQuality: z.array(creationFieldQualitySchema).default([]),
+  askedFieldHistory: z
+    .array(
+      z.object({
+        field: z.string(),
+        question: z.string(),
+      }),
+    )
+    .default([]),
+  readinessRationale: z.string().default(""),
+});
+
+export type CreationControllerState = z.infer<
+  typeof creationControllerStateSchema
+>;
+
+const researchBriefBaseSchema = z.object({
   programId: z.enum(EDUCATION_PROGRAM_IDS),
   title: z.string().min(1),
   researchGoal: z.string().min(1),
@@ -22,7 +55,8 @@ export const researchBriefSchema = z.object({
   audienceRelationship: z.string().optional(),
   audienceKnowledgeLevel: z.string().optional(),
   learningContext: z.string().min(1),
-  deliveryContext: z.string().min(1),
+  studyContext: z.string().min(1).optional(),
+  deliveryContext: z.string().optional(),
   timeWindow: z.string().min(1),
   requiredTopics: z.array(z.string()).default([]),
   successCriteria: z.array(z.string()).default([]),
@@ -39,6 +73,15 @@ export const researchBriefSchema = z.object({
   routingRationale: z.string().default(""),
   missingFields: z.array(z.string()).default([]),
   readyForSampling: z.boolean().default(false),
+  creationController: creationControllerStateSchema,
+});
+
+export const researchBriefSchema = researchBriefBaseSchema.transform((brief) => {
+  const { deliveryContext: _deliveryContext, studyContext, ...rest } = brief;
+  return {
+    ...rest,
+    studyContext: studyContext || _deliveryContext || "",
+  };
 });
 
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
@@ -265,4 +308,7 @@ export interface BriefValidationResult {
   isReady: boolean;
   missingFields: string[];
   notes: string[];
+  fieldQuality: CreationFieldQuality[];
+  targetField: string | null;
+  nextAction: CreationControllerState["action"];
 }

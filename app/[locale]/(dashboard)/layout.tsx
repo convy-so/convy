@@ -8,10 +8,11 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
-import { getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
+import { isInvalidAccountStateError } from "@/lib/auth/dal";
+import { getLocalizedAuthIssuePath, getLocalizedSignedInHomePath } from "@/lib/auth/redirect";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
-import { resolveViewerAccess } from "@/lib/auth/viewer-access";
+import { resolveViewerAccess, type ViewerAccessContext } from "@/lib/auth/viewer-access";
 import { getNotificationsForSession } from "@/lib/server/app-queries";
 
 export default function DashboardLayout({
@@ -43,18 +44,18 @@ async function DashboardLayoutContent({
   const appLocale = normalizeAppLocale(locale);
   const authHeaders = await headers();
   const session = await requireVerifiedSession(authHeaders);
-  const viewerAccess = await resolveViewerAccess(session);
-
-  if (viewerAccess.authRole === "student") {
-    redirect(`/${locale}/student/dashboard`);
+  let viewerAccess: ViewerAccessContext;
+  try {
+    viewerAccess = await resolveViewerAccess(session);
+  } catch (error) {
+    if (isInvalidAccountStateError(error)) {
+      redirect(getLocalizedAuthIssuePath(appLocale));
+    }
+    throw error;
   }
 
-  if (viewerAccess.authRole === "expert") {
-    redirect(`/${locale}/expert`);
-  }
-
-  if (viewerAccess.authRole === "admin") {
-    redirect(getLocalizedAdminAppPath(appLocale));
+  if (viewerAccess.authRole !== "teacher") {
+    redirect(getLocalizedSignedInHomePath(appLocale, viewerAccess.authRole));
   }
 
   const preferredLocale = await resolvePreferredUiLocale(session);

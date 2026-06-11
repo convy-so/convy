@@ -14,6 +14,9 @@ export function toApiAuthError(error: unknown) {
     if (error.code === "UNAUTHENTICATED" || error.code === "EMAIL_NOT_VERIFIED") {
       return apiError("UNAUTHENTICATED", error.message);
     }
+    if (error.code === "INVALID_ACCOUNT_STATE") {
+      return apiError("UNAUTHORIZED", error.message);
+    }
     return apiError("UNAUTHORIZED", error.message);
   }
   return null;
@@ -25,6 +28,9 @@ export function toActionAuthError(error: unknown): MappedActionAuthError | null 
     return { code: "SERVICE_UNAVAILABLE", message: error.message };
   }
   if (error.code === "UNAUTHENTICATED" || error.code === "EMAIL_NOT_VERIFIED") {
+    return { code: "UNAUTHORIZED", message: error.message };
+  }
+  if (error.code === "INVALID_ACCOUNT_STATE") {
     return { code: "UNAUTHORIZED", message: error.message };
   }
   return { code: "FORBIDDEN", message: error.message };

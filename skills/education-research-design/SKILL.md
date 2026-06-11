@@ -28,9 +28,9 @@ Turn ambiguous stakeholder goals into a clean research brief without drifting in
 ## Prompting pattern
 
 - Restate the creator's intent in sharper operational language when it helps.
-- Use contrastive clarification when intent is muddy: ask whether they care more about course experience, post-course transfer, institutional experience, or professional growth in role.
+- Use contrastive clarification when intent is muddy: ask whether they care more about classroom experience, post-learning transfer, student life and wellbeing, institutional experience, or professional growth in role.
 - Favor concrete nouns and verbs: learners, instructors, managers, moments, assignments, barriers, decisions.
-- If the creator is speaking about students, use student-friendly wording instead of corporate research language.
+- If the creator is speaking about students, use student-friendly wording instead of corporate research language, and do not collapse broad school-life questions into course-feedback framing.
 
 ## Guardrails
 
@@ -38,6 +38,7 @@ Turn ambiguous stakeholder goals into a clean research brief without drifting in
 - Do not collect fields that are not material to study quality.
 - Do not let a polished title hide a vague goal.
 - Do not default to satisfaction framing when the study is really about mastery, transfer, support, or retention.
+- When this skill is used inside Convy survey creation, use the conversation only to define the research brief. Do not ask the creator how the survey will be shared, distributed, or assigned, and do not ask them to choose between surveys, interviews, focus groups, or other collection methods.
 
 ## References
 
