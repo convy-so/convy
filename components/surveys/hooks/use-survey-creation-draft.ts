@@ -5,7 +5,6 @@ import toast from "react-hot-toast";
 
 import {
   createSurveyDraftAction,
-  updateSurveyAction,
 } from "@/app/actions/survey";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import {
@@ -100,23 +99,6 @@ export function useSurveyCreationDraft({
   );
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
-  const updateSurveyMode = useCallback(async (id: string | null, isVoice: boolean) => {
-    setIsVoiceSurvey(isVoice);
-
-    if (!id) {
-      return;
-    }
-
-    try {
-      const result = await updateSurveyAction({ id, isVoice });
-      if (!result.success) {
-        throw new Error(getFriendlyActionError(result.error));
-      }
-    } catch {
-      toast.error("Failed to save survey mode. Please try again.");
-    }
-  }, []);
-
   const ensureDraftExists = useCallback(async (): Promise<
     SurveyDraftCreateResponse | string | null
   > => {
@@ -195,6 +177,5 @@ export function useSurveyCreationDraft({
     setCollectedInfo,
     isCreatingDraft,
     ensureDraftExists,
-    updateSurveyMode,
   };
 }

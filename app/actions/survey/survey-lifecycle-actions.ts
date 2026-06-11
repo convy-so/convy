@@ -147,7 +147,7 @@ export async function createSurveyDraftAction(
       `Limit reached: You can only have ${SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE} voice surveys in your account`,
     );
 
-    const { createdSurvey, greeting } = await createSurveyForUser({
+    const { createdSurvey } = await createSurveyForUser({
       session,
       body: {
         deliveryMode: body.deliveryMode ?? "link",
@@ -167,15 +167,7 @@ export async function createSurveyDraftAction(
         title: createdSurvey.title ?? "Untitled Survey",
         deliveryMode: createdSurvey.deliveryMode as "link" | "classroom_assigned",
         classroomId: createdSurvey.classroomId,
-        messages: [
-          {
-            id: nanoid(),
-            role: "assistant",
-            content: greeting,
-            parts: [{ type: "text", text: greeting }],
-            timestamp: new Date().toISOString(),
-          },
-        ],
+        messages: [],
       },
     };
   }, "createSurveyDraftAction");

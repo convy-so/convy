@@ -15,7 +15,13 @@ const log = createLogger("auth-session");
 const databaseInfo = getDatabaseConnectionInfo(env.DATABASE_URL);
 
 export { AuthError, type PlatformRole, type RolePrincipal } from "./roles";
-import { AuthError, getPlatformRole } from "./roles";
+import {
+  AuthError,
+  getPlatformRole,
+  getPlatformRoleOrNull,
+  isInvalidAccountStateError,
+  requirePlatformRole,
+} from "./roles";
 
 function isSupportedLocale(value: unknown): value is AppLocale {
   return typeof value === "string" && SUPPORTED_LOCALE_SET.has(value);
@@ -183,7 +189,8 @@ export async function requireRole(
 ): Promise<AuthSessionWithUser> {
   const session = await getVerifiedSession(authHeaders);
   const allowed = Array.isArray(role) ? role : [role];
-  if (!allowed.includes(getPlatformRole(session.user))) {
+  const resolvedRole = requirePlatformRole(session.user);
+  if (!allowed.includes(resolvedRole)) {
     throw new AuthError("FORBIDDEN");
   }
   return session;
@@ -203,8 +210,11 @@ export async function requireExpertUser(authHeaders?: Headers | string | null) {
 
 export {
   getPlatformRole,
+  getPlatformRoleOrNull,
+  isInvalidAccountStateError,
   isAdmin,
   isExpert,
   assertAdmin,
   assertExpert,
+  requirePlatformRole,
 } from "./roles";

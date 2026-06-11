@@ -30,6 +30,7 @@ import {
 } from "@/lib/education/creation-workflow";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { getResearchBrief } from "@/lib/education/storage/brief-storage";
 import {
   ensureCreationLease,
   loadSurveyCreationContext,
@@ -39,6 +40,15 @@ import {
 
 
 export const maxDuration = 300;
+
+function isBriefReadyForSampling(brief: Awaited<ReturnType<typeof getResearchBrief>>) {
+  if (!brief) return false;
+  return (
+    brief.completenessStatus === "ready" ||
+    brief.approvalState === "sample_ready" ||
+    Boolean((brief.brief as { readyForSampling?: boolean } | null)?.readyForSampling)
+  );
+}
 
 
 export async function GET(
@@ -114,6 +124,14 @@ export async function POST(
     }
     if (survey.status !== "creating") {
       return apiError("VALIDATION_ERROR", `Survey is not in creation mode. Status: ${survey.status}`);
+    }
+
+    const briefRow = await getResearchBrief(surveyId);
+    if (isBriefReadyForSampling(briefRow)) {
+      return apiError(
+        "CONFLICT",
+        "Survey brief is already ready for sample review",
+      );
     }
 
     const currentRevision = await getCurrentSurveyRevision(surveyId);
@@ -210,8 +228,16 @@ export async function POST(
         execute: async ({ writer }) => {
           writer.write({
             id: assistantMessage.id!,
+            type: "text-start",
+          });
+          writer.write({
+            id: assistantMessage.id!,
             type: "text-delta",
             delta: result.responseText,
+          });
+          writer.write({
+            id: assistantMessage.id!,
+            type: "text-end",
           });
         },
       }),
@@ -243,6 +269,14 @@ export async function PUT(
     const permission = await getSurveyPermissionForSession(session, survey.id);
     if (!hasSurveyPermission(permission, "canEdit")) {
       return apiError("UNAUTHORIZED", "Editor access required");
+    }
+
+    const briefRow = await getResearchBrief(surveyId);
+    if (isBriefReadyForSampling(briefRow)) {
+      return apiError(
+        "CONFLICT",
+        "Survey brief is already ready for sample review",
+      );
     }
 
     if (

@@ -5,8 +5,12 @@ import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { auth } from "@/lib/auth";
-import { getCurrentSession } from "@/lib/auth/dal";
-import { getPlatformRole } from "@/lib/auth/roles";
+import {
+  getCurrentSession,
+  isInvalidAccountStateError,
+  requirePlatformRole,
+  type PlatformRole,
+} from "@/lib/auth/dal";
 import {
   getExpertInvitationById,
   isExpertInvitationExpired,
@@ -33,7 +37,17 @@ export async function POST(
       return apiError("VALIDATION_ERROR", "This expert invitation is no longer active.");
     }
 
-    if (getPlatformRole(session.user) !== "expert") {
+    let role: PlatformRole;
+    try {
+      role = requirePlatformRole(session.user);
+    } catch (error) {
+      if (isInvalidAccountStateError(error)) {
+        return apiError("UNAUTHORIZED", error.message);
+      }
+      throw error;
+    }
+
+    if (role !== "expert") {
       return apiError("UNAUTHORIZED", "Only invited experts can continue this onboarding flow.");
     }
 

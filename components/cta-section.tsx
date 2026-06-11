@@ -23,7 +23,7 @@ export default function CtaSection() {
               Start for free
             </Link>
             <a
-              href="mailto:support@convyy.com"
+              href="mailto:support@example.invalid"
               className="whitespace-nowrap rounded-full border border-gray-200 bg-white px-[32px] py-[14px] text-[16px] font-medium tracking-[-0.2px] text-[#080808] transition-colors hover:bg-gray-50"
             >
               Talk to sales
