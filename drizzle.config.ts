@@ -11,5 +11,10 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // Supabase: store migration history in public (default "drizzle" schema requires CREATE SCHEMA).
+  migrations: {
+    table: "__drizzle_migrations",
+    schema: "public",
+  },
 });
 

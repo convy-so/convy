@@ -32,7 +32,7 @@ import type {
   ResearchBriefPatch,
   RefinementMessage,
   RefinementProposal,
-} from "@/lib/education/refinement";
+} from "@/lib/education/refinement-schemas";
 import {
   surveyStatusEnum,
   toneEnum,
