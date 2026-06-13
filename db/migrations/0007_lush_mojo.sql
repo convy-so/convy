@@ -1,1 +1,0 @@
-ALTER TABLE "expert_invitations" DROP COLUMN "invited_name";
