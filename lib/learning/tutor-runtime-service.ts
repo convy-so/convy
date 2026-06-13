@@ -175,17 +175,18 @@ export class TutorRuntimeService {
       studyLanguage: params.studyLanguage,
       existingSnapshot: params.state.contentScopeSnapshot,
     });
-    const playbookResult = params.studentUserId
+    const studentUserId = params.studentUserId;
+    const playbookResult = studentUserId
       ? await measureTutoringStep(
           "runtime:prepare-turn:playbook",
           {
             topicId: params.topicId,
             studyLanguage: params.studyLanguage,
-            studentUserId: params.studentUserId,
+            studentUserId,
           },
           async () =>
             await buildStudentTeachingPlaybook({
-              studentUserId: params.studentUserId,
+              studentUserId,
               subjectKey: params.subjectKey ?? null,
               subjectLabel: params.subjectLabel ?? null,
               topicLocalGaps: [],

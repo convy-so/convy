@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowUpRight,
   BookOpen,
@@ -107,11 +107,10 @@ export function TeacherLearningHome(
     return classrooms.slice(start, start + CLASSROOMS_PAGE_SIZE);
   }, [classrooms, effectiveClassroomPage]);
 
-  useEffect(() => {
-    if (selectedTopic) {
-      setActiveTopicView("overview");
-    }
-  }, [selectedTopic?.id]);
+  const handleSelectTopic = (topicId: string) => {
+    setSelectedTopicId(topicId);
+    setActiveTopicView("overview");
+  };
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f3f6fb_100%)] pb-20 pt-10">
@@ -334,7 +333,7 @@ export function TeacherLearningHome(
                       <button
                         key={topic.id}
                         type="button"
-                        onClick={() => setSelectedTopicId(topic.id)}
+                        onClick={() => handleSelectTopic(topic.id)}
                         className={`group w-full px-5 py-4 text-left transition hover:bg-slate-50/70 ${
                           index !== topics.length - 1 ? "border-b border-slate-100" : ""
                         }`}

@@ -37,6 +37,11 @@ const optionalInt = (key: string, defaultValue: number): number => {
 const appBaseUrl = optional("APP_BASE_URL") || "http://localhost:3000";
 const betterAuthUrl = optional("BETTER_AUTH_URL") || appBaseUrl;
 const allowInsecureTls = optional("ALLOW_INSECURE_TLS") === "true";
+const cookieSecureOverride = optional("COOKIE_SECURE");
+const useSecureCookies =
+  cookieSecureOverride !== undefined
+    ? cookieSecureOverride === "true"
+    : betterAuthUrl.startsWith("https://");
 const outboxNotifyChannel =
   optional("OUTBOX_NOTIFY_CHANNEL") || "survey_outbox_wakeup";
 
@@ -74,6 +79,8 @@ export const env = {
   // Encryption for tokens
   ENCRYPTION_KEY: optional("ENCRYPTION_KEY"),
   ALLOW_INSECURE_TLS: allowInsecureTls,
+  /** Secure cookies require HTTPS. Set COOKIE_SECURE=false to override on HTTP prod (e.g. EC2 IP). */
+  COOKIE_SECURE: useSecureCookies,
 
   // Voice/WebSocket Configuration
   WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",

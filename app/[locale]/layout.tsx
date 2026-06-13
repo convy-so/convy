@@ -10,6 +10,10 @@ import { routing } from "@/i18n/routing";
 import { Suspense } from "react";
 import { CookieConsent } from "@/components/cookie-consent";
 
+// App pages load user/session data from Postgres at request time. Skip static
+// prerender during `next build` so Docker CI does not need a live database.
+export const dynamic = "force-dynamic";
+
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }

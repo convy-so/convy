@@ -1,0 +1,30 @@
+# Dependencies & build output
+node_modules
+.next
+dist
+out
+
+# Git & IDE
+.git
+.gitignore
+.vscode
+.cursor
+.claude
+
+# Env files (secrets injected at runtime)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Local tooling
+terminals
+scratch
+evals
+tests
+*.md
+!README.md
+
+# OS
+.DS_Store
+Thumbs.db

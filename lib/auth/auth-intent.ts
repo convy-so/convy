@@ -115,7 +115,7 @@ export async function setAuthIntentCookie(intent: AuthIntent) {
   (await cookies()).set(AUTH_INTENT_COOKIE, encodeIntent(intent), {
     httpOnly: true,
     sameSite: "lax",
-    secure: env.NODE_ENV === "production",
+    secure: env.COOKIE_SECURE,
     maxAge: AUTH_INTENT_TTL_SECONDS,
     path: "/",
   });
@@ -125,7 +125,7 @@ export async function clearAuthIntentCookie() {
   (await cookies()).set(AUTH_INTENT_COOKIE, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: env.NODE_ENV === "production",
+    secure: env.COOKIE_SECURE,
     maxAge: 0,
     path: "/",
   });

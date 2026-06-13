@@ -2,6 +2,8 @@
 
 import { Loader2 } from "lucide-react";
 
+import type { ComponentProps } from "react";
+
 import type { LearningMeData } from "@/lib/api/learning";
 import { TeacherLearningHome } from "@/components/learning/teacher-learning-home";
 import { StudentLearningHome } from "@/components/learning/student-learning-home";
@@ -30,7 +32,9 @@ export function LearningHub({
   teacherWorkspaceInitialData?: Awaited<
     ReturnType<typeof getTeacherLearningWorkspaceInitialData>
   >;
-  initialStudentSessions?: any[];
+  initialStudentSessions?: ComponentProps<
+    typeof StudentLearningHome
+  >["initialStudentSessions"];
 }) {
   const learningMe = initialLearningMe;
 

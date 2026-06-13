@@ -6,6 +6,17 @@ import type { KnowledgeStateNode } from "@/lib/learning/types";
 import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
 import { cn } from "@/lib/utils";
 
+type SkillMapNode = Pick<
+  KnowledgeStateNode,
+  "conceptKey" | "title" | "masteryLevel" | "confidence" | "evidence" | "misconceptions"
+>;
+
+type ProgressReportContent = {
+    studentSummary?: string;
+    identifiedGaps?: string[];
+    conceptProgress?: SkillMapNode[];
+};
+
 type ReportRecord = {
     id: string;
     topicId: string;
@@ -16,11 +27,15 @@ type ReportRecord = {
         subject: string | null;
         subjectKey: string | null;
     } | null;
-    report: any; // studentSummary, identifiedGaps, etc.
+    report: ProgressReportContent | null;
 };
 
+type LatestModel = {
+    knowledgeStateModel: SkillMapNode[];
+} | null;
+
 type Props = {
-    latestModel: any;
+    latestModel: LatestModel;
     progressReports: ReportRecord[];
 };
 
@@ -56,7 +71,7 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
 
                     {latestModel && latestModel.knowledgeStateModel && latestModel.knowledgeStateModel.length > 0 ? (
                         <div className="space-y-4">
-                            {latestModel.knowledgeStateModel.map((node: KnowledgeStateNode) => {
+                            {latestModel.knowledgeStateModel.map((node) => {
                                 const pct = node.masteryLevel === 'generative' ? 100 : node.masteryLevel === 'applied' ? 66 : 33;
                                 const label = masteryLabelForStudent(String(node.masteryLevel));
                                 return (

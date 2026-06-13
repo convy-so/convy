@@ -7,11 +7,11 @@ import { z } from "zod";
 import type {
   RefinementMessage,
   RefinementProposal,
-} from "@/lib/education/refinement";
+} from "@/lib/education/refinement-schemas";
 import {
   refinementMessageSchema,
   refinementProposalSchema,
-} from "@/lib/education/refinement";
+} from "@/lib/education/refinement-schemas";
 
 type StoredMessage = Pick<RefinementMessage, "id" | "role" | "content">;
 type Proposal = RefinementProposal;
