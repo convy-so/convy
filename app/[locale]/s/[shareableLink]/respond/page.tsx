@@ -27,6 +27,12 @@ import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
 import { ChatMessage, ChatMessagePart, VoiceAgentMessage, SurveyMedia } from "@/lib/chat-types";
 import { toUIMessages } from "@/lib/chat-ui-messages";
+import {
+  getUIMessageText,
+  hasSurveyCompletionText,
+  isNamedToolUIPart,
+  stripSurveyCompletionTag,
+} from "@/lib/chat-ui-signals";
 import { nanoid } from "nanoid";
 
 import { useQuery } from "@tanstack/react-query";
@@ -418,23 +424,10 @@ function SurveyContent() {
       ),
     ),
     onFinish: ({ message }: { message: UIMessage }) => {
-      // Check for explicit tool calls (robust detection)
-      const hasToolCompletion = message.parts?.some(
-        (part) =>
-          part.type === "tool-finishSurvey",
+      const hasToolCompletion = message.parts?.some((part) =>
+        isNamedToolUIPart(part, "finishSurvey"),
       );
-
-      // Fallback to text detection
-      const messageText =
-        message.parts
-          ?.filter((part): part is Extract<UIMessage["parts"][number], { type: "text" }> => part.type === "text")
-          .map((part) => part.text)
-          .join(" ")
-          .toLowerCase() || "";
-
-      const hasTextCompletion =
-        messageText.includes("thank you for completing") ||
-        messageText.includes("survey is now complete");
+      const hasTextCompletion = hasSurveyCompletionText(getUIMessageText(message));
 
       if (hasToolCompletion || hasTextCompletion) {
         setCompletedOverride(true);
@@ -451,18 +444,11 @@ function SurveyContent() {
     if (!lastAssistantMessage) return false;
 
     const hasToolCompletion = lastAssistantMessage.parts?.some(
-      (part) => part.type === "tool-finishSurvey",
+      (part) => isNamedToolUIPart(part, "finishSurvey"),
     );
-
-    const messageText = lastAssistantMessage.parts
-      ?.filter((part): part is Extract<UIMessage["parts"][number], { type: "text" }> => part.type === "text")
-      .map((part) => part.text)
-      .join(" ")
-      .toLowerCase() || "";
-
-    const hasTextCompletion =
-      messageText.includes("thank you for completing") ||
-      messageText.includes("survey is now complete");
+    const hasTextCompletion = hasSurveyCompletionText(
+      getUIMessageText(lastAssistantMessage),
+    );
 
     return hasToolCompletion || hasTextCompletion;
   }, [messages, initiallyCompleted, completedParam, completedOverride]);
@@ -1111,7 +1097,12 @@ function SurveyContent() {
                         {messageParts.length > 0 ? (
                           messageParts.map((part, index) => {
                             if (part.type === "text") {
-                              return <MarkdownMessage key={index} content={part.text} />;
+                              return (
+                                <MarkdownMessage
+                                  key={index}
+                                  content={stripSurveyCompletionTag(part.text)}
+                                />
+                              );
                             }
                             return null;
                           })

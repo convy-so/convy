@@ -12,9 +12,10 @@ import {
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
+import { getLocalizedAuthIssuePath, getLocalizedSignedInHomePath } from "@/lib/auth/redirect";
 import { normalizeAppLocale } from "@/lib/i18n/config";
-import { resolveViewerAccess } from "@/lib/auth/viewer-access";
+import { resolveViewerAccess, type ViewerAccessContext } from "@/lib/auth/viewer-access";
+import { isInvalidAccountStateError } from "@/lib/auth/dal";
 
 export default function StudentLayout(props: {
     children: React.ReactNode;
@@ -45,11 +46,18 @@ async function StudentLayoutContent({
 
     if (!session) redirect(`/${locale}/sign-in`);
 
-    const viewerAccess = await resolveViewerAccess(session);
+    let viewerAccess: ViewerAccessContext;
+    try {
+      viewerAccess = await resolveViewerAccess(session);
+    } catch (error) {
+      if (isInvalidAccountStateError(error)) {
+        redirect(getLocalizedAuthIssuePath(appLocale));
+      }
+      throw error;
+    }
+
     if (viewerAccess.authRole !== "student") {
-      if (viewerAccess.authRole === "teacher") redirect(`/${locale}/dashboard`);
-      if (viewerAccess.authRole === "expert") redirect(`/${locale}/expert`);
-      redirect(getLocalizedAdminAppPath(appLocale));
+      redirect(getLocalizedSignedInHomePath(appLocale, viewerAccess.authRole));
     }
 
     const messages = await getMessages();

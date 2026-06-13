@@ -96,10 +96,19 @@ export async function POST(
     return createUIMessageStreamResponse({
       stream: createUIMessageStream({
         execute: async ({ writer }) => {
+          const messageId = crypto.randomUUID();
           writer.write({
-            id: crypto.randomUUID(),
+            id: messageId,
+            type: "text-start",
+          });
+          writer.write({
+            id: messageId,
             type: "text-delta",
             delta: responseText || "",
+          });
+          writer.write({
+            id: messageId,
+            type: "text-end",
           });
         },
       }),

@@ -26,23 +26,17 @@ import toast from "react-hot-toast";
 import { finalizeSurveyCreationAction } from "@/app/actions/survey";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
-import {
-  isCreationMediaDecisionResolved,
-  normalizeCreationMediaDecision,
-} from "@/lib/education/agent-tools";
 import { isAppLocale, type AppLocale } from "@/lib/i18n/config";
 import {
   useSurveyCreationDraft,
   type SurveyExtractedData,
 } from "@/components/surveys/hooks/use-survey-creation-draft";
 import {
-  type UIMessage,
   normalizeCreateMessages,
   normalizeCollectedInfo,
   normalizeExtractedData,
 } from "@/lib/surveys/message-normalizer";
 import { CreatorChatSection } from "@/components/surveys/creator/CreatorChatSection";
-import { CreatorSidebarSection } from "@/components/surveys/creator/CreatorSidebarSection";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import type { SurveyDetailsResponse } from "@/lib/api/surveys";
 
@@ -68,6 +62,19 @@ type InitialSurveyCreationState = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function createHiddenGreetingMessage() {
+  return {
+    id: `survey-create-bootstrap-${Date.now()}`,
+    role: "user" as const,
+    parts: [
+      {
+        type: "text" as const,
+        text: "Start the conversation now. Greet the participant according to the system prompt instructions.",
+      },
+    ],
+  };
 }
 
 export function CreateSurveyPageClient({
@@ -103,15 +110,12 @@ export function CreateSurveyPageClient({
     setSurveyStatus,
     language,
     setLanguage,
-    isVoiceSurvey,
     setIsVoiceSurvey,
     extractedData,
     setExtractedData,
-    collectedInfo,
     setCollectedInfo,
     isCreatingDraft,
     ensureDraftExists,
-    updateSurveyMode,
   } = useSurveyCreationDraft({
     authLoading,
     initialLanguage,
@@ -125,12 +129,12 @@ export function CreateSurveyPageClient({
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isResearching, setIsResearching] = useState(false);
-  const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
   const [input, setInput] = useState("");
 
   // Keep refs in sync for the chat transport closure without re-initialising useChat
   const surveyIdRef = useRef<string | null>(surveyId);
   const extractedDataRef = useRef<SurveyExtractedData | null>(extractedData);
+  const bootstrappedConversationIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     surveyIdRef.current = surveyId;
   }, [surveyId]);
@@ -182,6 +186,48 @@ export function CreateSurveyPageClient({
       },
     });
 
+  const bootstrapConversation = useCallback(
+    async (currentSurveyId: string) => {
+      if (bootstrappedConversationIdsRef.current.has(currentSurveyId)) {
+        return;
+      }
+
+      bootstrappedConversationIdsRef.current.add(currentSurveyId);
+
+      try {
+        const bootstrapRes = await fetch(
+          `/api/surveys/${currentSurveyId}/create`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [createHiddenGreetingMessage()],
+            }),
+          },
+        );
+
+        if (!bootstrapRes.ok) {
+          throw new Error("Failed to bootstrap creation conversation.");
+        }
+
+        const refreshedRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
+        if (!refreshedRes.ok) {
+          throw new Error("Failed to refresh creation state.");
+        }
+
+        const refreshedData =
+          (await refreshedRes.json()) as SurveyCreationSyncResponse;
+        setMessages(normalizeCreateMessages(refreshedData.messages ?? []));
+        setCollectedInfo(normalizeCollectedInfo(refreshedData.collectedInfo));
+        setExtractedData(normalizeExtractedData(refreshedData.extractedData));
+      } catch (error) {
+        bootstrappedConversationIdsRef.current.delete(currentSurveyId);
+        throw error;
+      }
+    },
+    [setCollectedInfo, setExtractedData, setMessages],
+  );
+
   const isLoading = status === "streaming" || status === "submitted";
 
   const {
@@ -193,36 +239,6 @@ export function CreateSurveyPageClient({
     },
   });
 
-  const mediaDecision = useMemo(
-    () => normalizeCreationMediaDecision(extractedData?.mediaDecision),
-    [extractedData],
-  );
-  const mediaDecisionResolved = isCreationMediaDecisionResolved(mediaDecision);
-
-  const resolveLocalMediaToolResult = useCallback(
-    (toolCallId: string, output: Record<string, unknown>) => {
-      setMessages((prev: UIMessage[]) =>
-        prev.map((message) => ({
-          ...message,
-          parts: message.parts?.map((part) => {
-            const isSdkTool =
-              part.type === "tool-requestMediaUpload" &&
-              part.toolCallId === toolCallId;
-            if (!isSdkTool) return part;
-            return {
-              type: part.type as `tool-${string}`,
-              toolCallId: part.toolCallId,
-              state: "output-available" as const,
-              input: "input" in part ? part.input : {},
-              output,
-            };
-          }),
-        })),
-      );
-    },
-    [setMessages],
-  );
-
   useEffect(() => {
     if (!initialSurveyId || !initialCreationState) {
       return;
@@ -231,16 +247,16 @@ export function CreateSurveyPageClient({
     const normalizedMessages = normalizeCreateMessages(
       initialCreationState.messages ?? [],
     );
-    if (normalizedMessages.length > 0) {
-      setMessages(normalizedMessages);
-    }
+    const normalizedCollectedInfo = normalizeCollectedInfo(
+      initialCreationState.collectedInfo,
+    );
+    const normalizedExtractedData = normalizeExtractedData(
+      initialCreationState.extractedData,
+    );
+    setMessages(normalizedMessages);
 
-    setCollectedInfo(
-      normalizeCollectedInfo(initialCreationState.collectedInfo),
-    );
-    setExtractedData(
-      normalizeExtractedData(initialCreationState.extractedData),
-    );
+    setCollectedInfo(normalizedCollectedInfo);
+    setExtractedData(normalizedExtractedData);
 
     const surveyRecord = initialSurveyData?.survey;
     const nextStatus = surveyRecord?.status ?? initialCreationState.status ?? null;
@@ -267,9 +283,27 @@ export function CreateSurveyPageClient({
       setIsVoiceMode(nextIsVoice);
     }
 
-    setIsReadOnly(Boolean(isFinished || !canEdit));
+    setIsReadOnly(
+      Boolean(
+        isFinished ||
+          !canEdit ||
+          (normalizedExtractedData as
+            | { readyForSampling?: boolean }
+            | null)?.readyForSampling,
+      ),
+    );
     setIsInitializing(false);
+
+    if (
+      normalizedMessages.length === 0 &&
+      !isFinished &&
+      canEdit &&
+      !normalizedExtractedData.readyForSampling
+    ) {
+      void bootstrapConversation(initialSurveyId);
+    }
   }, [
+    bootstrapConversation,
     initialCreationState,
     initialLanguage,
     initialSurveyData,
@@ -303,14 +337,20 @@ export function CreateSurveyPageClient({
           fetch(`/api/surveys/${idFromUrl}/details`),
         ]);
 
+        let normalizedMessages: ReturnType<typeof normalizeCreateMessages> = [];
+        let normalizedConversationExtractedData: ReturnType<
+          typeof normalizeExtractedData
+        > | null = null;
+        let canBootstrapConversation = false;
+
         if (conversationRes.ok) {
           const data = (await conversationRes.json()) as SurveyCreationSyncResponse;
-          if (data.messages && (data.messages as unknown[]).length > 0) {
-            setMessages(normalizeCreateMessages(data.messages));
-          }
+          normalizedMessages = normalizeCreateMessages(data.messages ?? []);
+          setMessages(normalizedMessages);
           const ci = normalizeCollectedInfo(data.collectedInfo);
           if (ci) setCollectedInfo(ci);
           const ed = normalizeExtractedData(data.extractedData);
+          normalizedConversationExtractedData = ed;
           if (ed) setExtractedData(ed);
         }
 
@@ -342,7 +382,18 @@ export function CreateSurveyPageClient({
           }
 
           const isFinished = surveyStatus && surveyStatus !== "creating";
-          setIsReadOnly(Boolean(isFinished || !canEdit));
+          const readyToSample = Boolean(
+            (normalizedConversationExtractedData as
+              | { readyForSampling?: boolean }
+              | null)?.readyForSampling,
+          );
+          setIsReadOnly(Boolean(isFinished || !canEdit || readyToSample));
+          canBootstrapConversation =
+            !isFinished && canEdit && !readyToSample;
+        }
+
+        if (normalizedMessages.length === 0 && canBootstrapConversation) {
+          await bootstrapConversation(idFromUrl);
         }
       } catch (error) {
         console.error("[LoadConversation] Failed:", error);
@@ -367,43 +418,7 @@ export function CreateSurveyPageClient({
     setLanguage,
     setIsVoiceSurvey,
     setIsReadOnly,
-  ]);
-
-  // Auto-greet when draft loads empty
-  useEffect(() => {
-    if (
-      isInitializing ||
-      authLoading ||
-      !user ||
-      !surveyId ||
-      isReadOnly ||
-      hasAutoGreeted ||
-      status === "submitted" ||
-      status === "streaming" ||
-      messages.length > 0
-    )
-      return;
-
-    sendMessage({
-      role: "user",
-      parts: [
-        {
-          type: "text" as const,
-          text: "Start the conversation now. Greet the participant according to the system prompt instructions.",
-        },
-      ],
-    });
-    setHasAutoGreeted(true);
-  }, [
-    isInitializing,
-    authLoading,
-    user,
-    surveyId,
-    messages.length,
-    status,
-    isReadOnly,
-    hasAutoGreeted,
-    sendMessage,
+    bootstrapConversation,
   ]);
 
   // Poll server state while streaming, instant refresh on finish
@@ -462,67 +477,25 @@ export function CreateSurveyPageClient({
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const isReadyForSample = useMemo(() => {
-    if (!surveyId || !collectedInfo || !mediaDecisionResolved) return false;
+    if (!surveyId) return false;
 
-    const finishToolCalled = messages.some((m) =>
-      m.parts?.some((p) => p.type === "tool-finishSurvey"),
-    );
-    if (finishToolCalled) return true;
+    if (
+      surveyStatus === "sample_review" ||
+      surveyStatus === "active" ||
+      surveyStatus === "completed"
+    ) {
+      return true;
+    }
 
-    const lastAssistantMessage = [...messages]
-      .reverse()
-      .find((m) => m.role === "assistant");
-    const msgContent =
-      lastAssistantMessage?.parts
-        ?.filter((p) => p.type === "text")
-        .map((p) => ("text" in p ? p.text : ""))
-        .join("") || "";
+    return Boolean(extractedData?.readyForSampling);
+  }, [surveyId, surveyStatus, extractedData]);
 
-    const aiMentionedSamples =
-      (msgContent.toLowerCase().includes("sample conversation") ||
-        (msgContent.toLowerCase().includes("click") &&
-          msgContent.toLowerCase().includes("button")));
-
-    const criticalFlagsCollected =
-      collectedInfo.objective &&
-      collectedInfo.targetAudience &&
-      collectedInfo.subjectDefined &&
-      collectedInfo.programIdentified;
-
-    if (aiMentionedSamples && criticalFlagsCollected) return true;
-
-    const allFlagsCollected =
-      criticalFlagsCollected &&
-      collectedInfo.scope &&
-      collectedInfo.successCriteria &&
-      collectedInfo.constraints &&
-      collectedInfo.tone &&
-      collectedInfo.requiredQuestions &&
-      collectedInfo.metrics &&
-      collectedInfo.personalInfo;
-
-    if (!allFlagsCollected || !extractedData)
-      return Boolean(extractedData?.readyForSampling);
-    if (extractedData.readyForSampling) return true;
-
-    return Boolean(
-      allFlagsCollected &&
-        extractedData.objective?.goal &&
-        extractedData.targetAudience?.description &&
-        extractedData.programId?.trim(),
-    );
-  }, [
-    surveyId,
-    collectedInfo,
-    extractedData,
-    mediaDecisionResolved,
-    messages,
-  ]);
+  const isConversationLocked = isReadOnly || isReadyForSample;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = async () => {
     let currentSurveyId = surveyId;
-    let initialGreetingMessages: unknown[] | null = null;
+    let existingMessages: unknown[] | null = null;
 
     if (!currentSurveyId) {
       try {
@@ -532,7 +505,7 @@ export function CreateSurveyPageClient({
           currentSurveyId = surveyData;
         } else {
           currentSurveyId = surveyData.id;
-          initialGreetingMessages =
+          existingMessages =
             "messages" in surveyData
               ? (surveyData.messages as unknown[])
               : null;
@@ -545,34 +518,32 @@ export function CreateSurveyPageClient({
 
     if (!currentSurveyId) return;
 
-    if (!initialGreetingMessages) {
-      await updateSurveyMode(currentSurveyId, isVoiceSurvey);
-    }
-
     try {
-      if (!initialGreetingMessages) {
-        await fetch(`/api/surveys/${currentSurveyId}/create`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
+      const currentStateRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
+      if (!currentStateRes.ok) {
+        throw new Error("Failed to load creation state.");
       }
 
-      if (initialGreetingMessages) {
-        setMessages(normalizeCreateMessages(initialGreetingMessages));
+      const currentState = (await currentStateRes.json()) as SurveyCreationSyncResponse;
+      const currentMessages =
+        existingMessages ?? (Array.isArray(currentState.messages) ? currentState.messages : []);
+
+      if (normalizeCreateMessages(currentMessages).length === 0) {
+        await bootstrapConversation(currentSurveyId);
       } else {
-        const greetingRes = await fetch(
-          `/api/surveys/${currentSurveyId}/create`,
-        );
-        if (greetingRes.ok) {
-          const greetingData = (await greetingRes.json()) as SurveyCreationSyncResponse;
-          if (greetingData.messages && (greetingData.messages as unknown[]).length > 0) {
-            setMessages(normalizeCreateMessages(greetingData.messages));
-          }
-          if (greetingData.collectedInfo)
-            setCollectedInfo(normalizeCollectedInfo(greetingData.collectedInfo));
-          if (greetingData.extractedData)
-            setExtractedData(normalizeExtractedData(greetingData.extractedData));
+        const refreshedRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
+        if (!refreshedRes.ok) {
+          throw new Error("Failed to refresh creation state.");
+        }
+
+        const refreshedData =
+          (await refreshedRes.json()) as SurveyCreationSyncResponse;
+        setMessages(normalizeCreateMessages(refreshedData.messages ?? []));
+        if (refreshedData.collectedInfo) {
+          setCollectedInfo(normalizeCollectedInfo(refreshedData.collectedInfo));
+        }
+        if (refreshedData.extractedData) {
+          setExtractedData(normalizeExtractedData(refreshedData.extractedData));
         }
       }
     } catch (error) {
@@ -583,7 +554,7 @@ export function CreateSurveyPageClient({
 
   const submitCurrentInput = (transcribedText?: string) => {
     const textToSubmit = transcribedText || input;
-    if (!textToSubmit?.trim() || isLoading || authError) return;
+    if (!textToSubmit?.trim() || isLoading || authError || isConversationLocked) return;
 
     if (!transcribedText) setInput("");
     sendMessage({
@@ -600,7 +571,7 @@ export function CreateSurveyPageClient({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!input?.trim() || isLoading) return;
+      if (!input?.trim() || isLoading || isConversationLocked) return;
       submitCurrentInput();
     }
   };
@@ -692,15 +663,15 @@ export function CreateSurveyPageClient({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      <div className="h-full flex flex-col w-full mx-auto overflow-hidden">
+      <div className="min-h-screen flex flex-col bg-white text-slate-950">
         <div
           className={cn(
-            "flex-1 flex flex-col overflow-hidden relative transition-all duration-500",
-            surveyId ? "bg-transparent" : "",
+            "relative flex flex-1 flex-col overflow-hidden",
+            surveyId ? "bg-white" : "bg-white",
           )}
         >
           {initialLoadError ? (
-            <div className="mx-2 mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               {initialLoadError}
             </div>
           ) : null}
@@ -708,16 +679,16 @@ export function CreateSurveyPageClient({
           {/* Header */}
           <div
             className={cn(
-              "flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-2 transition-all duration-500",
+              "flex flex-col items-center justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:px-6 lg:px-8",
               surveyId
-                ? "bg-transparent border-b border-gray-100"
-                : "bg-transparent",
+                ? "bg-white"
+                : "bg-white",
             )}
           >
             {!surveyId ? (
-              <div className="w-full text-center py-4">
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
-                  <Sparkles className="w-6 h-6 text-indigo-600" />
+              <div className="w-full py-2 text-center">
+                <h1 className="flex items-center justify-center gap-2 text-2xl font-semibold tracking-tight text-slate-950">
+                  <Sparkles className="w-5 h-5" />
                   {t("Title.Create")}
                 </h1>
               </div>
@@ -725,20 +696,20 @@ export function CreateSurveyPageClient({
               <div className="flex items-center gap-3">
                 <Link
                   href="/dashboard"
-                  className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-900"
+                  className="p-1 text-slate-400 transition-colors hover:text-slate-950"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </Link>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    {isReadOnly ? "View Survey" : "Build Survey"}
+                  <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-slate-950">
+                    {isConversationLocked ? "View Survey" : "Build Survey"}
                     {isCreatingDraft && (
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                     )}
                   </h1>
-                  <div className="flex items-center gap-2 mt-1">
-                    {(isReadOnly || surveyStatus === "completed") && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <div className="mt-1 flex items-center gap-2">
+                    {(isConversationLocked || surveyStatus === "completed") && (
+                      <span className="border border-slate-200 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-500">
                         Read Only
                       </span>
                     )}
@@ -750,10 +721,14 @@ export function CreateSurveyPageClient({
           </div>
 
           {/* Read-only banner */}
-          {isReadOnly && (
-            <div className="bg-blue-50/50 border-b border-blue-100 px-4 py-2 flex items-center justify-center gap-2 text-sm text-blue-800">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>This survey is finalized and cannot be edited.</span>
+          {isConversationLocked && (
+            <div className="flex items-center justify-center gap-2 border-b border-slate-200 px-4 py-2 text-sm text-slate-600">
+              <Sparkles className="w-4 h-4" />
+              <span>
+                {surveyStatus === "creating"
+                  ? "This brief is ready for sample review. The creation chat is now locked."
+                  : "This survey is finalized and cannot be edited."}
+              </span>
               <Link
                 href={`/dashboard/surveys/${surveyId}`}
                 className="font-medium hover:underline"
@@ -766,154 +741,144 @@ export function CreateSurveyPageClient({
           {/* Main area */}
           <div
             className={cn(
-              "flex-1 overflow-hidden relative flex flex-col",
-              surveyId ? "bg-white" : "bg-transparent",
+              "relative flex flex-1 flex-col overflow-hidden",
+              surveyId ? "bg-white" : "bg-white",
             )}
           >
             {isInitializing && (
-              <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+              <div className="flex items-center justify-center border-b border-slate-200 px-4 py-3 text-sm text-slate-500">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading survey state...
               </div>
             )}
 
             {/* Pre-start configuration */}
             {!surveyId ? (
-              <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 py-10">
-                  <div className="text-center space-y-6">
-                    <h2 className="text-4xl font-bold text-gray-900 tracking-tight">
+              <div className="flex-1 overflow-y-auto px-4 py-10 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-3xl">
+                  <div className="space-y-8 text-center">
+                    <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
                       {t("Title.ChooseTopic")}
                     </h2>
-                    <p className="text-xl text-gray-500 max-w-2xl mx-auto leading-relaxed">
+                    <p className="mx-auto max-w-2xl text-lg leading-8 text-slate-500">
                       {t("Subtitle")}
                     </p>
 
-                    <div className="mt-8">
-                      <div className="max-w-4xl mx-auto w-full bg-white rounded-2xl p-8 lg:p-12 border border-gray-200">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-16">
+                    <div className="mx-auto max-w-2xl space-y-6">
+                      <div className="grid grid-cols-1 gap-px border-y border-slate-200 sm:grid-cols-2">
+                        {[
+                          {
+                            active: !isVoiceMode,
+                            icon: <Send className="w-4 h-4" />,
+                            label: t("CreationMode.Text"),
+                            desc: t("CreationMode.TextDescription"),
+                            onClick: () => setCreationVoiceMode(false),
+                          },
+                          {
+                            active: isVoiceMode,
+                            icon: <Mic className="w-4 h-4" />,
+                            label: t("CreationMode.Voice"),
+                            desc: t("CreationMode.VoiceDescription"),
+                            onClick: () => setCreationVoiceMode(true),
+                          },
+                        ].map(({ active, icon, label, desc, onClick }) => (
+                          <button
+                            key={label}
+                            onClick={onClick}
+                            className={cn(
+                              "flex items-start gap-3 border-x border-slate-200 bg-white px-4 py-4 text-left transition",
+                              active
+                                ? "text-slate-950"
+                                : "text-slate-500 hover:text-slate-950",
+                            )}
+                          >
+                            <span className="mt-0.5">{icon}</span>
+                            <span>
+                              <span className="block text-sm font-medium">{label}</span>
+                              <span className="mt-1 block text-xs leading-5 text-slate-500">
+                                {desc}
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
 
-                          {/* Creator input mode */}
-                          <div className="space-y-6">
-                            <div className="flex items-start gap-4">
-                              <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
-                                <Sparkles className="w-6 h-6 text-black" />
-                              </div>
-                              <div>
-                                <h3 className="text-xl font-medium text-black">
-                                  {t("CreationMode.Title")}
-                                </h3>
-                                <p className="text-sm text-gray-500 mt-1">
-                                  {t("CreationMode.Description")}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 gap-4">
-                              {[
-                                {
-                                  active: !isVoiceMode,
-                                  icon: <Send className="w-5 h-5" />,
-                                  label: t("CreationMode.Text"),
-                                  desc: t("CreationMode.TextDescription"),
-                                  onClick: () => setCreationVoiceMode(false),
-                                },
-                                {
-                                  active: isVoiceMode,
-                                  icon: <Mic className="w-5 h-5" />,
-                                  label: t("CreationMode.Voice"),
-                                  desc: t("CreationMode.VoiceDescription"),
-                                  onClick: () => setCreationVoiceMode(true),
-                                },
-                              ].map(({ active, icon, label, desc, onClick }) => (
-                                <button
-                                  key={label}
-                                  onClick={onClick}
-                                  className={cn(
-                                    "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
-                                    active
-                                      ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
-                                      : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm",
-                                  )}
-                                >
-                                  <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center">
-                                    {icon}
-                                  </div>
-                                  <div className="space-y-1">
-                                    <span className="block font-bold text-sm lg:text-base">
-                                      {label}
-                                    </span>
-                                    <span className="text-[11px] lg:text-xs opacity-70 leading-tight block">
-                                      {desc}
-                                    </span>
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Quick Actions */}
-                          <div className="space-y-6">
-                            <div className="flex items-start gap-4">
-                              <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
-                                <Play className="w-6 h-6 text-black" />
-                              </div>
-                              <div>
-                                <h3 className="text-xl font-medium text-black">
-                                  Get Started
-                                </h3>
-                                <p className="text-sm text-gray-500 mt-1">
-                                  Launch your survey creation session
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex flex-col h-full justify-center">
-                              <button
-                                onClick={handleStart}
-                                className="group relative w-full bg-black text-white p-6 rounded-2xl font-bold text-lg hover:bg-gray-900 transition-all duration-300 shadow-xl shadow-black/10 overflow-hidden"
-                              >
-                                <div className="relative z-10 flex items-center justify-center gap-3">
-                                  <span>Start Creation Session</span>
-                                  <Sparkles className="w-5 h-5 animate-pulse" />
-                                </div>
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                              </button>
-                            </div>
-                          </div>
+                      <div className="flex items-center justify-between gap-4 border-t border-slate-200 pt-6 text-left">
+                        <div>
+                          <p className="text-sm font-medium text-slate-950">
+                            Start the creation session
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            Open the transcript and begin shaping the brief.
+                          </p>
                         </div>
+                        <button
+                          onClick={handleStart}
+                          className="inline-flex h-11 items-center gap-2 border border-slate-950 bg-slate-950 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                        >
+                          <Play className="h-4 w-4" />
+                          Start
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-                {/* Chat Section */}
-                <CreatorChatSection
-                  messages={messages}
-                  isLoading={isLoading}
-                  isResearching={isResearching}
-                  isInitializing={isInitializing}
-                  isReadOnly={isReadOnly}
-                  isVoiceMode={isVoiceMode}
-                  input={input}
-                  setInput={setInput}
-                  handleSubmit={handleSubmit}
-                  handleKeyDown={handleKeyDown}
-                  setCreationVoiceMode={setCreationVoiceMode}
-                  messagesEndRef={messagesEndRef}
-                />
+              <div className="flex-1 overflow-hidden">
+                <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pb-4 sm:px-6 lg:px-8">
+                  <div className="border-b border-slate-200 py-5">
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                      Survey creation
+                    </p>
+                    <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+                      Build the brief in conversation.
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Keep the page quiet. The transcript is the primary workspace.
+                    </p>
+                  </div>
 
-                {/* Sidebar Section */}
-                <CreatorSidebarSection
-                  surveyId={surveyId}
-                  collectedInfo={collectedInfo}
-                  extractedData={extractedData}
-                  mediaDecision={mediaDecision}
-                  mediaDecisionResolved={mediaDecisionResolved}
-                  resolveLocalMediaToolResult={resolveLocalMediaToolResult}
-                  isReadyForSample={isReadyForSample}
-                  isFinalizing={isFinalizing}
-                  handleGoToSampleConversations={handleGoToSampleConversations}
-                />
+                  <div className="min-h-0 flex-1">
+                    <CreatorChatSection
+                      messages={messages}
+                      isLoading={isLoading}
+                      isResearching={isResearching}
+                      isInitializing={isInitializing}
+                      isReadOnly={isConversationLocked}
+                      isVoiceMode={isVoiceMode}
+                      input={input}
+                      setInput={setInput}
+                      handleSubmit={handleSubmit}
+                      handleKeyDown={handleKeyDown}
+                      setCreationVoiceMode={setCreationVoiceMode}
+                      messagesEndRef={messagesEndRef}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 border-t border-slate-200 py-4">
+                    <p className="text-sm text-slate-500">
+                      Generate sample conversations when the brief is complete.
+                    </p>
+                    <button
+                      onClick={handleGoToSampleConversations}
+                      disabled={!isReadyForSample || isFinalizing}
+                      className={cn(
+                        "inline-flex h-10 items-center gap-2 border px-4 text-sm font-medium transition",
+                        !isReadyForSample || isFinalizing
+                          ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                          : "border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
+                      )}
+                    >
+                      {isFinalizing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                      Generate Sample Conversations
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

@@ -12,6 +12,7 @@ import {
   toPersistedUIChatMessages,
   toVisibleConversationMessages,
 } from "@/lib/chat-ui-messages";
+import { getSessionBySourceId } from "@/lib/education/storage";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
@@ -44,10 +45,15 @@ export async function GET(
       ),
     ).limit(1);
 
+    const sessionRow = sample
+      ? await getSessionBySourceId(sample.id)
+      : null;
+
     return NextResponse.json({
       messages: toVisibleConversationMessages(
         toPersistedUIChatMessages(sample?.messages ?? [], ["user", "assistant"]),
       ),
+      completed: sessionRow?.sessionState?.status === "completed",
       lease: await getActiveSurveyLease(surveyId, "rehearsal"),
       revision: await getCurrentSurveyRevision(surveyId),
     });

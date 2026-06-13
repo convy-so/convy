@@ -21,7 +21,11 @@ import {
   surveys,
   topicMaterials,
 } from "@/db/schema";
-import { getCurrentSession, getPlatformRole, getVerifiedSession } from "@/lib/auth/dal";
+import {
+  getCurrentSession,
+  getVerifiedSession,
+  requirePlatformRole,
+} from "@/lib/auth/dal";
 import { isTransientDatabaseError } from "@/lib/db/errors";
 import { env } from "@/lib/env";
 import {
@@ -110,6 +114,7 @@ async function resolveQuerySession(authContext?: QueryAuthContext) {
 }
 
 export async function getLearningMeDataForSession(session: VerifiedSession): Promise<LearningMeData> {
+  const sessionRole = requirePlatformRole(session.user);
   const [memberships, invitations] = await Promise.all([
     listStudentMemberships(session.user.id),
     listPendingInvitationsForUser(session.user.id),
@@ -119,7 +124,7 @@ export async function getLearningMeDataForSession(session: VerifiedSession): Pro
     : null;
 
   if (memberships.length === 0) {
-    const learnerPersona = getPlatformRole(session.user) === "student";
+    const learnerPersona = sessionRole === "student";
     const serializedInvitations = invitations.map((invitation) => ({
       id: invitation.id,
       classroomId: invitation.classroomId,

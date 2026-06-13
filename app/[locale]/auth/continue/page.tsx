@@ -1,11 +1,16 @@
 import { redirect } from "next/navigation";
 
 import { readAuthIntentCookie } from "@/lib/auth/auth-intent";
-import { getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
 import { getCurrentSession } from "@/lib/auth/dal";
+import { isInvalidAccountStateError } from "@/lib/auth/dal";
+import { logAuthAuditEvent } from "@/lib/auth/audit";
 import { findActivePendingExpertInvitationForUser } from "@/lib/auth/expert-invitations";
-import { sanitizeReturnTo } from "@/lib/auth/redirect";
-import { resolveViewerAccess } from "@/lib/auth/viewer-access";
+import {
+  getLocalizedAuthIssuePath,
+  getLocalizedSignedInHomePath,
+  sanitizeReturnTo,
+} from "@/lib/auth/redirect";
+import { resolveViewerAccess, type ViewerAccessContext } from "@/lib/auth/viewer-access";
 import { localizeAppPath } from "@/lib/auth/redirect";
 import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
 
@@ -69,7 +74,21 @@ export default async function AuthContinuePage({
     redirect(buildVerifyEmailPath(appLocale, session.user.email, intent?.invitationId ?? null));
   }
 
-  const viewerAccess = await resolveViewerAccess(session);
+  let viewerAccess: ViewerAccessContext;
+  try {
+    viewerAccess = await resolveViewerAccess(session);
+  } catch (error) {
+    if (isInvalidAccountStateError(error)) {
+      logAuthAuditEvent("invalid_account_state_detected", {
+        route: "/auth/continue",
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role ?? null,
+      });
+      redirectViaCompletion(getLocalizedAuthIssuePath(appLocale));
+    }
+    throw error;
+  }
 
   if (intent?.invitationId && viewerAccess.authRole === "student") {
     console.log("[auth-continue] redirect:student_invite", {
@@ -108,14 +127,7 @@ export default async function AuthContinuePage({
     redirectViaCompletion(requestedTarget);
   }
 
-  const defaultTarget =
-    viewerAccess.authRole === "student"
-      ? localizeAppPath(appLocale, "/student/dashboard")
-      : viewerAccess.authRole === "teacher"
-        ? localizeAppPath(appLocale, "/dashboard")
-        : viewerAccess.authRole === "expert"
-          ? localizeAppPath(appLocale, "/expert")
-        : getLocalizedAdminAppPath(appLocale);
+  const defaultTarget = getLocalizedSignedInHomePath(appLocale, viewerAccess.authRole);
 
   console.log("[auth-continue] redirect:default_target", {
     sessionUserId: session.user.id,

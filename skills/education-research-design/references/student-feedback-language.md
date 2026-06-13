@@ -4,10 +4,10 @@ Use language that feels respectful, concrete, and low-pressure for students and 
 
 ## Phrasing rules
 
-- Prefer `learning program`, `course`, `support`, `experience`, `what happened`, and `what helped` over abstract research terms.
+- Prefer `student life`, `school experience`, `learning experience`, `support`, `what happened`, and `what helped` over abstract research terms.
 - Ask for concrete episodes instead of overall ratings when depth matters.
 - Avoid stacked clauses and double-barreled wording.
-- Use time anchors such as `during the course`, `after the training`, or `when you needed help`.
+- Use time anchors such as `during the term`, `during the program`, `at school`, `after the training`, or `when you needed help`.
 - When the participant population may include younger students or multilingual learners, shorten questions and avoid idioms.
 
 ## Bias-reduction rules
@@ -19,7 +19,7 @@ Use language that feels respectful, concrete, and low-pressure for students and 
 
 ## Good moves
 
-- `What were you hoping this course would help you do?`
+- `What part of the student or learner experience do you want to understand better?`
 - `Can you walk me through a moment when you tried to use what you learned?`
 - `When you needed support, what happened next?`
 

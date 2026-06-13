@@ -1,5 +1,6 @@
 import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
-import { getAdminAppPath } from "@/lib/auth/admin-path";
+import { getAdminAppPath, getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
+import type { PlatformRole } from "@/lib/auth/roles";
 
 const SAFE_PREFIXES = [
   "/dashboard",
@@ -10,9 +11,12 @@ const SAFE_PREFIXES = [
   "/invite",
   "/expert-invite",
   "/auth/continue",
+  "/auth/account-issue",
   "/sign-in",
   "/verify-email",
 ] as const;
+
+export type AuthIssueReason = "invalid-role";
 
 function stripLocalePrefix(path: string): string {
   const segments = path.split("/");
@@ -48,4 +52,31 @@ export function localizeAppPath(locale: AppLocale, path: string): string {
   const safePath = path.startsWith("/") ? path : `/${path}`;
   const normalized = stripLocalePrefix(safePath);
   return `/${normalizeAppLocale(locale)}${normalized === "/" ? "" : normalized}`;
+}
+
+export function getLocalizedSignedInHomePath(
+  locale: AppLocale,
+  role: PlatformRole,
+): string {
+  if (role === "student") {
+    return localizeAppPath(locale, "/student/dashboard");
+  }
+
+  if (role === "teacher") {
+    return localizeAppPath(locale, "/dashboard");
+  }
+
+  if (role === "expert") {
+    return localizeAppPath(locale, "/expert");
+  }
+
+  return getLocalizedAdminAppPath(locale);
+}
+
+export function getLocalizedAuthIssuePath(
+  locale: AppLocale,
+  reason: AuthIssueReason = "invalid-role",
+): string {
+  const params = new URLSearchParams({ reason });
+  return `${localizeAppPath(locale, "/auth/account-issue")}?${params.toString()}`;
 }

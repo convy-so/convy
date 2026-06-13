@@ -44,3 +44,11 @@ next-env.d.ts
 
 # Agent skills 
 /.agents/**
+
+# Historical local migrations kept out of Git after schema baseline squash
+/db/migrations/0000_nifty_wendigo.sql
+/db/migrations/000[1-9]_*.sql
+/db/migrations/001[0-5]_*.sql
+/db/migrations/meta/0001_snapshot.json
+/db/migrations/meta/000[3-9]_snapshot.json
+/db/migrations/meta/001[0-5]_snapshot.json
