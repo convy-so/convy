@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 
 import { resolveTeacherOwnedClassroomAccess } from "@/lib/access/classroom-access";
 import {
-  getPlatformRole,
   requireStudentUser,
   requireTeacherUser,
 } from "@/lib/auth/dal";
@@ -16,10 +15,6 @@ export const appLocaleSchema = z.enum(["en", "fr", "de"]);
 
 export async function requireTeachingSession() {
   const session = await requireTeacherUser();
-  const role = getPlatformRole(session.user);
-  if (role !== "teacher" && role !== "admin") {
-    throw new ForbiddenError("Teacher access required.");
-  }
   return { session };
 }
 

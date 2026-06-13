@@ -15,6 +15,7 @@ import {
 import type {
   BriefValidationResult,
   CoveragePlan,
+  CreationFieldQuality,
   EducationProgramId,
   ResearchBrief,
 } from "../types";
@@ -26,7 +27,8 @@ const FIELD_LABELS: Record<string, string> = {
   decisionToInform: "the decision this study should inform",
   audienceDefinition: "who the respondents are",
   learningContext: "the learning context or program being studied",
-  deliveryContext: "how the learning experience is delivered",
+  studyContext:
+    "the delivery or structural context of the educational experience being studied",
   timeWindow: "the time window or stage being examined",
   requiredTopics: "the key topics that must be covered",
   successCriteria: "what a useful response must reveal",
@@ -68,7 +70,7 @@ function parseProgramClassification(
   };
 }
 
-function getBriefFieldValue(brief: ResearchBrief, field: string): unknown {
+export function getBriefFieldValue(brief: ResearchBrief, field: string): unknown {
   switch (field) {
     case "researchGoal":
       return brief.researchGoal;
@@ -78,8 +80,8 @@ function getBriefFieldValue(brief: ResearchBrief, field: string): unknown {
       return brief.audienceDefinition;
     case "learningContext":
       return brief.learningContext;
-    case "deliveryContext":
-      return brief.deliveryContext;
+    case "studyContext":
+      return brief.studyContext;
     case "timeWindow":
       return brief.timeWindow;
     case "requiredTopics":
@@ -91,62 +93,6 @@ function getBriefFieldValue(brief: ResearchBrief, field: string): unknown {
     default:
       return undefined;
   }
-}
-
-function buildExtractionPromptParts(
-  programId: EducationProgramId,
-  messages: ChatMessage[],
-) {
-  const program = getEducationProgram(programId);
-  const required = program.manifest.requiredBriefFields.join(", ");
-  const systemPrompt = `${program.creationPrompt}
-
-<task>
-Extract the latest canonical research brief from the creator conversation.
-Preserve only the latest best interpretation.
-Return JSON only.
-</task>
-
-<program-requirements>
-Required fields for this program: ${required}
-</program-requirements>
-
-  <rules>
-- Infer nothing that is contradicted by the conversation.
-- Prefer concrete phrasing over generic phrasing.
-- If a field is still unclear, leave it sparse and add it to missingFields.
-- Do not mark the brief ready inside this step.
-</rules>
-
-<schema>
-{
-  "title": "string",
-  "researchGoal": "string",
-  "decisionToInform": "string",
-  "audienceDefinition": "string",
-  "audienceRelationship": "string",
-  "audienceKnowledgeLevel": "string",
-  "learningContext": "string",
-  "deliveryContext": "string",
-  "timeWindow": "string",
-  "requiredTopics": ["string"],
-  "successCriteria": ["string"],
-  "analysisQuestions": ["string"],
-  "requiredQuestions": ["string"],
-  "metrics": ["string"],
-  "personalInfo": ["string"],
-  "riskFlags": ["string"],
-  "constraints": ["string"],
-  "assumptions": ["string"],
-  "tone": "formal|casual|playful|empathetic",
-  "media": [],
-  "missingFields": ["string"]
-}
-</schema>`;
-  const prompt = `<conversation>
-${conversationToText(messages)}
-</conversation>`;
-  return { systemPrompt, prompt };
 }
 
 export type ClassifiedProgram = {
@@ -210,18 +156,78 @@ export function validateBrief(
   programId: EducationProgramId,
 ): BriefValidationResult {
   const program = getEducationProgram(programId);
-  const missingFields = program.manifest.requiredBriefFields.filter((field) => {
+  const qualityByField = new Map(
+    brief.creationController.fieldQuality.map((quality) => [
+      quality.field,
+      quality,
+    ]),
+  );
+  const fieldQuality = program.manifest.requiredBriefFields.map((field) => {
     const value = getBriefFieldValue(brief, field);
-    if (Array.isArray(value)) return value.length === 0;
-    return !value || (typeof value === "string" && value.trim().length < 3);
+    const modelQuality = qualityByField.get(field);
+    const hasValue = hasUsableBriefValue(value);
+    if (modelQuality) {
+      return {
+        ...modelQuality,
+        status: hasValue ? modelQuality.status : "missing",
+      } satisfies CreationFieldQuality;
+    }
+    return {
+      field,
+      status: hasValue ? "thin" : "missing",
+      valueSummary: summarizeBriefValue(value),
+      evidence: "",
+      confidence: hasValue ? 0.45 : 0,
+      specificity: hasValue ? 0.45 : 0,
+      unresolvedIssue: hasValue
+        ? `Need more specific detail for ${FIELD_LABELS[field] || field}.`
+        : `Need ${FIELD_LABELS[field] || field}.`,
+      lastAskedQuestion: "",
+    } satisfies CreationFieldQuality;
   });
+  const missingFields = fieldQuality
+    .filter(
+      (quality) =>
+        quality.status !== "sufficient" ||
+        quality.confidence < 0.6 ||
+        quality.specificity < 0.6,
+    )
+    .map((quality) => quality.field);
+  const targetField =
+    brief.creationController.targetField && missingFields.includes(brief.creationController.targetField)
+      ? brief.creationController.targetField
+      : missingFields[0] ?? null;
+  const isReady = missingFields.length === 0;
   return {
-    isReady: missingFields.length === 0,
+    isReady,
     missingFields,
-    notes: missingFields.map(
-      (field) => `Need ${FIELD_LABELS[field] || field}.`,
-    ),
+    notes: fieldQuality
+      .filter((quality) => missingFields.includes(quality.field))
+      .map(
+        (quality) =>
+          quality.unresolvedIssue ||
+          `Need a more specific answer for ${FIELD_LABELS[quality.field] || quality.field}.`,
+      ),
+    fieldQuality,
+    targetField,
+    nextAction: isReady ? "complete" : brief.creationController.action,
   };
+}
+
+function hasUsableBriefValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.some(
+      (item) => typeof item === "string" && item.trim().length >= 8,
+    );
+  }
+  return typeof value === "string" && value.trim().length >= 8;
+}
+
+function summarizeBriefValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.filter((item) => typeof item === "string").join("; ");
+  }
+  return typeof value === "string" ? value : "";
 }
 
 export function buildCoveragePlan(
@@ -242,84 +248,4 @@ export function buildCoveragePlan(
       minimumReliability: 0.65,
     },
   };
-}
-
-export async function extractBrief(
-  programId: EducationProgramId,
-  messages: ChatMessage[],
-): Promise<ResearchBrief> {
-  const promptParts = buildExtractionPromptParts(programId, messages);
-  const raw = await generateAIResponse(
-    promptParts.prompt,
-    promptParts.systemPrompt,
-    {
-      model: analysisModel,
-      temperature: 0.1,
-      maxTokens: 1500,
-      attribution: {
-        feature: "survey-creation-extract-brief",
-      },
-      promptCache: {
-        namespace: "creation-extract-brief",
-        staticSystemPrompt: promptParts.systemPrompt,
-      },
-    },
-  );
-  const parsedCandidate = safeJsonParse(raw);
-  const parsed = isRecord(parsedCandidate) ? parsedCandidate : {};
-
-  return {
-    programId,
-    title: String(parsed.title || "Untitled Education Study"),
-    researchGoal: String(parsed.researchGoal || ""),
-    decisionToInform: String(parsed.decisionToInform || ""),
-    audienceDefinition: String(parsed.audienceDefinition || ""),
-    audienceRelationship: parsed.audienceRelationship
-      ? String(parsed.audienceRelationship)
-      : undefined,
-    audienceKnowledgeLevel: parsed.audienceKnowledgeLevel
-      ? String(parsed.audienceKnowledgeLevel)
-      : undefined,
-    learningContext: String(parsed.learningContext || ""),
-    deliveryContext: String(parsed.deliveryContext || ""),
-    timeWindow: String(parsed.timeWindow || ""),
-    requiredTopics: Array.isArray(parsed.requiredTopics)
-      ? parsed.requiredTopics.map(String)
-      : [],
-    successCriteria: Array.isArray(parsed.successCriteria)
-      ? parsed.successCriteria.map(String)
-      : [],
-    analysisQuestions: Array.isArray(parsed.analysisQuestions)
-      ? parsed.analysisQuestions.map(String)
-      : [],
-    requiredQuestions: Array.isArray(parsed.requiredQuestions)
-      ? parsed.requiredQuestions.map(String)
-      : [],
-    metrics: Array.isArray(parsed.metrics) ? parsed.metrics.map(String) : [],
-    personalInfo: Array.isArray(parsed.personalInfo)
-      ? parsed.personalInfo.map(String)
-      : [],
-    riskFlags: Array.isArray(parsed.riskFlags)
-      ? parsed.riskFlags.map(String)
-      : [],
-    constraints: Array.isArray(parsed.constraints)
-      ? parsed.constraints.map(String)
-      : [],
-    assumptions: Array.isArray(parsed.assumptions)
-      ? parsed.assumptions.map(String)
-      : [],
-    tone:
-      parsed.tone === "formal" ||
-      parsed.tone === "playful" ||
-      parsed.tone === "empathetic"
-        ? parsed.tone
-        : "casual",
-    media: [],
-    routingConfidence: 0,
-    routingRationale: "",
-    missingFields: Array.isArray(parsed.missingFields)
-      ? parsed.missingFields.map(String)
-      : [],
-    readyForSampling: false,
-  } satisfies ResearchBrief;
 }

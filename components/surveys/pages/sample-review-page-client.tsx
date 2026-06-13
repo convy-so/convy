@@ -33,6 +33,11 @@ import { toUIMessages } from "@/lib/chat-ui-messages";
 import { DefaultChatTransport } from "ai";
 import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
 import { getMessageText } from "@/lib/chat-message-text";
+import {
+    hasSurveyCompletionText,
+    isNamedToolUIPart,
+    stripSurveyCompletionTag,
+} from "@/lib/chat-ui-signals";
 import { RefinementAssistantPanel } from "@/components/surveys/refinement-assistant-panel";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import type { SurveyDetailsResponse } from "@/lib/api/surveys";
@@ -87,11 +92,7 @@ function normalizeSampleMessage(
 }
 
 function isFinishSurveyPart(part: UIMessage["parts"][number]): boolean {
-    return (
-        (part.type === "tool-invocation" || part.type === "tool-call") &&
-        "toolName" in part &&
-        part.toolName === "finishSurvey"
-    );
+    return isNamedToolUIPart(part, "finishSurvey");
 }
 
 function parseToolResult(value: unknown): Record<string, unknown> | null {
@@ -294,7 +295,7 @@ export function SampleReviewPageClient({
         onFinish: ({ message, finishReason }) => {
             const messageText = getMessageText(message);
             const hasFinishTool = message.parts?.some((part) => isFinishSurveyPart(part));
-            if (messageText.includes("[[SURVEY_COMPLETED]]") || finishReason === 'tool-calls' || hasFinishTool) {
+            if (hasSurveyCompletionText(messageText) || finishReason === 'tool-calls' || hasFinishTool) {
                 toast.success(t("Toasts.Finished"));
             }
         }
@@ -319,18 +320,20 @@ export function SampleReviewPageClient({
     }, [messages]);
 
     // Clean up SURVEY_COMPLETED tags and track completion
-    const isCompleted = messages.some(msg =>
-        msg.role === "assistant" && (
-            msg.parts?.some(p => p.type === 'text' && p.text.includes("[[SURVEY_COMPLETED]]")) ||
-            msg.parts?.some(isFinishSurveyPart)
-        )
-    );
+    const isCompleted =
+        Boolean((historyData as { completed?: boolean } | undefined)?.completed) ||
+        messages.some(msg =>
+            msg.role === "assistant" && (
+                hasSurveyCompletionText(getMessageText(msg)) ||
+                msg.parts?.some(isFinishSurveyPart)
+            )
+        );
 
     const isSimulating = status === "streaming" || status === "submitted";
 
     const visibleMessages = messages.map(msg => {
         const textPart = msg.parts?.find(p => p.type === 'text');
-        const hasCompletionTag = msg.role === "assistant" && textPart && textPart.text.includes("[[SURVEY_COMPLETED]]");
+        const hasCompletionTag = msg.role === "assistant" && textPart && hasSurveyCompletionText(textPart.text);
         const hasCompletionTool =
             msg.role === "assistant" && msg.parts?.some(isFinishSurveyPart);
 
@@ -339,7 +342,7 @@ export function SampleReviewPageClient({
                 ...msg,
                 parts: msg.parts.map(p => {
                     if (p.type === 'text') {
-                        return { ...p, text: p.text.replace("[[SURVEY_COMPLETED]]", "").trim() };
+                        return { ...p, text: stripSurveyCompletionTag(p.text) };
                     }
                     return p;
                 })
@@ -351,8 +354,11 @@ export function SampleReviewPageClient({
         const isInternalPing = text.includes("Start the conversation now") || text.includes("The user has returned to this sample");
         const hasVisibleContent = m.parts?.some(p => 
             (p.type === 'text' && p.text.trim()) || 
+            p.type === 'dynamic-tool' ||
+            p.type.startsWith('tool-') ||
             p.type === 'tool-invocation' || 
-            p.type === 'tool-call'
+            p.type === 'tool-call' ||
+            p.type === 'tool-result'
         );
         return !isInternalPing && Boolean(hasVisibleContent);
     });
@@ -661,6 +667,7 @@ export function SampleReviewPageClient({
                         <div className="flex-shrink-0 flex flex-col items-center justify-center p-4 border-b border-gray-50 bg-slate-50/50 z-[2]">
                             <button
                                 onClick={() => {
+                                    if (isCompleted) return;
                                     if (voiceWs.status !== "connected") {
                                         voiceWs.connect();
                                     } else if (voiceWs.isRecording) {
@@ -670,6 +677,7 @@ export function SampleReviewPageClient({
                                     }
                                 }}
                                 className="group focus:outline-none transition-transform active:scale-95 my-2"
+                                disabled={isCompleted}
                             >
                                 <VisualizerRing
                                     isRecording={voiceWs.isRecording}
@@ -778,6 +786,7 @@ export function SampleReviewPageClient({
                                 <div className="flex flex-col items-center justify-center space-y-3 pb-2 pt-2">
                                     <button
                                         onClick={() => {
+                                            if (isCompleted) return;
                                             if (voiceWs.status !== "connected") {
                                                 voiceWs.connect();
                                             } else if (voiceWs.isRecording) {
@@ -792,6 +801,7 @@ export function SampleReviewPageClient({
                                                 voiceWs.isRecording ? "bg-red-50 text-red-600 ring-2 ring-red-100" :
                                                     "bg-black text-white hover:scale-105 shadow-md"
                                         )}
+                                        disabled={isCompleted}
                                     >
                                         {voiceWs.isRecording && (
                                             <span className="absolute inset-0 rounded-full bg-red-500/10 animate-ping" />
@@ -825,6 +835,7 @@ export function SampleReviewPageClient({
                                         placeholder={placeholders.textInput}
                                         className="w-full pl-5 pr-12 py-3.5 bg-gray-50 border-transparent focus:border-gray-200 focus:bg-white focus:ring-4 focus:ring-gray-100 rounded-xl transition-all outline-none text-sm placeholder:text-gray-400 text-gray-900"
                                         autoFocus
+                                        disabled={isSimulating || isCompleted}
                                     />
                                     <button
                                         type="submit"

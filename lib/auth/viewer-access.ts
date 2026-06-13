@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { classroomInvitations, classroomStudents } from "@/db/schema";
 import type { AuthSessionWithUser } from "@/lib/auth";
-import { getPlatformRole } from "@/lib/auth/roles";
+import { requirePlatformRole } from "@/lib/auth/roles";
 
 export type ViewerArea = "teacher-dashboard" | "student" | "expert" | "admin";
 
@@ -23,7 +23,7 @@ export type ViewerAccessContext = {
 export async function resolveViewerAccess(
   session: AuthSessionWithUser,
 ): Promise<ViewerAccessContext> {
-  const authRole = getPlatformRole(session.user);
+  const authRole = requirePlatformRole(session.user);
 
   const [memberships, invitations] = await Promise.all([
     authRole === "student"

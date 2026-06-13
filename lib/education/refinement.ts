@@ -15,7 +15,6 @@ import { createLogger, serializeError } from "@/lib/logger";
 
 const log = createLogger("refinement");
 
-
 import { buildCoveragePlan } from "./creation-workflow";
 import type { SampleConductingProfile, SampleRequestedChange } from "./sample-feedback";
 import type { CoveragePlan, ResearchBrief } from "./types";
@@ -53,6 +52,7 @@ function applyBriefSetFields(
   if (typeof setFields.audienceRelationship === "string") nextBrief.audienceRelationship = setFields.audienceRelationship;
   if (typeof setFields.audienceKnowledgeLevel === "string") nextBrief.audienceKnowledgeLevel = setFields.audienceKnowledgeLevel;
   if (typeof setFields.learningContext === "string") nextBrief.learningContext = setFields.learningContext;
+  if (typeof setFields.studyContext === "string") nextBrief.studyContext = setFields.studyContext;
   if (typeof setFields.deliveryContext === "string") nextBrief.deliveryContext = setFields.deliveryContext;
   if (typeof setFields.timeWindow === "string") nextBrief.timeWindow = setFields.timeWindow;
   if (typeof setFields.routingRationale === "string") nextBrief.routingRationale = setFields.routingRationale;

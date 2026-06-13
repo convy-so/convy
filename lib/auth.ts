@@ -56,6 +56,7 @@ async function readSignupRoleIntent(requestHeaders?: Headers | null) {
 async function reconcileSignupRoleFromIntent(params: {
   userId: string;
   requestHeaders?: Headers | null;
+  path?: string | null;
 }) {
   const signupIntent = await readSignupRoleIntent(params.requestHeaders);
   if (!signupIntent) {
@@ -84,6 +85,18 @@ async function reconcileSignupRoleFromIntent(params: {
       updatedAt: new Date(),
     })
     .where(eq(users.id, params.userId));
+
+  logAuthAuditEvent("role_assignment_applied", {
+    path: params.path ?? null,
+    userId: params.userId,
+    assignedRole: signupIntent.desiredRole,
+    source:
+      params.path === "/sign-up/email"
+        ? "email_signup_reconcile"
+        : signupIntent.kind === "invite-signup"
+          ? "invite_signup_reconcile"
+          : "social_callback",
+  });
 }
 
 export const auth = betterAuth({
@@ -116,9 +129,8 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path === "/sign-up/email") {
         const rawIntent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
-        let intent;
         try {
-          intent = validateSignupIntent(rawIntent);
+          validateSignupIntent(rawIntent);
         } catch (error) {
           logAuthAuditEvent("invalid_auth_intent", {
             path: ctx.path,
@@ -177,6 +189,7 @@ export const auth = betterAuth({
       await reconcileSignupRoleFromIntent({
         userId,
         requestHeaders: ctx.request?.headers ?? null,
+        path: ctx.path,
       });
     }),
   },
@@ -313,6 +326,12 @@ export const auth = betterAuth({
           const signupIntent = await readSignupRoleIntent(await headers());
           if (signupIntent) {
             user.role = signupIntent.desiredRole;
+            logAuthAuditEvent("role_assignment_applied", {
+              path: "/sign-up/email",
+              email: user.email ?? null,
+              assignedRole: user.role,
+              source: "email_signup",
+            });
           }
 
           if (user.role === "expert" || user.role === "admin") {

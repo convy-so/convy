@@ -9,7 +9,6 @@ import {
   surveys,
   users,
 } from "@/db/schema";
-import { buildCreationGreeting } from "@/lib/education/creation-agent";
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 import { resolveTeacherClassroomAccess } from "@/lib/access/classroom-access";
 import { getSurveyPermissionContext, hasSurveyPermission } from "@/lib/survey-access";
@@ -128,8 +127,6 @@ export async function createSurveyForUser(params: {
     .from(surveys)
     .where(eq(surveys.userId, params.session.user.id));
 
-  const greeting = buildCreationGreeting(language);
-
   let createdSurvey: typeof surveys.$inferSelect | undefined;
   await getDb().transaction(async (tx) => {
     const [inserted] = await tx
@@ -156,7 +153,7 @@ export async function createSurveyForUser(params: {
     await tx.insert(surveyCreationConversations).values({
       id: nanoid(),
       surveyId,
-      messages: [{ id: nanoid(), role: "assistant", content: greeting, parts: [{ type: "text", text: greeting }], timestamp: now.toISOString() }],
+      messages: [],
       status: "in_progress",
       collectedInfo: {},
       extractedData: {},
@@ -167,7 +164,6 @@ export async function createSurveyForUser(params: {
 
   return {
     createdSurvey,
-    greeting,
     existingSurveys,
   };
 }

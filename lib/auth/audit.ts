@@ -2,6 +2,8 @@ import "server-only";
 
 type AuthAuditEvent =
   | "invalid_auth_intent"
+  | "invalid_account_state_detected"
+  | "role_assignment_applied"
   | "role_assignment_rejected"
   | "invite_email_mismatch"
   | "staff_invitation_blocked"
