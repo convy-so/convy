@@ -1,0 +1,84 @@
+# Copy to EC2: /etc/nginx/sites-available/getconvy.pro
+# Then: sudo ln -sf /etc/nginx/sites-available/getconvy.pro /etc/nginx/sites-enabled/
+#
+# Requires:
+#   /etc/nginx/ssl/getconvy.pro/origin.crt   (Cloudflare Origin Certificate)
+#   /etc/nginx/ssl/getconvy.pro/origin.key   (private key — never commit)
+#
+# Cloudflare: DNS proxied (orange cloud) + SSL mode "Full (strict)"
+
+# Redirect HTTP → HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name getconvy.pro www.getconvy.pro;
+    return 301 https://getconvy.pro$request_uri;
+}
+
+# Optional: WebSocket subdomain → Docker port 3001
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ws.getconvy.pro;
+
+    ssl_certificate     /etc/nginx/ssl/getconvy.pro/origin.crt;
+    ssl_certificate_key /etc/nginx/ssl/getconvy.pro/origin.key;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+
+# Main app → Docker port 3000
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name getconvy.pro www.getconvy.pro;
+
+    ssl_certificate     /etc/nginx/ssl/getconvy.pro/origin.crt;
+    ssl_certificate_key /etc/nginx/ssl/getconvy.pro/origin.key;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    # Cloudflare real client IP (optional but recommended)
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+    real_ip_header CF-Connecting-IP;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+    }
+}

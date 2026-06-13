@@ -307,6 +307,14 @@ function renderList({
   );
 }
 
+function renderPre({ children, className }: ComponentPropsWithoutRef<"pre">) {
+  return (
+    <div className={cn("my-3 overflow-x-auto", className)}>
+      {children}
+    </div>
+  );
+}
+
 function renderTable(props: ComponentPropsWithoutRef<"table">) {
   return (
     <div className="my-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -356,7 +364,7 @@ export function MarkdownMessage({ content, className }: MarkdownMessageProps) {
             />
           ),
           p: renderParagraph,
-          pre: (props) => <div className="my-3 overflow-x-auto" {...props} />,
+          pre: renderPre,
           ul: (props) => renderList({ ordered: false, ...props }),
           ol: (props) => renderList({ ordered: true, ...props }),
           li: (props) => <li className="marker:text-slate-500" {...props} />,

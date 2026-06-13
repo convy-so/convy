@@ -1,0 +1,58 @@
+# Production overrides for EC2 (prod2 branch, .env.prod).
+#
+# Uses Supabase for Postgres — bundled postgres is disabled by default.
+# Redis runs in Docker on the EC2 instance.
+#
+# Start:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     --env-file .env.prod up -d --build
+
+services:
+  app:
+    image: ghcr.io/convy-so/convy:prod2
+    pull_policy: always
+    restart: always
+    env_file:
+      - .env.prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      SKIP_DB_WAIT: "true"
+      DATABASE_HOST: ""
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      NODE_ENV: production
+      RUN_DB_MIGRATE: "true"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  deploy-sync:
+    profiles: ["auto-sync"]
+    build:
+      context: ./docker/deploy
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/repo
+    working_dir: /repo
+    env_file:
+      - .env.prod
+    environment:
+      REPO_DIR: /repo
+      DEPLOY_BRANCH: prod2
+      DEPLOY_ENV_FILE: .env.prod
+      DEPLOY_COMPOSE_FILES: docker-compose.yml:docker-compose.prod.yml
+      DEPLOY_INTERVAL_SECONDS: ${DEPLOY_INTERVAL_SECONDS:-300}
+      REQUIRE_CI_PASS: ${REQUIRE_CI_PASS:-true}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-convy}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-convy-so/convy}
+      GITHUB_DEPLOY_TOKEN: ${GITHUB_DEPLOY_TOKEN:-}
+      HEALTHCHECK_URL: http://app:3000/api/health
+    depends_on:
+      app:
+        condition: service_started

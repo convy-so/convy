@@ -1,0 +1,93 @@
+# Convy — full-stack Docker Compose
+#
+# Runs everything needed to host the app:
+#   • app      — single container with Next.js + workers + WebSocket
+#   • postgres — PostgreSQL 16 with pgvector
+#   • redis    — Redis 7 (BullMQ queues + pub/sub)
+#
+# Quick start:
+#   cp .env.docker.example .env.docker
+#   # Edit .env.docker with your API keys
+#   docker compose --env-file .env.docker up --build
+#
+# First deploy against self-hosted Postgres:
+#   Set RUN_DB_PUSH=true in .env.docker for the first run only.
+#
+# AWS options:
+#   1) EC2/ECS: run this entire compose file on one instance.
+#   2) Managed DB: set DATABASE_URL to RDS and REDIS_URL to ElastiCache,
+#      then `docker compose up app --build` (skip bundled postgres/redis).
+#   3) ALB: route port 443 → app:3000 (HTTP) and port 443/3001 → app:3001 (WebSocket).
+
+name: convy
+
+services:
+  postgres:
+    profiles: ["local-db"]
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-convy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+      POSTGRES_DB: ${POSTGRES_DB:-convy}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-convy} -d ${POSTGRES_DB:-convy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    image: ${DOCKER_IMAGE:-ghcr.io/convy-so/convy:prod2}
+    pull_policy: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+        NEXT_PUBLIC_BETTER_AUTH_URL: ${NEXT_PUBLIC_BETTER_AUTH_URL:-http://localhost:3000}
+        NEXT_PUBLIC_WEBSOCKET_URL: ${NEXT_PUBLIC_WEBSOCKET_URL:-ws://localhost:3001}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_GDPR_EU_MODE: ${NEXT_PUBLIC_GDPR_EU_MODE:-false}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+    restart: unless-stopped
+    env_file:
+      - path: .env.docker
+        required: false
+      - path: .env.prod
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://convy:${POSTGRES_PASSWORD:-localdev}@postgres:5432/convy}
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      DATABASE_HOST: ${DATABASE_HOST:-}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      PORT: 3000
+      WEBSOCKET_PORT: ${WEBSOCKET_PORT:-3001}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

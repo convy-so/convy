@@ -1,0 +1,113 @@
+name: Prod2 CI and EC2 Deploy
+
+on:
+  push:
+    branches: [prod2]
+  pull_request:
+    branches: [prod2]
+
+concurrency:
+  group: prod2-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/convy-so/convy
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+  build-push:
+    name: Build and push Docker image
+    needs: lint
+    if: github.event_name == 'push' && github.ref == 'refs/heads/prod2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:prod2
+            ${{ env.IMAGE_NAME }}:prod2-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_APP_URL=${{ vars.PROD_APP_URL || 'http://44.207.198.43:3000' }}
+            NEXT_PUBLIC_BETTER_AUTH_URL=${{ vars.PROD_BETTER_AUTH_URL || 'http://44.207.198.43:3000' }}
+            NEXT_PUBLIC_WEBSOCKET_URL=${{ vars.PROD_WEBSOCKET_URL || 'ws://44.207.198.43:3001' }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.PROD_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ vars.PROD_SUPABASE_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_GDPR_EU_MODE=false
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.PROD_SENTRY_DSN }}
+
+  deploy:
+    name: Deploy to EC2
+    needs: build-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST || vars.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY || vars.EC2_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -e
+            cd /opt/convy
+            git fetch origin prod2
+            git checkout prod2
+            git reset --hard origin/prod2
+            echo "${{ secrets.GHCR_READ_TOKEN || vars.GHCR_READ_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              --env-file .env.prod pull app
+            chmod +x docker/deploy/db-migrate.sh
+            ./docker/deploy/db-migrate.sh
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              --env-file .env.prod up -d --no-build --remove-orphans
+            wget -qO- http://127.0.0.1:3000/api/health

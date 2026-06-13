@@ -94,7 +94,6 @@ function createFramework(): ActiveExpertFramework {
     frameworkVersionId: "framework_version_1",
     seedSource: "expert_authored",
     framework: {
-      id: "artifact_1",
       name: "Socratic Math Tutoring",
       description: "Lead with diagnosis, then one precise nudge.",
       toolUsageGuidance: "Use tools only when they directly support diagnosis or checking work.",
@@ -104,6 +103,7 @@ function createFramework(): ActiveExpertFramework {
         "Student: Can I use the quadratic formula? Tutor: Not in this lesson. Let's stay with factoring.",
       ],
       markdownContent: "Start with the student's current idea, then ask one sharp question.",
+      metadata: {},
     },
     heuristics: [
       {
@@ -127,6 +127,7 @@ function createState(): LearningSessionState {
     topicId: "topic_1",
     topicTitle: "Quadratic Equations",
     frameworkVersionId: "framework_version_1",
+    activeFrameworkSnapshot: createFramework(),
     groundingPackVersion: 3,
     contentScopeSnapshot: createContentScope(),
     recentMessageSummary: "Student tried factors that gave the wrong middle term.",

@@ -2,17 +2,16 @@
 
 import { createAuthClient } from "better-auth/react";
 import { adminClient, inferAdditionalFields } from "better-auth/client/plugins";
-import { clientEnv } from "./env.client";
 
+// Same-origin: omit baseURL so requests go to the current host (not baked localhost).
 export const authClient = createAuthClient({
-  baseURL: clientEnv.NEXT_PUBLIC_BETTER_AUTH_URL,
   plugins: [
     inferAdditionalFields({
       user: {
         role: {
           type: "string",
           required: false,
-          input: true,
+          input: false,
           returned: false,
         },
       },
