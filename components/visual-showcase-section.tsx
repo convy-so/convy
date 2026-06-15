@@ -5,38 +5,38 @@ import Image from "next/image";
 const productViews = [
   {
     tab: "For teachers",
-    title: "Connects with your teaching workflow.",
+    title: "Run your classroom in one place.",
     description:
-      "Convyy fits the tools your classroom already uses and keeps everything in one simple flow.",
-    image: "/nexura-hero-bg.png",
+      "Create classrooms, set topics, and support students with AI tutoring you can actually review.",
+    image: "/teacher.png",
     steps: [
-      "Create AI tutoring activities in minutes",
-      "Link student check-ins to class goals",
-      "Share quick progress summaries with your team",
+      "Create a classroom and add your topics",
+      "Students learn through adaptive AI chat or voice",
+      "See who needs help and what to do next",
     ],
   },
   {
-    tab: "For tutors",
-    title: "Connects with your tutoring workflow.",
+    tab: "For students",
+    title: "Learn with help that listens.",
     description:
-      "Manage prep, live sessions, and post-lesson follow-up from one focused workspace.",
-    image: "/nexura-product-ref.png",
+      "Get support that changes with your answers, not a fixed script.",
+    image: "/student.png",
     steps: [
-      "Generate guided prompts before each session",
-      "Track weak areas while students respond",
-      "Send recap notes and next tasks in one click",
+      "Join your classroom and pick a topic",
+      "Ask questions by chat or voice",
+      "Practice more when something still feels unclear",
     ],
   },
   {
     tab: "For schools",
-    title: "Connects with your school systems.",
+    title: "Support learning across teams.",
     description:
-      "Give teams a shared place to monitor learning progress without changing existing processes.",
-    image: "/nexura-integrations-ref.png",
+      "Give teachers, tutors, and leaders one place to run and review learning support.",
+    image: "/school.png",
     steps: [
-      "Add programs and classrooms without migration",
-      "Securely connect staff and learner accounts",
-      "Sync reports for leaders, teachers, and support teams",
+      "Set up classrooms for different programs",
+      "Track sessions, check-ins, and student progress",
+      "Use reports to spot who needs follow-up",
     ],
   },
 ];
@@ -51,7 +51,7 @@ export default function VisualShowcaseSection() {
               Built for every learning team.
             </h2>
             <p className="mx-auto mt-2 max-w-2xl text-[14px] font-normal leading-[22px] text-[#696969] md:text-[16px] md:leading-[24px]">
-              Pick a role and see how Convyy adapts to your workflow.
+              Simple support for teachers, students, and school teams.
             </p>
           </div>
 
@@ -100,7 +100,7 @@ export default function VisualShowcaseSection() {
                     alt={`${view.tab} workflow preview`}
                     width={1200}
                     height={900}
-                    className="h-auto w-full rounded-[18px] object-cover"
+                    className="h-auto w-full rounded-[18px] object-contain"
                   />
                 </div>
               </div>

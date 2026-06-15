@@ -8,10 +8,10 @@ export default function FeaturesSection() {
           {/* Left side: Text */}
           <div className="w-full lg:w-[45%]">
             <h2 className="mb-4 text-[32px] font-[500] leading-[40px] tracking-[-1px] text-[#080808] md:text-[44px] md:leading-[52px]">
-              Everything you need to deliver adaptive learning.
+              Adaptive learning for real classrooms.
             </h2>
             <p className="mb-10 text-[18px] font-normal leading-[28px] text-[#696969] md:text-[20px] md:leading-[30px]">
-              Build classroom experiences that help students learn in a more personal, responsive, and measurable way.
+              Convyy helps students learn through conversation, while teachers stay in control of what gets taught and reviewed.
             </p>
 
             <div className="space-y-6">
@@ -20,7 +20,7 @@ export default function FeaturesSection() {
                   1
                 </span>
                 <p className="mt-0.5 text-[16px] leading-[24px] text-[#4E5661]">
-                  Design learning flows with AI
+                  Set up classrooms, topics, and learning goals
                 </p>
               </div>
               <div className="flex items-start gap-4">
@@ -28,7 +28,7 @@ export default function FeaturesSection() {
                   2
                 </span>
                 <p className="mt-0.5 text-[16px] leading-[24px] text-[#4E5661]">
-                  Personalize learning spaces
+                  Students get help that adapts to each answer
                 </p>
               </div>
               <div className="flex items-start gap-4">
@@ -36,7 +36,7 @@ export default function FeaturesSection() {
                   3
                 </span>
                 <p className="mt-0.5 text-[16px] leading-[24px] text-[#4E5661]">
-                  Gain actionable learning insights
+                  Review progress and reports in one place
                 </p>
               </div>
             </div>
@@ -44,13 +44,13 @@ export default function FeaturesSection() {
 
           {/* Right side: Image */}
           <div className="w-full lg:w-[55%]">
-            <div className="rounded-[24px] bg-[#F7F7F7] p-8 flex items-center justify-center border border-gray-100 shadow-sm overflow-hidden h-[400px]">
+            <div className="flex h-[400px] items-center justify-center overflow-hidden rounded-[24px] bg-[#F7F7F7] p-8">
               <Image
-                src="/nexura-integrations-ref.png"
-                alt="Convyy Integrations"
+                src="/school.png"
+                alt="Convyy adaptive learning for schools"
                 width={800}
                 height={600}
-                className="h-full w-full object-contain mix-blend-multiply scale-[1.2]"
+                className="h-full w-full object-contain"
               />
             </div>
           </div>
