@@ -298,7 +298,7 @@ export function CreateSurveyPageClient({
       normalizedMessages.length === 0 &&
       !isFinished &&
       canEdit &&
-      !normalizedExtractedData.readyForSampling
+      !normalizedExtractedData?.readyForSampling
     ) {
       void bootstrapConversation(initialSurveyId);
     }
