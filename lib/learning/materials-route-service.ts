@@ -129,10 +129,18 @@ function getUserMessageForStageFailure(
   stage: LearningMaterialUploadAttemptStage,
   error: unknown,
 ) {
-  const message = getErrorMessage(error, "");
+  const message = getErrorMessage(error, "").toLowerCase();
 
-  if (message.toLowerCase().includes("unsupported learning material format")) {
+  if (message.includes("unsupported learning material format")) {
     return "This file format is not supported. Upload a PDF, DOCX, or TXT file.";
+  }
+
+  if (
+    message.includes("queue_enqueue") ||
+    message.includes("attempt_queue_update") ||
+    message.includes("enqueue")
+  ) {
+    return "This file was uploaded, but processing could not be queued. Try again.";
   }
 
   switch (stage) {
@@ -703,6 +711,13 @@ function buildLatestBatchLeafState(
 export async function processLearningMaterialBatchFinalizer(
   data: LearningMaterialBatchFinalizeJobData,
 ) {
+  const startedAt = Date.now();
+  console.info("[learning-material-batch-worker] finalize start", {
+    batchId: data.batchId,
+    topicId: data.topicId,
+    classroomId: data.classroomId,
+  });
+
   const attempts = await getDb().query.topicMaterialUploadAttempts.findMany({
     where: eq(topicMaterialUploadAttempts.batchId, data.batchId),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
@@ -712,10 +727,22 @@ export async function processLearningMaterialBatchFinalizer(
     buildLatestBatchLeafState(attempts);
 
   if (activeAttempts.length === 0) {
+    console.info("[learning-material-batch-worker] finalize empty", {
+      batchId: data.batchId,
+      topicId: data.topicId,
+      durationMs: Date.now() - startedAt,
+    });
     return { success: true, status: "empty" as const };
   }
 
   if (incompleteAttempts.length > 0) {
+    console.info("[learning-material-batch-worker] finalize waiting for incomplete attempts", {
+      batchId: data.batchId,
+      topicId: data.topicId,
+      pendingCount: incompleteAttempts.length,
+      activeCount: activeAttempts.length,
+      durationMs: Date.now() - startedAt,
+    });
     return {
       success: true,
       status: "batch_incomplete" as const,
@@ -744,6 +771,14 @@ export async function processLearningMaterialBatchFinalizer(
         }),
       ),
     );
+
+    console.info("[learning-material-batch-worker] finalize completed with failed attempts", {
+      batchId: data.batchId,
+      topicId: data.topicId,
+      failedCount: failedAttempts.length,
+      successfulCount: successfulAttempts.length,
+      durationMs: Date.now() - startedAt,
+    });
 
     return {
       success: true,
@@ -774,6 +809,13 @@ export async function processLearningMaterialBatchFinalizer(
       }),
     ),
   );
+
+  console.info("[learning-material-batch-worker] finalize succeeded", {
+    batchId: data.batchId,
+    topicId: data.topicId,
+    materialCount: successfulAttempts.length,
+    durationMs: Date.now() - startedAt,
+  });
 
   return {
     success: true,
@@ -871,15 +913,30 @@ export async function processLearningMaterialUploadAttempt(
       sizeBytes: data.sizeBytes,
     });
 
+    console.info("[learning-material-worker] topic access check start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      userId: data.userId,
+    });
     const topic = await getTeacherTopicAccess(data.userId, data.topicId);
     if (!topic) {
       throw new Error("Topic not found or user is no longer authorized.");
     }
+    console.info("[learning-material-worker] topic access check complete", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      classroomId: topic.classroomId,
+    });
 
     if (!attempt.storagePath) {
       throw new Error("Uploaded file could not be found for processing.");
     }
 
+    console.info("[learning-material-worker] marking extraction started", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      storagePath: attempt.storagePath,
+    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -899,7 +956,27 @@ export async function processLearningMaterialUploadAttempt(
     });
 
     materialId = nanoid();
+    console.info("[learning-material-worker] download start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      storagePath: attempt.storagePath,
+      materialId,
+    });
     const buffer = await downloadLearningMaterial(attempt.storagePath);
+    console.info("[learning-material-worker] download complete", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      storagePath: attempt.storagePath,
+      materialId,
+      sizeBytes: buffer.byteLength,
+    });
+
+    console.info("[learning-material-worker] extraction start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+      mimeType: data.mimeType,
+    });
     const sourceDocument = await extractLearningMaterialSourceDocument({
       materialId,
       buffer,
@@ -919,6 +996,11 @@ export async function processLearningMaterialUploadAttempt(
     });
 
     currentStage = "analysis";
+    console.info("[learning-material-worker] marking analysis started", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -928,6 +1010,12 @@ export async function processLearningMaterialUploadAttempt(
       stage: "analysis",
     });
 
+    console.info("[learning-material-worker] grounding map start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+      segmentCount: sourceDocument.segments.length,
+    });
     const groundingMap = await buildMaterialGroundingMap({
       topicTitle: topic.title,
       materialId,
@@ -956,6 +1044,11 @@ export async function processLearningMaterialUploadAttempt(
     }
 
     currentStage = "indexing";
+    console.info("[learning-material-worker] marking indexing started", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -965,6 +1058,11 @@ export async function processLearningMaterialUploadAttempt(
       stage: "indexing",
     });
 
+    console.info("[learning-material-worker] material insert start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+    });
     const [material] = await getDb()
       .insert(topicMaterials)
       .values({
@@ -992,8 +1090,18 @@ export async function processLearningMaterialUploadAttempt(
         updatedAt: new Date(),
       })
       .returning();
+    console.info("[learning-material-worker] material insert complete", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+    });
 
     currentStage = "pack_build";
+    console.info("[learning-material-worker] marking pack build started", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -1004,6 +1112,11 @@ export async function processLearningMaterialUploadAttempt(
       materialId,
     });
 
+    console.info("[learning-material-worker] indexing and boundary sync start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
+    });
     await indexMaterialAndSyncBoundary({
       topicId: data.topicId,
       materialId,
@@ -1014,6 +1127,11 @@ export async function processLearningMaterialUploadAttempt(
       sourceDocument,
       groundingMap,
       topic,
+    });
+    console.info("[learning-material-worker] indexing and boundary sync complete", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      materialId,
     });
 
     await updateLearningMaterialUploadAttempt({
@@ -1033,10 +1151,23 @@ export async function processLearningMaterialUploadAttempt(
       materialId,
     });
 
-    await enqueueLearningMaterialBatchFinalize({
+    console.info("[learning-material-worker] batch finalizer enqueue start", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      materialId,
+    });
+    const finalizeJob = await enqueueLearningMaterialBatchFinalize({
       batchId: attempt.batchId,
       topicId: data.topicId,
       classroomId: data.classroomId,
+    });
+    console.info("[learning-material-worker] batch finalizer enqueued", {
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      batchId: attempt.batchId,
+      materialId,
+      jobId: finalizeJob?.id ?? null,
     });
 
     console.info("[learning-material-worker] processing succeeded", {

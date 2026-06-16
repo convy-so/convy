@@ -16,6 +16,15 @@ import {
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import { enqueueLearningMaterialProcessing } from "@/lib/queue";
 
+type RetryFailurePoint = "queue_enqueue" | "attempt_queue_update";
+
+function annotateRetryError(failurePoint: RetryFailurePoint, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const wrapped = new Error(`${failurePoint}: ${message}`);
+  (wrapped as Error & { cause?: unknown }).cause = error;
+  return wrapped;
+}
+
 function serializeUploadAttempt(attempt: {
   id: string;
   previousAttemptId?: string | null;
@@ -127,8 +136,16 @@ export async function POST(
       processingStartedAt: new Date(),
     });
 
+    let failurePoint: RetryFailurePoint = "queue_enqueue";
     try {
-      await enqueueLearningMaterialProcessing({
+      console.info("[learning-material-upload-retry] enqueue start", {
+        topicId,
+        sourceAttemptId: sourceAttempt.id,
+        retryAttemptId,
+        batchId: sourceAttempt.batchId,
+        storagePath: sourceAttempt.storagePath,
+      });
+      const processingJob = await enqueueLearningMaterialProcessing({
         attemptId: retryAttemptId,
         topicId,
         classroomId: topic.classroomId,
@@ -140,7 +157,15 @@ export async function POST(
         title: sourceAttempt.title ?? null,
         description: sourceAttempt.description ?? null,
       });
+      console.info("[learning-material-upload-retry] enqueue complete", {
+        topicId,
+        sourceAttemptId: sourceAttempt.id,
+        retryAttemptId,
+        batchId: sourceAttempt.batchId,
+        jobId: processingJob?.id ?? null,
+      });
 
+      failurePoint = "attempt_queue_update";
       retryAttempt =
         (await updateLearningMaterialUploadAttempt({
           attemptId: retryAttemptId,
@@ -159,7 +184,16 @@ export async function POST(
           failureMessage: null,
         })) ?? retryAttempt;
     } catch (error) {
-      const failure = buildUploadAttemptFailure("extraction", error);
+      const annotatedError = annotateRetryError(failurePoint, error);
+      const failure = buildUploadAttemptFailure("extraction", annotatedError);
+      console.error("[learning-material-upload-retry] failed", {
+        topicId,
+        sourceAttemptId: sourceAttempt.id,
+        retryAttemptId,
+        batchId: sourceAttempt.batchId,
+        failurePoint,
+        error: annotatedError,
+      });
       retryAttempt =
         (await updateLearningMaterialUploadAttempt({
           attemptId: retryAttemptId,

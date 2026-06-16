@@ -23,6 +23,34 @@ export const SURVEY_AUDIO_BUCKET = "survey-audio";
 export const SURVEY_VIDEO_BUCKET = "survey-video";
 export const LEARNING_MATERIALS_BUCKET = "learning-materials";
 
+function getUploadByteLength(file: Buffer | Blob) {
+  return Buffer.isBuffer(file) ? file.byteLength : file.size;
+}
+
+function getSupabaseStorageErrorDetails(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return {};
+  }
+
+  const candidate = error as {
+    message?: unknown;
+    name?: unknown;
+    statusCode?: unknown;
+    error?: unknown;
+  };
+
+  return {
+    name: typeof candidate.name === "string" ? candidate.name : undefined,
+    message: typeof candidate.message === "string" ? candidate.message : undefined,
+    statusCode:
+      typeof candidate.statusCode === "string" ||
+      typeof candidate.statusCode === "number"
+        ? candidate.statusCode
+        : undefined,
+    error: typeof candidate.error === "string" ? candidate.error : undefined,
+  };
+}
+
 /**
  * Upload an image to Supabase Storage
  * @param file - The file to upload (Buffer or Blob)
@@ -108,6 +136,15 @@ export async function uploadLearningMaterial(
   const safeName = originalFilename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filePath = `${topicId}/${assetId}-${safeName}`;
 
+  console.info("[learning-material-storage] upload start", {
+    bucket: LEARNING_MATERIALS_BUCKET,
+    path: filePath,
+    topicId,
+    assetId,
+    contentType,
+    sizeBytes: getUploadByteLength(file),
+  });
+
   const { data, error } = await supabase.storage
     .from(LEARNING_MATERIALS_BUCKET)
     .upload(filePath, file, {
@@ -116,8 +153,26 @@ export async function uploadLearningMaterial(
     });
 
   if (error) {
+    console.error("[learning-material-storage] upload failed", {
+      bucket: LEARNING_MATERIALS_BUCKET,
+      path: filePath,
+      topicId,
+      assetId,
+      contentType,
+      sizeBytes: getUploadByteLength(file),
+      error: getSupabaseStorageErrorDetails(error),
+    });
     throw new Error(`Failed to upload learning material: ${error.message}`);
   }
+
+  console.info("[learning-material-storage] upload complete", {
+    bucket: LEARNING_MATERIALS_BUCKET,
+    path: data.path,
+    topicId,
+    assetId,
+    contentType,
+    sizeBytes: getUploadByteLength(file),
+  });
 
   return {
     path: data.path,
@@ -164,15 +219,32 @@ export async function createSignedLearningMaterialUrl(
 }
 
 export async function downloadLearningMaterial(path: string): Promise<Buffer> {
+  console.info("[learning-material-storage] download start", {
+    bucket: LEARNING_MATERIALS_BUCKET,
+    path,
+  });
+
   const { data, error } = await supabase.storage
     .from(LEARNING_MATERIALS_BUCKET)
     .download(path);
 
   if (error || !data) {
+    console.error("[learning-material-storage] download failed", {
+      bucket: LEARNING_MATERIALS_BUCKET,
+      path,
+      error: error ? getSupabaseStorageErrorDetails(error) : null,
+    });
     throw new Error(`Failed to download learning material: ${error?.message ?? "Missing file"}`);
   }
 
-  return Buffer.from(await data.arrayBuffer());
+  const buffer = Buffer.from(await data.arrayBuffer());
+  console.info("[learning-material-storage] download complete", {
+    bucket: LEARNING_MATERIALS_BUCKET,
+    path,
+    sizeBytes: buffer.byteLength,
+  });
+
+  return buffer;
 }
 
 /**

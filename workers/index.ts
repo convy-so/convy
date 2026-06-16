@@ -54,8 +54,17 @@ const workers = [
   const isConnected = await testRedisConnection();
 
   if (!isConnected) {
+    console.error("[workers] Redis connection failed; workers will exit");
     process.exit(1);
   }
+
+  console.info("[workers] ready", {
+    workers: workers.map(({ name }) => name).join(", "),
+  });
+  Sentry.logger.info("Workers ready", {
+    service: "workers",
+    worker_names: workers.map(({ name }) => name).join(", "),
+  });
 
   if (env.SENTRY_TEST_TRIGGER) {
     throw new Error("Sentry Test Worker Error: This is a test error from the Worker process.");
