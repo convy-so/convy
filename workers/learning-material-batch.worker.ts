@@ -28,6 +28,12 @@ const learningMaterialBatchWorker = new Worker<LearningMaterialBatchFinalizeJobD
       batch_id: data.batchId,
       topic_id: data.topicId,
     });
+    console.info("[learning-material-batch-worker] job started", {
+      jobId: job.id ?? null,
+      batchId: data.batchId,
+      topicId: data.topicId,
+      classroomId: data.classroomId,
+    });
 
     let result;
     try {
@@ -50,6 +56,13 @@ const learningMaterialBatchWorker = new Worker<LearningMaterialBatchFinalizeJobD
       duration_ms: Date.now() - startedAt,
       status: result.status,
     });
+    console.info("[learning-material-batch-worker] job completed", {
+      jobId: job.id ?? null,
+      batchId: data.batchId,
+      topicId: data.topicId,
+      status: result.status,
+      durationMs: Date.now() - startedAt,
+    });
 
     return result;
   },
@@ -60,6 +73,26 @@ const learningMaterialBatchWorker = new Worker<LearningMaterialBatchFinalizeJobD
   },
 );
 
+learningMaterialBatchWorker.on("active", (job) => {
+  console.info("[learning-material-batch-worker] job active", {
+    jobId: job.id ?? null,
+    batchId: job.data.batchId,
+    topicId: job.data.topicId,
+  });
+});
+
+learningMaterialBatchWorker.on("completed", (job, result) => {
+  console.info("[learning-material-batch-worker] bullmq completed event", {
+    jobId: job.id ?? null,
+    batchId: job.data.batchId,
+    topicId: job.data.topicId,
+    status:
+      result && typeof result === "object" && "status" in result
+        ? String(result.status)
+        : null,
+  });
+});
+
 learningMaterialBatchWorker.on("failed", (job, error) => {
   Sentry.logger.error("Learning material batch finalizer job failed unexpectedly", {
     service: "workers",
@@ -67,6 +100,32 @@ learningMaterialBatchWorker.on("failed", (job, error) => {
     job_id: job?.id,
     error_message: error.message,
   });
+  console.error("[learning-material-batch-worker] bullmq failed event", {
+    jobId: job?.id ?? null,
+    batchId: job?.data.batchId ?? null,
+    topicId: job?.data.topicId ?? null,
+    error,
+  });
+});
+
+learningMaterialBatchWorker.on("stalled", (jobId) => {
+  Sentry.logger.warn("Learning material batch finalizer job stalled", {
+    service: "workers",
+    worker_name: "Learning Material Batch",
+    job_id: jobId,
+  });
+  console.warn("[learning-material-batch-worker] bullmq stalled event", {
+    jobId,
+  });
+});
+
+learningMaterialBatchWorker.on("error", (error) => {
+  Sentry.logger.error("Learning material batch finalizer worker error", {
+    service: "workers",
+    worker_name: "Learning Material Batch",
+    error_message: error.message,
+  });
+  console.error("[learning-material-batch-worker] worker error", { error });
 });
 
 export default learningMaterialBatchWorker;

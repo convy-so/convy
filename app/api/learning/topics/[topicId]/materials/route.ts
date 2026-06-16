@@ -14,6 +14,7 @@ import {
   createLearningMaterialUploadAttempt,
   getTeacherTopicOrNull,
   isMaterialAnalysisFailed,
+  type LearningMaterialUploadAttemptStage,
   normalizeLearningMaterialUploadAttemptStage,
   normalizeDetectedLearningMaterialMime,
   updateLearningMaterialUploadAttempt,
@@ -28,6 +29,26 @@ function getFileMetadata(formData: FormData, key: string, index: number) {
     String(formData.get(`${key}:${index}`) || "") ||
     String(formData.get(key) || "")
   );
+}
+
+type LearningMaterialUploadFailurePoint =
+  | "attempt_create"
+  | "input_validation"
+  | "buffer_read"
+  | "mime_detection"
+  | "storage_upload"
+  | "attempt_storage_update"
+  | "queue_enqueue"
+  | "attempt_queue_update";
+
+function annotateLearningMaterialUploadError(
+  failurePoint: LearningMaterialUploadFailurePoint,
+  error: unknown,
+) {
+  const message = error instanceof Error ? error.message : String(error);
+  const wrapped = new Error(`${failurePoint}: ${message}`);
+  (wrapped as Error & { cause?: unknown }).cause = error;
+  return wrapped;
 }
 
 function serializeUploadAttempt(attempt: {
@@ -157,6 +178,16 @@ export async function POST(
       let uploadedBucket: string | null = null;
       let uploadedPath: string | null = null;
       let mimeType: string | null = file.type || null;
+      let failurePoint: LearningMaterialUploadFailurePoint = "attempt_create";
+      let failureStage: LearningMaterialUploadAttemptStage = "upload";
+      console.info("[learning-material-upload] attempt create start", {
+        topicId,
+        batchId,
+        attemptId,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+      });
       let attempt = await createLearningMaterialUploadAttempt({
         id: attemptId,
         batchId,
@@ -171,6 +202,13 @@ export async function POST(
         stage: "upload",
         processingStartedAt: new Date(),
       });
+      console.info("[learning-material-upload] attempt create complete", {
+        topicId,
+        batchId,
+        attemptId,
+        status: attempt?.status ?? null,
+        stage: attempt?.stage ?? null,
+      });
 
       try {
         console.info("[learning-material-upload] file received", {
@@ -182,8 +220,13 @@ export async function POST(
           fileSize: file.size,
         });
 
+        failurePoint = "input_validation";
         assertLearningMaterialFile(file);
+
+        failurePoint = "buffer_read";
         const buffer = Buffer.from(await file.arrayBuffer());
+
+        failurePoint = "mime_detection";
         const detected = await fileTypeFromBuffer(buffer);
         mimeType = normalizeDetectedLearningMaterialMime({
           filename: file.name,
@@ -191,7 +234,18 @@ export async function POST(
           detectedMime: detected?.mime,
         });
         assertLearningMaterialFile({ name: file.name, size: file.size, type: mimeType });
+        console.info("[learning-material-upload] file validated", {
+          topicId,
+          batchId,
+          attemptId,
+          fileName: file.name,
+          browserMimeType: file.type,
+          detectedMimeType: detected?.mime ?? null,
+          normalizedMimeType: mimeType,
+          sizeBytes: file.size,
+        });
 
+        failurePoint = "storage_upload";
         const uploaded = await uploadLearningMaterial(
           buffer,
           topicId,
@@ -201,6 +255,15 @@ export async function POST(
         );
         uploadedBucket = uploaded.bucket;
         uploadedPath = uploaded.path;
+        console.info("[learning-material-upload] storage upload complete", {
+          topicId,
+          batchId,
+          attemptId,
+          bucket: uploaded.bucket,
+          path: uploaded.path,
+        });
+
+        failurePoint = "attempt_storage_update";
         attempt =
           (await updateLearningMaterialUploadAttempt({
             attemptId,
@@ -220,7 +283,9 @@ export async function POST(
             failureMessage: null,
           })) ?? attempt;
 
-        await enqueueLearningMaterialProcessing({
+        failureStage = "extraction";
+        failurePoint = "queue_enqueue";
+        const processingJob = await enqueueLearningMaterialProcessing({
           attemptId,
           topicId,
           classroomId: topic.classroomId,
@@ -232,7 +297,15 @@ export async function POST(
           title: title || null,
           description: description || null,
         });
+        console.info("[learning-material-upload] processing job enqueued", {
+          topicId,
+          batchId,
+          attemptId,
+          jobId: processingJob?.id ?? null,
+          queueName: processingJob?.queueName ?? "learning-material-processing",
+        });
 
+        failurePoint = "attempt_queue_update";
         attempt =
           (await updateLearningMaterialUploadAttempt({
             attemptId,
@@ -257,7 +330,22 @@ export async function POST(
 
         attempts.push(attempt);
       } catch (error) {
-        const failure = buildUploadAttemptFailure("upload", error);
+        const annotatedError = annotateLearningMaterialUploadError(
+          failurePoint,
+          error,
+        );
+        const failure = buildUploadAttemptFailure(failureStage, annotatedError);
+        console.error("[learning-material-upload] file failed", {
+          topicId,
+          batchId,
+          attemptId,
+          fileName: file.name,
+          failureStage,
+          failurePoint,
+          uploadedBucket,
+          uploadedPath,
+          error: annotatedError,
+        });
         attempt =
           (await updateLearningMaterialUploadAttempt({
             attemptId,
@@ -265,7 +353,7 @@ export async function POST(
             topicId,
             batchId,
             status: "failed",
-            stage: "upload",
+            stage: failureStage,
             mimeType,
             sizeBytes: file.size,
             storageBucket: uploadedBucket,

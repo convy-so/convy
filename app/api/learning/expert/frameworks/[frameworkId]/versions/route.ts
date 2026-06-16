@@ -18,7 +18,7 @@ const createVersionSchema = z.object({
 function isUniqueViolation(error: unknown): error is { code: string } {
   return (
     typeof error === "object" &&
-    error !== null &&
+    error !== null && 
     "code" in error &&
     (error as { code?: unknown }).code === "23505"
   );
