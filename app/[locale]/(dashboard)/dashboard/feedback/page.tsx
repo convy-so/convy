@@ -14,7 +14,6 @@ export default async function DashboardFeedbackPage() {
 
   return (
     <FeedbackForm
-      allowedRoles={context.allowedRoles}
       defaultRole={context.defaultRole}
       contactEmail={context.contactEmail}
       heading="Complaints and suggestions"
