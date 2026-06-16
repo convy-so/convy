@@ -418,11 +418,13 @@ export function buildConversationListItem(input: {
 export async function translateSurveyAnalyticsData(
   data: SurveyAnalyticsData,
   targetLanguage: AppLocale,
-  _metadata?: {
+  metadata?: {
     userId?: string;
     surveyId?: string;
   },
 ): Promise<SurveyAnalyticsData> {
+  void metadata;
+
   const texts: string[] = [
     data.brief.researchGoal,
     data.brief.decisionToInform,

@@ -45,5 +45,5 @@ export function useServerEventStream({
       source.removeEventListener(event, listener as EventListener);
       source.close();
     };
-  }, [enabled, event, handleEvent, url]);
+  }, [enabled, event, url]);
 }

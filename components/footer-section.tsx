@@ -1,11 +1,8 @@
 import Image from "next/image";
 import { FaXTwitter } from "react-icons/fa6";
 import { Link } from "@/i18n/routing";
-import { useTranslations } from "next-intl";
 
 export default function FooterSection() {
-  const t = useTranslations("Landing.Footer");
-
   return (
     <section className="bg-white px-4 py-12 sm:px-6 lg:px-12 border-t border-gray-100">
       <div className="mx-auto max-w-[1200px] bg-white px-0 py-8 text-[#080808]">

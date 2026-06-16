@@ -17,9 +17,6 @@ const databaseInfo = getDatabaseConnectionInfo(env.DATABASE_URL);
 export { AuthError, type PlatformRole, type RolePrincipal } from "./roles";
 import {
   AuthError,
-  getPlatformRole,
-  getPlatformRoleOrNull,
-  isInvalidAccountStateError,
   requirePlatformRole,
 } from "./roles";
 
