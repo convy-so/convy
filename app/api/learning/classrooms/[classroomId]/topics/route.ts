@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
 import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";

@@ -106,7 +106,7 @@ export function useAudioTranscription(params?: {
           } else if (permissionStatus.state === 'prompt') {
             toast("Please click 'Allow' in the browser prompt above.", { icon: "🎤" });
           }
-        } catch (e) {
+        } catch {
           // Browser may not support navigator.permissions for microphone, safely ignore
         }
 

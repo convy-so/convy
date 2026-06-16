@@ -271,6 +271,9 @@ export function CreateSurveyPageClient({
       surveyRecord?.permission?.canEdit === true ||
       initialCreationState.permission?.canEdit === true;
     const isFinished = Boolean(nextStatus && nextStatus !== "creating");
+    const readyForSampling = Boolean(
+      normalizedExtractedData?.readyForSampling,
+    );
 
     setSurveyStatus(nextStatus);
 
@@ -283,22 +286,14 @@ export function CreateSurveyPageClient({
       setIsVoiceMode(nextIsVoice);
     }
 
-    setIsReadOnly(
-      Boolean(
-        isFinished ||
-          !canEdit ||
-          (normalizedExtractedData as
-            | { readyForSampling?: boolean }
-            | null)?.readyForSampling,
-      ),
-    );
+    setIsReadOnly(Boolean(isFinished || !canEdit || readyForSampling));
     setIsInitializing(false);
 
     if (
       normalizedMessages.length === 0 &&
       !isFinished &&
       canEdit &&
-      !normalizedExtractedData?.readyForSampling
+      !readyForSampling
     ) {
       void bootstrapConversation(initialSurveyId);
     }

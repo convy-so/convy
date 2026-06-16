@@ -5,7 +5,6 @@ import { desc, eq } from "drizzle-orm";
 import { TrendingUp, Award, Target, AlertCircle, ChevronLeft, Sparkles, Lightbulb, Map } from "lucide-react";
 import { Link } from "@/i18n/routing";
 import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
-import type { KnowledgeStateNode } from "@/lib/learning/types";
 import { cn } from "@/lib/utils";
 
 function masteryLabelForStudent(level: string) {
