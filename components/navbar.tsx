@@ -4,7 +4,6 @@ import { Link } from "@/i18n/routing";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
-import { ChevronDown } from "lucide-react";
 
 export default function Navbar() {
   const t = useTranslations("Landing.Navbar");

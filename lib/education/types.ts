@@ -56,7 +56,6 @@ const researchBriefBaseSchema = z.object({
   audienceKnowledgeLevel: z.string().optional(),
   learningContext: z.string().min(1),
   studyContext: z.string().min(1).optional(),
-  deliveryContext: z.string().optional(),
   timeWindow: z.string().min(1),
   requiredTopics: z.array(z.string()).default([]),
   successCriteria: z.array(z.string()).default([]),
@@ -76,13 +75,7 @@ const researchBriefBaseSchema = z.object({
   creationController: creationControllerStateSchema,
 });
 
-export const researchBriefSchema = researchBriefBaseSchema.transform((brief) => {
-  const { deliveryContext: _deliveryContext, studyContext, ...rest } = brief;
-  return {
-    ...rest,
-    studyContext: studyContext || _deliveryContext || "",
-  };
-});
+export const researchBriefSchema = researchBriefBaseSchema;
 
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 

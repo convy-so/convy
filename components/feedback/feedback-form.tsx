@@ -12,7 +12,6 @@ import type {
 } from "@/lib/feedback/service";
 
 type FeedbackFormProps = {
-  allowedRoles: FeedbackRole[];
   defaultRole: FeedbackRole;
   contactEmail: string;
   heading: string;
@@ -26,12 +25,6 @@ const sourceAreaLabels: Record<FeedbackSourceArea, string> = {
   classroom: "Classroom",
   expert_ops: "Expert Ops",
   other: "Other",
-};
-
-const roleLabels: Record<FeedbackRole, string> = {
-  teacher: "Teacher",
-  student: "Student",
-  expert: "Expert",
 };
 
 function CustomSelect<T extends string>({
@@ -97,7 +90,6 @@ function CustomSelect<T extends string>({
 }
 
 export function FeedbackForm({
-  allowedRoles,
   defaultRole,
   contactEmail,
   heading,

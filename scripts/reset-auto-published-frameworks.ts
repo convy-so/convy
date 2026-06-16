@@ -4,7 +4,7 @@
  *   pnpm exec tsx --env-file=.env scripts/reset-auto-published-frameworks.ts --dry-run
  *   pnpm exec tsx --env-file=.env scripts/reset-auto-published-frameworks.ts --apply
  */
-import { eq, inArray, isNotNull } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { expertFrameworks, expertFrameworkVersions } from "@/db/schema";

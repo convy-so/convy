@@ -23,7 +23,6 @@ export default async function ExpertFeedbackPage({
 
   return (
     <FeedbackForm
-      allowedRoles={context.allowedRoles}
       defaultRole={context.allowedRoles.includes("expert") ? "expert" : context.defaultRole}
       contactEmail={context.contactEmail}
       heading="Expert complaints and suggestions"

@@ -28,7 +28,6 @@ yarn-error.log*
 
 # local env files
 .env*.local
-.env
 .env.prod
 .env.docker
 
@@ -52,3 +51,4 @@ next-env.d.ts
 /db/migrations/meta/0001_snapshot.json
 /db/migrations/meta/000[3-9]_snapshot.json
 /db/migrations/meta/001[0-5]_snapshot.json
+config.bat

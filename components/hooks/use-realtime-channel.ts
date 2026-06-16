@@ -153,5 +153,5 @@ export function useRealtimeChannel({
       clearReconnectTimer();
       socket?.close();
     };
-  }, [channel, enabled, handleMessage]);
+  }, [channel, enabled]);
 }

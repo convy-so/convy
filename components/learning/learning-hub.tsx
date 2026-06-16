@@ -8,7 +8,6 @@ import type { LearningMeData } from "@/lib/api/learning";
 import { TeacherLearningHome } from "@/components/learning/teacher-learning-home";
 import { StudentLearningHome } from "@/components/learning/student-learning-home";
 import type {
-  getOnboardingStateData,
   getStudentLearningWorkspaceInitialData,
   getTeacherLearningWorkspaceInitialData,
 } from "@/lib/server/app-queries";
@@ -16,8 +15,6 @@ import type {
 export function LearningHub({
   initialLearningMe,
   initialStudentPatterns,
-  initialOnboardingState,
-  initialTutoringSession,
   teacherWorkspaceInitialData,
   initialStudentSessions,
 }: {
@@ -25,10 +22,6 @@ export function LearningHub({
   initialStudentPatterns?: Awaited<
     ReturnType<typeof getStudentLearningWorkspaceInitialData>
   >["initialPatterns"];
-  initialOnboardingState?: Awaited<ReturnType<typeof getOnboardingStateData>>;
-  initialTutoringSession?: Awaited<
-    ReturnType<typeof getStudentLearningWorkspaceInitialData>
-  >["initialTutoringSession"];
   teacherWorkspaceInitialData?: Awaited<
     ReturnType<typeof getTeacherLearningWorkspaceInitialData>
   >;
