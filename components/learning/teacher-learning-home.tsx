@@ -4,21 +4,13 @@ import { useMemo, useState } from "react";
 import {
   ArrowUpRight,
   BookOpen,
-  Check,
   ChevronDown,
-  ExternalLink,
-  FileText,
-  GraduationCap,
   Layout,
-  Loader2,
   Plus,
   RefreshCw,
-  Sparkles,
   Trash2,
-  UploadCloud,
   Users,
 } from "lucide-react";
-import toast from "react-hot-toast";
 
 import { Link } from "@/i18n/routing";
 import { CreateClassroomModal } from "@/components/learning/create-classroom-modal";
@@ -46,9 +38,6 @@ function formatDate(value: string | Date | null | undefined) {
 function formatTopicStatusLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
-
-const TOPIC_STATUSES = ["draft", "active", "paused", "archived"] as const;
-
 export function TeacherLearningHome(
   initialData: Awaited<ReturnType<typeof getTeacherLearningWorkspaceInitialData>>,
 ) {
@@ -326,6 +315,19 @@ export function TeacherLearningHome(
                     <span>{activeSessionCount} active</span>
                   </div>
                 </div>
+
+                {topics.length ? (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsTopicModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create session
+                    </button>
+                  </div>
+                ) : null}
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   {topics.length ? (

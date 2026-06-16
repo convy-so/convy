@@ -34,6 +34,14 @@ const learningMaterialWorker = new Worker<LearningMaterialProcessingJobData>(
       file_name: data.fileName,
       mime_type: data.mimeType,
     });
+    console.info("[learning-material-worker] job started", {
+      jobId: job.id ?? null,
+      attemptId: data.attemptId,
+      topicId: data.topicId,
+      fileName: data.fileName,
+      mimeType: data.mimeType,
+      sizeBytes: data.sizeBytes,
+    });
 
     await job.updateProgress(10);
 
@@ -50,6 +58,13 @@ const learningMaterialWorker = new Worker<LearningMaterialProcessingJobData>(
         error_message: result.error,
         duration_ms: Date.now() - startedAt,
       });
+      console.warn("[learning-material-worker] job completed with pipeline failure", {
+        jobId: job.id ?? null,
+        attemptId: data.attemptId,
+        topicId: data.topicId,
+        error: result.error,
+        durationMs: Date.now() - startedAt,
+      });
     } else {
       Sentry.logger.info("Learning material worker job completed", {
         service: "workers",
@@ -59,6 +74,13 @@ const learningMaterialWorker = new Worker<LearningMaterialProcessingJobData>(
         topic_id: data.topicId,
         material_id: result.materialId ?? "",
         duration_ms: Date.now() - startedAt,
+      });
+      console.info("[learning-material-worker] job completed", {
+        jobId: job.id ?? null,
+        attemptId: data.attemptId,
+        topicId: data.topicId,
+        materialId: result.materialId ?? null,
+        durationMs: Date.now() - startedAt,
       });
     }
 
@@ -72,6 +94,26 @@ const learningMaterialWorker = new Worker<LearningMaterialProcessingJobData>(
   },
 );
 
+learningMaterialWorker.on("active", (job) => {
+  console.info("[learning-material-worker] job active", {
+    jobId: job.id ?? null,
+    attemptId: job.data.attemptId,
+    topicId: job.data.topicId,
+  });
+});
+
+learningMaterialWorker.on("completed", (job, result) => {
+  console.info("[learning-material-worker] bullmq completed event", {
+    jobId: job.id ?? null,
+    attemptId: job.data.attemptId,
+    topicId: job.data.topicId,
+    success:
+      result && typeof result === "object" && "success" in result
+        ? Boolean(result.success)
+        : null,
+  });
+});
+
 learningMaterialWorker.on("failed", (job, error) => {
   Sentry.logger.error("Learning material worker job failed unexpectedly", {
     service: "workers",
@@ -79,6 +121,32 @@ learningMaterialWorker.on("failed", (job, error) => {
     job_id: job?.id,
     error_message: error.message,
   });
+  console.error("[learning-material-worker] bullmq failed event", {
+    jobId: job?.id ?? null,
+    attemptId: job?.data.attemptId ?? null,
+    topicId: job?.data.topicId ?? null,
+    error,
+  });
+});
+
+learningMaterialWorker.on("stalled", (jobId) => {
+  Sentry.logger.warn("Learning material worker job stalled", {
+    service: "workers",
+    worker_name: "Learning Material",
+    job_id: jobId,
+  });
+  console.warn("[learning-material-worker] bullmq stalled event", {
+    jobId,
+  });
+});
+
+learningMaterialWorker.on("error", (error) => {
+  Sentry.logger.error("Learning material worker error", {
+    service: "workers",
+    worker_name: "Learning Material",
+    error_message: error.message,
+  });
+  console.error("[learning-material-worker] worker error", { error });
 });
 
 export default learningMaterialWorker;
