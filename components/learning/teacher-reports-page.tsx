@@ -222,7 +222,7 @@ export function TeacherReportsPage({
                       <div className="truncate pr-4">
                         <div className={selectedTopic?.id === topic.id ? "text-emerald-600" : "text-slate-700 truncate"}>{topic.title}</div>
                         <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                          {topic.subject ?? getSubjectDisplayLabel(topic.subjectKey)}
+                          {topic.courseTitle ?? getSubjectDisplayLabel(null)}
                         </div>
                       </div>
                       {selectedTopic?.id === topic.id && <Check className="h-4 w-4 text-emerald-500 flex-shrink-0" />}

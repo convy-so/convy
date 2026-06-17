@@ -227,6 +227,7 @@ export async function appendLearningMessage(params: {
   sessionId: string;
   role: string;
   content: string;
+  parts?: Array<Record<string, unknown>> | null;
   metadata?: Record<string, unknown>;
 }) {
   const [message] = await getDb()
@@ -236,6 +237,7 @@ export async function appendLearningMessage(params: {
       sessionId: params.sessionId,
       role: params.role,
       content: params.content,
+      parts: params.parts ?? null,
       metadata: params.metadata ?? {},
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -296,6 +298,7 @@ export async function persistTutorTurnOutcome(params: {
   classroomStudentId: string;
   topicId: string;
   assistantText: string;
+  assistantParts?: Array<Record<string, unknown>> | null;
   assistantMetadata?: Record<string, unknown>;
   interactionMetadata?: Record<string, unknown>;
   nextState: LearningSessionState;
@@ -307,6 +310,7 @@ export async function persistTutorTurnOutcome(params: {
       sessionId: params.sessionId,
       role: "assistant",
       content: params.assistantText,
+      parts: params.assistantParts ?? null,
       metadata: params.assistantMetadata ?? {},
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -356,13 +360,17 @@ export {
 } from "@/lib/learning/student-profile-storage";
 
 export {
-  getSubjectFramework,
-  getTopicFramework,
+  getCourseFrameworks,
+  getFrameworkById,
+  getActiveFrameworkForCourse,
   createExpertFrameworkForCourse,
-  getActiveFrameworkVersion,
+  updateFrameworkDraft,
+  activateFramework,
+  archiveFramework,
+  deleteDraftFramework,
   listApprovedCrystallizations,
   listOpenConflicts,
-  getActiveExpertFrameworkBundle,
+  getActiveFrameworkBundleForTopic,
 } from "@/lib/learning/framework-runtime-storage";
 
 export {

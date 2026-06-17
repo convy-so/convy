@@ -9,6 +9,7 @@ import type {
   TeacherProgressReport,
 } from "@/lib/learning/types";
 import type { GroundingUnit } from "@/lib/learning/grounding-units";
+import { TUTOR_CAPABILITIES } from "@/lib/learning/tutor-capabilities";
 
 type TranscriptMessage = {
   role: string;
@@ -130,7 +131,7 @@ export function renderLearningOutcomes(outcomes: LearningOutcomeDefinition[]) {
 export function renderCompactSessionState(state: LearningSessionState) {
   return [
     `Turn count: ${state.turnCount}`,
-    `Framework version: ${state.frameworkVersionId ?? "none"}`,
+    `Framework: ${state.frameworkId ?? "none"}`,
     `Grounding pack version: ${state.groundingPackVersion}`,
     `Recent summary: ${normalizeLine(state.recentMessageSummary) || "none"}`,
     `Recent evidence:\n${renderBullets(state.recentEvidence.slice(-6))}`,
@@ -195,9 +196,10 @@ export function renderFrameworkRuntimeArtifact(activeFramework: ActiveExpertFram
     framework.markdownContent.trim()
       ? `Instructions:\n${framework.markdownContent.trim()}`
       : "Instructions: none",
-    framework.toolUsageGuidance.trim()
-      ? `Tool guidance:\n${framework.toolUsageGuidance.trim()}`
-      : "Tool guidance: none",
+    `Capability guidance:\n${TUTOR_CAPABILITIES.map((capability) => {
+      const guidance = framework.capabilityGuidance[capability.id]?.trim();
+      return `- ${capability.id} (${capability.label}): ${guidance || "missing"}`;
+    }).join("\n")}`,
     activeFramework.heuristics.length
       ? `Approved heuristics:\n${activeFramework.heuristics
           .map(

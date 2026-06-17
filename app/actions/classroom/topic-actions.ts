@@ -22,7 +22,7 @@ import {
 import { count, eq } from "drizzle-orm";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import { getTopicWithMaterials } from "@/lib/learning/storage";
-import { getActiveFrameworkVersion } from "@/lib/learning/framework-runtime-storage";
+import { getActiveFrameworkForCourse } from "@/lib/learning/framework-runtime-storage";
 import {
   getTopicActivationMaterialGate,
   isMaterialAnalysisFailed,
@@ -36,7 +36,6 @@ const createLearningTopicSchema = z.object({
   title: z.string().trim().min(2),
   description: z.string().trim().optional(),
   courseId: z.string().min(1),
-  subjectKey: z.string().min(1),
   learningOutcomes: z.array(learningOutcomeDefinitionSchema).optional(),
   sourceBoundary: topicSourceBoundarySchema.optional(),
   contentLocale: appLocaleSchema.optional(),
@@ -127,7 +126,6 @@ export async function createLearningTopicAction(input: unknown): Promise<
       title: body.title,
       description: body.description,
       courseId: body.courseId,
-      subjectKey: body.subjectKey,
       contentLocale,
       learningOutcomes: normalizedLearningOutcomes,
       sourceBoundary: normalizedSourceBoundary,
@@ -204,7 +202,7 @@ export async function normalizeLearningOutcomesAction(input: unknown): Promise<
         throw new Error("Unauthorized");
       }
 
-      const subjectName = getSubjectDisplayLabel(topic.subjectKey);
+      const subjectName = topic.course?.title ?? getSubjectDisplayLabel(null);
 
       const { output } = await generateText({
         model: analysisModel,
@@ -334,10 +332,10 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
         );
       }
 
-      const activeFrameworkVersion = await getActiveFrameworkVersion(body.topicId);
-      if (!activeFrameworkVersion) {
+      const activeFramework = await getActiveFrameworkForCourse(topic.courseId);
+      if (!activeFramework?.liveFramework) {
         throw new ActionError(
-          "Publish an expert framework version before activating tutoring for this lesson.",
+          "Activate an expert framework before activating tutoring for this lesson.",
           "VALIDATION_ERROR",
           400,
         );

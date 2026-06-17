@@ -4,6 +4,7 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import { ArrowLeft, ArrowRight, Loader2, Save } from "lucide-react";
 
 import type { ExpertFramework } from "@/lib/learning/types";
+import { TUTOR_CAPABILITIES } from "@/lib/learning/tutor-capabilities";
 
 const EDITOR_STEPS = [
   {
@@ -29,7 +30,7 @@ const EDITOR_STEPS = [
   {
     id: "review",
     label: "Review",
-    description: "Confirm everything looks right, then save a draft version.",
+    description: "Confirm everything looks right, then save the editable draft.",
   },
 ] as const;
 
@@ -43,7 +44,9 @@ function validateStep(stepId: EditorStepId, framework: ExpertFramework): string 
 }
 
 function countFilledCapabilities(framework: ExpertFramework) {
-  return framework.toolUsageGuidance.trim().length > 0 ? 1 : 0;
+  return TUTOR_CAPABILITIES.filter(
+    (capability) => framework.capabilityGuidance[capability.id]?.trim(),
+  ).length;
 }
 
 function FrameworkEditorStepper({
@@ -104,15 +107,11 @@ function scrollWizardToTop() {
 export function FrameworkEditorWizard({
   draftFramework,
   setDraftFramework,
-  notes,
-  setNotes,
   onSaveDraft,
   isSavingDraft,
 }: {
   draftFramework: ExpertFramework;
   setDraftFramework: Dispatch<SetStateAction<ExpertFramework>>;
-  notes: string;
-  setNotes: (value: string) => void;
   onSaveDraft: () => void;
   isSavingDraft: boolean;
 }) {
@@ -245,25 +244,30 @@ export function FrameworkEditorWizard({
           {currentStep.id === "capabilities" ? (
             <div className="space-y-4">
               <p className="text-sm text-slate-500">
-                Keep tool usage separate from the framework body. Describe when the tutor should
-                use images, videos, quizzes, grading, or other tools, and when it should avoid
-                them.
+                Keep tool usage separate from the framework body. Every capability needs explicit
+                guidance before a framework can be activated for tutoring.
               </p>
-              <div>
-                <label className={labelClassName()}>Tool usage guide</label>
-                <textarea
-                  value={draftFramework.toolUsageGuidance}
-                  onChange={(event) =>
-                    setDraftFramework((current) => ({
-                      ...current,
-                      toolUsageGuidance: event.target.value,
-                    }))
-                  }
-                  rows={10}
-                  placeholder="Example: Use an image when a concept has a strong visual form. Prefer quizzes only after explanation and one student attempt. Avoid grading unless the student explicitly asks for evaluation or submits work."
-                  className={`${fieldClassName(true)} min-h-[220px]`}
-                />
-              </div>
+              {TUTOR_CAPABILITIES.map((capability) => (
+                <div key={capability.id}>
+                  <label className={labelClassName()}>{capability.label}</label>
+                  <p className="mb-2 text-sm text-slate-500">{capability.summary}</p>
+                  <textarea
+                    value={draftFramework.capabilityGuidance[capability.id] ?? ""}
+                    onChange={(event) =>
+                      setDraftFramework((current) => ({
+                        ...current,
+                        capabilityGuidance: {
+                          ...current.capabilityGuidance,
+                          [capability.id]: event.target.value,
+                        },
+                      }))
+                    }
+                    rows={5}
+                    placeholder={capability.placeholder}
+                    className={`${fieldClassName(true)} min-h-[120px]`}
+                  />
+                </div>
+              ))}
             </div>
           ) : null}
 
@@ -368,8 +372,8 @@ export function FrameworkEditorWizard({
                   },
                   {
                     label: "Capabilities",
-                    value: capabilityCount ? "Tool guide added" : "No tool guide yet",
-                    sub: "Separate tutor tool-usage guidance",
+                    value: `${capabilityCount} of ${TUTOR_CAPABILITIES.length} capability guides filled`,
+                    sub: "Images, videos, quizzes, grading, and tutor-driven completion",
                     stepIndex: 2,
                   },
                   {
@@ -401,19 +405,9 @@ export function FrameworkEditorWizard({
                 ))}
               </ul>
 
-              <div>
-                <label className={labelClassName()}>Version note (optional)</label>
-                <input
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  placeholder="e.g. Added capability guidance for quizzes"
-                  className={fieldClassName()}
-                />
-              </div>
-
               <p className="text-sm text-slate-500">
-                Saving creates a draft version. Publish it from the Versions tab when you are
-                ready for tutoring to use it.
+                Saving updates the draft only. Activate the framework separately when you want
+                tutoring to start using the latest draft.
               </p>
             </div>
           ) : null}

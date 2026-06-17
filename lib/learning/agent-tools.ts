@@ -57,10 +57,33 @@ const gradeStudentWorkSchema = z.object({
   masteryLevel: z.enum(["surface", "applied", "generative"]).describe("The newly assessed mastery level for this concept based on their answer."),
 });
 
+export const finishSessionSchema = z.object({
+  completionRationale: z
+    .string()
+    .trim()
+    .min(1)
+    .describe("Why this session is ready to end based on the student's demonstrated progress."),
+  coveredOutcomes: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .describe("Specific lesson outcomes or concepts covered in this session."),
+  evidenceSummary: z
+    .string()
+    .trim()
+    .min(1)
+    .describe("Concrete evidence from the chat, quiz, grade, or student explanation."),
+  nextStepNote: z
+    .string()
+    .trim()
+    .min(1)
+    .describe("A short note telling the student what to do next after this session."),
+});
+
 type SearchImageInput = z.infer<typeof searchImageSchema>;
 type SearchVideoInput = z.infer<typeof searchVideoSchema>;
 type AdministerQuizInput = z.infer<typeof administerQuizSchema>;
 type GradeStudentWorkInput = z.infer<typeof gradeStudentWorkSchema>;
+type FinishSessionInput = z.infer<typeof finishSessionSchema>;
 
 function createDuplicateMediaFailure(input: {
   mediaType: "image" | "video";
@@ -80,11 +103,14 @@ function createDuplicateMediaFailure(input: {
 export function createTutorTools(params: {
   topicTitle: string;
   studentContext: string;
+  priorQuizIds?: string[];
+  canFinishSession?: boolean;
 }) {
   let imageSearchCalls = 0;
   let videoSearchCalls = 0;
+  const priorQuizIds = new Set(params.priorQuizIds ?? []);
 
-  return {
+  const tools = {
     search_image: {
       description:
         "Search for a single educational image to show the student. Use only when the concept has a meaningful visual form such as anatomy, labeled diagrams, physical structures, processes, geography, or chemistry. Avoid this for abstract or purely logical concepts. You may call this at most once in a single tutoring response. Preferred query pattern: '<concept> labeled diagram', '<concept> cross-section', or '<concept> annotated photo'.",
@@ -128,13 +154,43 @@ export function createTutorTools(params: {
         "Grade the student's answer to a previously administered quiz and render a structured Grade UI card in the chat. Use this immediately after receiving the student's answer. Always pass the exact quizId returned by administer_quiz and the same conceptKey so the grade is tied to the correct assessment.",
       inputSchema: gradeStudentWorkSchema,
       execute: async (args: GradeStudentWorkInput) => {
+        if (priorQuizIds.size === 0 || !priorQuizIds.has(args.quizId)) {
+          return {
+            success: false,
+            errorCode: "missing_quiz_context",
+            reason:
+              "grade_student_work requires a prior administer_quiz result with the same quizId.",
+            quizId: args.quizId,
+            conceptKey: args.conceptKey,
+          };
+        }
+
         // Generative UI tool: this stays structured so tutoring state can persist the exact assessment.
         return {
+          success: true,
           gradeId: crypto.randomUUID(),
           gradedAt: new Date().toISOString(),
           ...args
         };
       },
-    }
+    },
+  };
+
+  if (!params.canFinishSession) {
+    return tools;
+  }
+
+  return {
+    ...tools,
+    finish_session: {
+      description:
+        "Finish the tutoring session. Use only when the framework's completion guidance is satisfied and you can provide completion evidence. The server accepts this tool based on the structured evidence fields; there is no hidden mastery rubric.",
+      inputSchema: finishSessionSchema,
+      execute: async (args: FinishSessionInput) => ({
+        success: true,
+        finishedAt: new Date().toISOString(),
+        ...args,
+      }),
+    },
   };
 }

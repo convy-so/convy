@@ -158,6 +158,9 @@ export async function getLearningMeDataForSession(session: VerifiedSession): Pro
               operators.eq(table.classroomId, membership.classroomId),
               operators.eq(table.status, "active"),
             ),
+          with: {
+            course: true,
+          },
         }),
         getDb().query.surveys.findMany({
           where: (table, operators) =>
@@ -212,8 +215,8 @@ export async function getLearningMeDataForSession(session: VerifiedSession): Pro
           id: topic.id,
           title: topic.title,
           description: topic.description,
-          subject: topic.subject,
-          subjectKey: topic.subjectKey,
+          courseId: topic.courseId,
+          courseTitle: topic.course.title,
           status: topic.status,
         })),
         surveys: classroomSurveys.flatMap((survey) => {
@@ -514,7 +517,12 @@ export async function getClassroomStudentReportDetailData(params: {
       eq(studentProgressReports.classroomStudentId, params.classroomStudentId),
     ),
     with: {
-      topic: true,
+      topic: {
+        with: {
+          course: true,
+          classroom: true,
+        },
+      },
       classroomStudent: {
         with: {
           classroom: true,
@@ -539,8 +547,8 @@ export async function getClassroomStudentReportDetailData(params: {
       topic: {
         id: report.topicId,
         title: report.topic?.title ?? "Topic",
-        subject: report.topic?.subject ?? null,
-        subjectKey: report.topic?.subjectKey ?? null,
+        courseId: report.topic?.courseId ?? "",
+        courseTitle: report.topic?.course?.title ?? "Course",
         status: report.topic?.status ?? "draft",
       },
       student: {
@@ -600,9 +608,9 @@ export async function getTopicOverviewData(topicId: string): Promise<TopicOvervi
         id: topic.id,
         title: topic.title,
         description: topic.description,
-        subject: topic.subject,
+        courseId: topic.courseId,
+        courseTitle: topic.course.title,
         contentLocale: toOptionalAppLocale(topic.contentLocale),
-        subjectKey: topic.subjectKey,
         status: topic.status,
         classroom: {
           id: topic.classroom.id,
@@ -634,8 +642,8 @@ export async function getTopicSetupData(topicId: string) {
         classroomId: topic.classroomId,
         title: topic.title,
         description: topic.description ?? "",
-        subject: topic.subject,
-        subjectKey: topic.subjectKey,
+        courseId: topic.courseId,
+        courseTitle: topic.course.title,
         contentLocale: toOptionalAppLocale(topic.contentLocale) ?? "en",
         status: topic.status,
         learningOutcomes: topic.learningOutcomes,
@@ -999,8 +1007,8 @@ export async function getTutoringSessionInitialData(
         lesson: {
           id: access.topic.id,
           title: access.topic.title,
-          subject: access.topic.subject,
-          subjectKey: access.topic.subjectKey,
+          courseId: access.topic.courseId,
+          courseTitle: access.topic.course.title,
         },
         sessionState: state,
         messages: messages.map((message) => ({
@@ -1170,7 +1178,6 @@ export async function getTeacherLearningWorkspaceInitialData(
     initialTopics,
     availableCourses: availableCourses.map((course) => ({
       id: course.id,
-      key: course.key,
       title: course.title,
     })),
   };

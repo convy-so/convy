@@ -78,7 +78,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
   topicId: string;
   reviewType: string;
   relevanceScope: "general" | "framework_specific";
-  frameworkVersionId?: string | null;
+  frameworkId?: string | null;
 }) {
   const cutoffDate = new Date(Date.now() - CRYSTALLIZATION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const reusableCases = await getDb().query.expertReviewCases.findMany({
@@ -90,7 +90,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
       eq(expertReviewCases.relevanceScope, params.relevanceScope),
       gte(expertReviewCases.createdAt, cutoffDate),
       params.relevanceScope === "framework_specific"
-        ? eq(expertReviewCases.frameworkVersionId, params.frameworkVersionId ?? "")
+        ? eq(expertReviewCases.frameworkId, params.frameworkId ?? "")
         : undefined,
     ),
     orderBy: [desc(expertReviewCases.createdAt)],
@@ -183,7 +183,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
         eq(expertCrystallizations.status, "draft"),
         eq(expertCrystallizations.relevanceScope, params.relevanceScope),
         params.relevanceScope === "framework_specific"
-          ? eq(expertCrystallizations.frameworkVersionId, params.frameworkVersionId ?? "")
+          ? eq(expertCrystallizations.frameworkId, params.frameworkId ?? "")
           : undefined,
         sql`${expertCrystallizations.sourceReviewCaseIds} @> ${JSON.stringify(sourceReviewCaseIds)}::jsonb`,
       ),
@@ -199,7 +199,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
       .values({
         id: nanoid(),
         topicId: params.topicId,
-        frameworkVersionId: params.relevanceScope === "framework_specific" ? (params.frameworkVersionId ?? null) : null,
+        frameworkId: params.relevanceScope === "framework_specific" ? (params.frameworkId ?? null) : null,
         status: "draft",
         relevanceScope: params.relevanceScope,
         title: `${params.reviewType}: reuse pattern from expert review cases`,

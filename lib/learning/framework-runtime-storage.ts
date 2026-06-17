@@ -7,71 +7,43 @@ import {
   expertConflicts,
   expertCrystallizations,
   expertFrameworks,
-  expertFrameworkVersions,
   learningTopics,
 } from "@/db/schema";
-import {
-  getCourseById,
-  getCourseByKey,
-} from "@/lib/learning/course-service";
+import { getCourseById } from "@/lib/learning/course-service";
 import { createEmptyExpertFramework } from "@/lib/learning/framework-presets";
-import { listFrameworksWithTopicLite } from "@/lib/learning/framework-records";
+import {
+  getFrameworkRecord,
+  listFrameworkRecords,
+  type FrameworkRecord,
+} from "@/lib/learning/framework-records";
 import {
   activeExpertFrameworkSchema,
+  expertFrameworkSchema,
   type ActiveExpertFramework,
+  type ExpertFramework,
 } from "@/lib/learning/types";
 
-async function findFrameworkForCourseId(courseId: string) {
-  const frameworks = await listFrameworksWithTopicLite();
-
-  return frameworks.find((framework) => framework.courseId === courseId) ?? null;
+export async function getCourseFrameworks(courseId: string, includeArchived = false) {
+  return await listFrameworkRecords({ courseId, includeArchived });
 }
 
-export async function getSubjectFramework(params: {
-  courseId?: string;
-  subjectKey?: string;
-}) {
-  const course =
-    (params.courseId ? await getCourseById(params.courseId) : null) ??
-    (params.subjectKey ? await getCourseByKey(params.subjectKey) : null);
-
-  if (!course) {
-    return null;
-  }
-
-  return findFrameworkForCourseId(course.id);
+export async function getFrameworkById(frameworkId: string) {
+  return await getFrameworkRecord(frameworkId);
 }
 
-export async function getTopicFramework(params: { topicId: string }) {
-  const topic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, params.topicId),
-  });
-
-  if (!topic) {
-    return null;
-  }
-
-  const frameworks = await listFrameworksWithTopicLite();
-
-  return (
-    frameworks.find((f) => f.topicId === topic.id) ??
-    frameworks.find((f) => f.classroomId === topic.classroomId) ??
-    frameworks.find((f) => f.courseId === topic.courseId) ??
-    null
+export async function getActiveFrameworkForCourse(courseId: string) {
+  const active = (await getCourseFrameworks(courseId, true)).find(
+    (candidate) => candidate.status === "active",
   );
+
+  return active ?? null;
 }
 
 export async function createExpertFrameworkForCourse(params: {
   courseId: string;
-  subjectKey: string;
   name: string;
   description?: string;
 }) {
-  const existing = await findFrameworkForCourseId(params.courseId);
-  if (existing) {
-    throw new Error("FRAMEWORK_ALREADY_EXISTS");
-  }
-
   const course = await getCourseById(params.courseId);
   if (!course) {
     throw new Error("Course not found");
@@ -82,57 +54,136 @@ export async function createExpertFrameworkForCourse(params: {
     description: params.description ?? "",
   });
 
-  return await getDb().transaction(async (tx) => {
-    const [framework] = await tx
-      .insert(expertFrameworks)
-      .values({
-        id: nanoid(),
-        courseId: course.id,
-        topicId: null,
-        classroomId: null,
-        subjectKey: params.subjectKey,
-        name: params.name,
-        description: params.description ?? null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    await tx.insert(expertFrameworkVersions).values({
+  const [framework] = await getDb()
+    .insert(expertFrameworks)
+    .values({
       id: nanoid(),
-      frameworkId: framework.id,
-      version: 1,
+      courseId: course.id,
+      name: params.name,
+      description: params.description ?? null,
       status: "draft",
       seedSource: "expert_authored",
-      framework: artifact,
+      draftFramework: artifact,
+      liveFramework: null,
+      archivedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    })
+    .returning();
 
-    return {
-      ...framework,
-      activeVersionId: null,
-    };
+  return framework;
+}
+
+export async function updateFrameworkDraft(params: {
+  frameworkId: string;
+  draftFramework: ExpertFramework;
+}) {
+  const framework = await getFrameworkById(params.frameworkId);
+  if (!framework) {
+    throw new Error("Framework not found");
+  }
+  if (framework.status === "archived") {
+    throw new Error("ARCHIVED_FRAMEWORK_READ_ONLY");
+  }
+
+  const draftFramework = expertFrameworkSchema.parse(params.draftFramework);
+  const [updated] = await getDb()
+    .update(expertFrameworks)
+    .set({
+      name: draftFramework.name,
+      description: draftFramework.description || null,
+      draftFramework,
+      updatedAt: new Date(),
+    })
+    .where(eq(expertFrameworks.id, params.frameworkId))
+    .returning();
+
+  return updated;
+}
+
+export async function activateFramework(params: {
+  frameworkId: string;
+  activatedByUserId: string;
+}) {
+  const framework = await getFrameworkById(params.frameworkId);
+  if (!framework) {
+    throw new Error("Framework not found");
+  }
+  if (framework.status === "archived") {
+    throw new Error("ARCHIVED_FRAMEWORK_READ_ONLY");
+  }
+
+  const artifact = expertFrameworkSchema.parse(framework.draftFramework);
+
+  return await getDb().transaction(async (tx) => {
+    await tx
+      .update(expertFrameworks)
+      .set({
+        status: "inactive",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(expertFrameworks.courseId, framework.courseId),
+          eq(expertFrameworks.status, "active"),
+        ),
+      );
+
+    const [updated] = await tx
+      .update(expertFrameworks)
+      .set({
+        name: artifact.name,
+        description: artifact.description || null,
+        status: "active",
+        liveFramework: artifact,
+        activatedAt: new Date(),
+        activatedByUserId: params.activatedByUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(expertFrameworks.id, framework.id))
+      .returning();
+
+    return updated;
   });
 }
 
-export async function getActiveFrameworkVersion(topicId: string) {
-  const framework = await getTopicFramework({ topicId });
-  if (!framework?.activeVersionId) {
-    return null;
+export async function archiveFramework(frameworkId: string) {
+  const framework = await getFrameworkById(frameworkId);
+  if (!framework) {
+    throw new Error("Framework not found");
+  }
+  if (framework.status === "active") {
+    throw new Error("ACTIVE_FRAMEWORK_CANNOT_BE_ARCHIVED");
   }
 
-  return await getDb().query.expertFrameworkVersions.findFirst({
-    where: and(
-      eq(expertFrameworkVersions.frameworkId, framework.id),
-      eq(expertFrameworkVersions.id, framework.activeVersionId),
-    ),
-  });
+  const [updated] = await getDb()
+    .update(expertFrameworks)
+    .set({
+      status: "archived",
+      archivedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(expertFrameworks.id, frameworkId))
+    .returning();
+
+  return updated;
+}
+
+export async function deleteDraftFramework(frameworkId: string) {
+  const framework = await getFrameworkById(frameworkId);
+  if (!framework) {
+    throw new Error("Framework not found");
+  }
+  if (framework.status !== "draft" || framework.activatedAt) {
+    throw new Error("ONLY_NEVER_ACTIVATED_DRAFTS_CAN_BE_DELETED");
+  }
+
+  await getDb().delete(expertFrameworks).where(eq(expertFrameworks.id, frameworkId));
 }
 
 export async function listApprovedCrystallizations(params: {
   courseId: string;
-  frameworkVersionId?: string;
+  frameworkId?: string;
 }) {
   return await getDb().query.expertCrystallizations.findMany({
     where: and(
@@ -142,7 +193,7 @@ export async function listApprovedCrystallizations(params: {
         eq(expertCrystallizations.relevanceScope, "general"),
         and(
           eq(expertCrystallizations.relevanceScope, "framework_specific"),
-          eq(expertCrystallizations.frameworkVersionId, params.frameworkVersionId ?? ""),
+          eq(expertCrystallizations.frameworkId, params.frameworkId ?? ""),
         ),
       ),
     ),
@@ -160,27 +211,32 @@ export async function listOpenConflicts(params: { topicId: string }) {
   });
 }
 
-export async function getActiveExpertFrameworkBundle(
+export async function getActiveFrameworkBundleForTopic(
   topicId: string,
 ): Promise<ActiveExpertFramework> {
-  const framework = await getTopicFramework({ topicId });
-  if (!framework) {
-    throw new Error(
-      "No expert framework exists for this course. Create and publish a framework before activating tutoring.",
-    );
+  const topic = await getDb().query.learningTopics.findFirst({
+    where: eq(learningTopics.id, topicId),
+  });
+  if (!topic) {
+    throw new Error("Topic not found.");
   }
 
-  const frameworkVersion = await getActiveFrameworkVersion(topicId);
-  if (!frameworkVersion) {
+  const framework = await getActiveFrameworkForCourse(topic.courseId);
+  if (!framework) {
     throw new Error(
-      "No published framework version is active for this course. Publish a framework version in the expert studio first.",
+      "No active expert framework exists for this course. Activate a framework before tutoring starts.",
+    );
+  }
+  if (!framework.liveFramework) {
+    throw new Error(
+      "The active framework is missing its live snapshot. Reactivate the framework before tutoring starts.",
     );
   }
 
   const [approvedCrystallizations, openConflicts] = await Promise.all([
     listApprovedCrystallizations({
       courseId: framework.courseId,
-      frameworkVersionId: frameworkVersion.id,
+      frameworkId: framework.id,
     }),
     listOpenConflicts({ topicId }),
   ]);
@@ -193,8 +249,7 @@ export async function getActiveExpertFrameworkBundle(
 
   return activeExpertFrameworkSchema.parse({
     frameworkId: framework.id,
-    frameworkVersionId: frameworkVersion.id,
-    framework: frameworkVersion.framework,
+    framework: framework.liveFramework,
     heuristics: approvedCrystallizations
       .filter((item) => !blockedCrystallizationIds.has(item.id))
       .map((item) => item.heuristic),
@@ -204,18 +259,20 @@ export async function getActiveExpertFrameworkBundle(
       details: conflict.details ?? null,
     })),
     seedSource:
-      frameworkVersion.seedSource === "deep_default"
-        ? "deep_default"
-        : "expert_authored",
+      framework.seedSource === "deep_default" ? "deep_default" : "expert_authored",
   });
 }
 
-const cachedGetActiveExpertFrameworkBundle = unstable_cache(
-  async (topicId: string) => await getActiveExpertFrameworkBundle(topicId),
-  ["learning-active-expert-framework-bundle"],
+const cachedGetActiveFrameworkBundleForTopic = unstable_cache(
+  async (topicId: string) => await getActiveFrameworkBundleForTopic(topicId),
+  ["learning-active-framework-bundle-for-topic"],
   { revalidate: 60 },
 );
 
-export async function getCachedActiveExpertFrameworkBundle(topicId: string) {
-  return await cachedGetActiveExpertFrameworkBundle(topicId);
+export async function getCachedActiveFrameworkBundleForTopic(topicId: string) {
+  return await cachedGetActiveFrameworkBundleForTopic(topicId);
+}
+
+export function isFrameworkEditable(framework: Pick<FrameworkRecord, "status">) {
+  return framework.status !== "archived";
 }

@@ -1,11 +1,7 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import {
-  courses,
-  expertFrameworks,
-  expertFrameworkVersions,
-} from "@/db/schema";
+import { courses, expertFrameworks } from "@/db/schema";
 
 async function main() {
   const db = getDb();
@@ -13,10 +9,11 @@ async function main() {
     .select({
       frameworkId: expertFrameworks.id,
       name: expertFrameworks.name,
-      activeVersionId: expertFrameworks.activeVersionId,
+      status: expertFrameworks.status,
       courseTitle: courses.title,
       courseId: expertFrameworks.courseId,
-      topicId: expertFrameworks.topicId,
+      seedSource: expertFrameworks.seedSource,
+      activatedAt: expertFrameworks.activatedAt,
       createdAt: expertFrameworks.createdAt,
     })
     .from(expertFrameworks)
@@ -28,39 +25,16 @@ async function main() {
     return;
   }
 
-  const frameworkIds = frameworks.map((row) => row.frameworkId);
-  const versions = await db.query.expertFrameworkVersions.findMany({
-    where: inArray(expertFrameworkVersions.frameworkId, frameworkIds),
-  });
-
   for (const framework of frameworks) {
-    const frameworkVersions = versions.filter(
-      (version) => version.frameworkId === framework.frameworkId,
-    );
-    const activeVersion = frameworkVersions.find(
-      (version) => version.id === framework.activeVersionId,
-    );
-    const publishedVersions = frameworkVersions.filter(
-      (version) => version.status === "published",
-    );
-
     console.log("---");
     console.log({
       frameworkId: framework.frameworkId,
       name: framework.name,
       courseTitle: framework.courseTitle,
-      activeVersionId: framework.activeVersionId,
-      activeVersionStatus: activeVersion?.status ?? null,
-      activeVersionSeed: activeVersion?.seedSource ?? null,
-      versionCount: frameworkVersions.length,
-      publishedVersionCount: publishedVersions.length,
-      uiWouldShowLive: Boolean(
-        activeVersion && activeVersion.status === "published",
-      ),
-      uiShowsLiveBug: Boolean(
-        framework.activeVersionId &&
-          (!activeVersion || activeVersion.status !== "published"),
-      ),
+      status: framework.status,
+      seedSource: framework.seedSource,
+      activatedAt: framework.activatedAt,
+      createdAt: framework.createdAt,
     });
   }
 }

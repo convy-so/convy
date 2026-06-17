@@ -24,8 +24,7 @@ type ReportRecord = {
     createdAt: Date;
     topic: {
         title: string;
-        subject: string | null;
-        subjectKey: string | null;
+        courseTitle: string | null;
     } | null;
     report: ProgressReportContent | null;
 };
@@ -153,7 +152,7 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
                                     >
                                         <div className="min-w-0 space-y-1">
                                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                                                {report.topic?.subject || getSubjectDisplayLabel(report.topic?.subjectKey)}
+                                                {report.topic?.courseTitle || getSubjectDisplayLabel(null)}
                                             </span>
                                             <h3 className="text-lg font-extrabold text-slate-800 tracking-tight leading-snug">
                                                 {report.topic?.title || "Topic assessment"}

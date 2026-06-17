@@ -141,7 +141,6 @@ export const courses = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    key: text("key").notNull().unique(),
     title: text("title").notNull(),
     description: text("description"),
     status: text("status").default("active").notNull(),
@@ -150,7 +149,7 @@ export const courses = pgTable(
     }),
   },
   (table) => [
-    index("courses_key_idx").on(table.key),
+    uniqueIndex("courses_title_unique").on(table.title),
     index("courses_status_idx").on(table.status),
     index("courses_created_by_user_id_idx").on(table.createdByUserId),
   ],
@@ -173,9 +172,7 @@ export const learningTopics = pgTable(
       .references(() => courses.id, { onDelete: "restrict" }),
     title: text("title").notNull(),
     description: text("description"),
-    subject: text("subject"),
     contentLocale: text("content_locale").default("en").notNull(),
-    subjectKey: text("subject_key").default("general").notNull(),
     status: text("status").default("draft").notNull(),
     openingPreference: text("opening_preference").default("auto").notNull(),
     sourceBoundary: jsonb("source_boundary")
@@ -208,7 +205,6 @@ export const learningTopics = pgTable(
     index("learning_topics_created_by_user_id_idx").on(table.createdByUserId),
     index("learning_topics_course_id_idx").on(table.courseId),
     index("learning_topics_status_idx").on(table.status),
-    index("learning_topics_subject_key_idx").on(table.subjectKey),
   ],
 );
 
@@ -549,6 +545,7 @@ export const learningMessages = pgTable(
       .references(() => learningSessions.id, { onDelete: "cascade" }),
     role: text("role").notNull(),
     content: text("content").notNull(),
+    parts: jsonb("parts").$type<Array<Record<string, unknown>> | null>(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
   (table) => [index("learning_messages_session_id_idx").on(table.sessionId)],
@@ -626,19 +623,19 @@ export const expertFrameworks = pgTable(
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
-    subjectKey: text("subject_key").default("general").notNull(),
-    classroomId: text("classroom_id").references(() => classrooms.id, {
-      onDelete: "set null",
-    }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
-      onDelete: "set null",
-    }),
     name: text("name").notNull(),
     description: text("description"),
-    activeVersionId: text("active_version_id").references(
-      (): AnyPgColumn => expertFrameworkVersions.id,
-      { onDelete: "set null" },
-    ),
+    status: text("status").default("draft").notNull(),
+    seedSource: text("seed_source").default("expert_authored").notNull(),
+    draftFramework: jsonb("draft_framework").$type<ExpertFramework>().notNull(),
+    liveFramework: jsonb("live_framework").$type<ExpertFramework | null>().default(null),
+    activatedAt: timestamp("activated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    activatedByUserId: text("activated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     archivedAt: timestamp("archived_at", {
       withTimezone: true,
       mode: "date",
@@ -646,42 +643,13 @@ export const expertFrameworks = pgTable(
   },
   (table) => [
     index("expert_frameworks_course_id_idx").on(table.courseId),
-    index("expert_frameworks_subject_key_idx").on(table.subjectKey),
-    index("expert_frameworks_classroom_idx").on(table.classroomId),
-    index("expert_frameworks_topic_idx").on(table.topicId),
-  ],
-);
-
-export const expertFrameworkVersions = pgTable(
-  "expert_framework_versions",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    frameworkId: text("framework_id")
-      .notNull()
-      .references(() => expertFrameworks.id, { onDelete: "cascade" }),
-    version: integer("version").notNull(),
-    status: text("status").default("draft").notNull(),
-    seedSource: text("seed_source").default("deep_default").notNull(),
-    framework: jsonb("framework").$type<ExpertFramework>().notNull(),
-    notes: text("notes"),
-    publishedAt: timestamp("published_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-    publishedByUserId: text("published_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-  },
-  (table) => [
-    index("expert_framework_versions_framework_idx").on(table.frameworkId),
-    unique("expert_framework_versions_framework_version_unique").on(
-      table.frameworkId,
-      table.version,
-    ),
+    index("expert_frameworks_status_idx").on(table.status),
+    uniqueIndex("expert_frameworks_one_active_per_course")
+      .on(table.courseId)
+      .where(sql`${table.status} = 'active'`),
     check(
-      "expert_framework_versions_status_check",
-      sql`${table.status} in ('draft', 'published', 'archived')`,
+      "expert_frameworks_status_check",
+      sql`${table.status} in ('draft', 'active', 'inactive', 'archived')`,
     ),
   ],
 );
@@ -713,8 +681,8 @@ export const expertReviewCases = pgTable(
     tutorFailureSummary: text("tutor_failure_summary").notNull(),
     expertCorrection: text("expert_correction").notNull(),
     relevanceScope: text("relevance_scope").default("general").notNull(),
-    frameworkVersionId: text("framework_version_id").references(
-      () => expertFrameworkVersions.id,
+    frameworkId: text("framework_id").references(
+      () => expertFrameworks.id,
       { onDelete: "set null" },
     ),
     reusableSignal: boolean("reusable_signal").default(true).notNull(),
@@ -789,8 +757,8 @@ export const expertCrystallizations = pgTable(
     topicId: text("topic_id").references(() => learningTopics.id, {
       onDelete: "set null",
     }),
-    frameworkVersionId: text("framework_version_id").references(
-      () => expertFrameworkVersions.id,
+    frameworkId: text("framework_id").references(
+      () => expertFrameworks.id,
       { onDelete: "set null" },
     ),
     status: text("status").default("draft").notNull(),
@@ -812,8 +780,8 @@ export const expertCrystallizations = pgTable(
   (table) => [
     index("expert_crystallizations_course_idx").on(table.courseId),
     index("expert_crystallizations_topic_idx").on(table.topicId),
-    index("expert_crystallizations_framework_version_idx").on(
-      table.frameworkVersionId,
+    index("expert_crystallizations_framework_idx").on(
+      table.frameworkId,
     ),
     check(
       "expert_crystallizations_status_check",
@@ -837,8 +805,8 @@ export const expertConflicts = pgTable(
     topicId: text("topic_id").references(() => learningTopics.id, {
       onDelete: "set null",
     }),
-    frameworkVersionId: text("framework_version_id").references(
-      () => expertFrameworkVersions.id,
+    frameworkId: text("framework_id").references(
+      () => expertFrameworks.id,
       { onDelete: "set null" },
     ),
     crystallizationId: text("crystallization_id").references(
@@ -860,7 +828,7 @@ export const expertConflicts = pgTable(
   (table) => [
     index("expert_conflicts_course_idx").on(table.courseId),
     index("expert_conflicts_topic_idx").on(table.topicId),
-    index("expert_conflicts_framework_version_idx").on(table.frameworkVersionId),
+    index("expert_conflicts_framework_idx").on(table.frameworkId),
     check(
       "expert_conflicts_status_check",
       sql`${table.status} in ('open', 'resolved', 'ignored')`,
@@ -1218,27 +1186,8 @@ export const expertFrameworksRelations = relations(
       fields: [expertFrameworks.courseId],
       references: [courses.id],
     }),
-    classroom: one(classrooms, {
-      fields: [expertFrameworks.classroomId],
-      references: [classrooms.id],
-    }),
-    topic: one(learningTopics, {
-      fields: [expertFrameworks.topicId],
-      references: [learningTopics.id],
-    }),
-    versions: many(expertFrameworkVersions),
-  }),
-);
-
-export const expertFrameworkVersionsRelations = relations(
-  expertFrameworkVersions,
-  ({ one, many }) => ({
-    framework: one(expertFrameworks, {
-      fields: [expertFrameworkVersions.frameworkId],
-      references: [expertFrameworks.id],
-    }),
-    publishedBy: one(users, {
-      fields: [expertFrameworkVersions.publishedByUserId],
+    activatedBy: one(users, {
+      fields: [expertFrameworks.activatedByUserId],
       references: [users.id],
     }),
     crystallizations: many(expertCrystallizations),
@@ -1269,6 +1218,10 @@ export const expertReviewCasesRelations = relations(
       fields: [expertReviewCases.interactionId],
       references: [learningInteractions.id],
     }),
+    framework: one(expertFrameworks, {
+      fields: [expertReviewCases.frameworkId],
+      references: [expertFrameworks.id],
+    }),
     createdBy: one(users, {
       fields: [expertReviewCases.createdByUserId],
       references: [users.id],
@@ -1287,9 +1240,9 @@ export const expertCrystallizationsRelations = relations(
       fields: [expertCrystallizations.topicId],
       references: [learningTopics.id],
     }),
-    frameworkVersion: one(expertFrameworkVersions, {
-      fields: [expertCrystallizations.frameworkVersionId],
-      references: [expertFrameworkVersions.id],
+    framework: one(expertFrameworks, {
+      fields: [expertCrystallizations.frameworkId],
+      references: [expertFrameworks.id],
     }),
     approvedBy: one(users, {
       fields: [expertCrystallizations.approvedByUserId],
@@ -1309,9 +1262,9 @@ export const expertConflictsRelations = relations(
       fields: [expertConflicts.topicId],
       references: [learningTopics.id],
     }),
-    frameworkVersion: one(expertFrameworkVersions, {
-      fields: [expertConflicts.frameworkVersionId],
-      references: [expertFrameworkVersions.id],
+    framework: one(expertFrameworks, {
+      fields: [expertConflicts.frameworkId],
+      references: [expertFrameworks.id],
     }),
     crystallization: one(expertCrystallizations, {
       fields: [expertConflicts.crystallizationId],

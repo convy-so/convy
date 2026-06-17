@@ -42,7 +42,11 @@ export default async function StudentProgressPage(props: {
         where: eq(studentProgressReports.classroomStudentId, studentId),
         orderBy: [desc(studentProgressReports.createdAt)],
         with: {
-            topic: true
+            topic: {
+                with: {
+                    course: true,
+                },
+            }
         }
     }) : [];
 
@@ -182,7 +186,7 @@ export default async function StudentProgressPage(props: {
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="min-w-0 space-y-1">
                                             <span className="text-xs font-medium text-gray-500">
-                                                {report.topic?.subject || getSubjectDisplayLabel(report.topic?.subjectKey)}
+                                                {report.topic?.course?.title || getSubjectDisplayLabel(null)}
                                             </span>
                                             <h3 className="text-lg font-semibold text-gray-900 transition-colors group-hover:text-gray-700">
                                                 {report.topic?.title || "Topic check-in"}

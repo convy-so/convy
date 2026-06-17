@@ -101,7 +101,7 @@ export function buildStudentTurnPromptRuntime(params: {
   });
 
   const contextBundle = buildBudgetedContextBundle({
-    key: `learning.student-turn.${params.activeFramework.frameworkVersionId}.${params.contentScope.groundingPackVersion}`,
+    key: `learning.student-turn.${params.activeFramework.frameworkId}.${params.contentScope.groundingPackVersion}`,
     maxTokens: 3_300,
     layers: [
       {
@@ -123,7 +123,7 @@ export function buildStudentTurnPromptRuntime(params: {
       {
         kind: "expert_guidance",
         label: "Compiled framework runtime",
-        versionId: params.activeFramework.frameworkVersionId,
+        versionId: params.activeFramework.frameworkId,
         tokenBudget: 1_200,
         content: renderFrameworkRuntimeArtifact(params.activeFramework),
       },

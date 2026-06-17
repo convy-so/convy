@@ -622,7 +622,7 @@ export async function indexMaterialAndSyncBoundary(params: {
     topicId: params.topicId,
     classroomId: params.topic.classroomId,
     language: params.topic.contentLocale,
-    subjectKey: params.topic.subjectKey,
+    subjectKey: params.topic.courseId,
     gradeBand: params.topic.classroom.gradeBand,
     sourceTitle: params.material.title,
     sourceUpdatedAt: params.material.updatedAt ?? new Date(),

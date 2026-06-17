@@ -83,9 +83,10 @@ export interface TutoringReportJobData {
   classroomStudentId: string;
   studentName: string;
   topicTitle: string;
+  courseId?: string | null;
+  courseTitle?: string | null;
   sourceLocale?: string | null;
   previousReport?: Record<string, unknown> | null;
-  subjectKey?: string | null;
 }
 
 export interface LearningMaterialProcessingJobData {

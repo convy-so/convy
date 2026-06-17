@@ -7,7 +7,7 @@ import {
   learningSessions,
   learningTopics,
 } from "@/db/schema";
-import { getFrameworkWithTopicLite } from "@/lib/learning/framework-records";
+import { getFrameworkRecord } from "@/lib/learning/framework-records";
 
 export async function getExpertAccessibleTopic(topicId: string) {
   const topic = await getDb().query.learningTopics.findFirst({
@@ -25,7 +25,7 @@ export async function getExpertAccessibleTopic(topicId: string) {
 }
 
 export async function getExpertAccessibleFramework(frameworkId: string) {
-  const framework = await getFrameworkWithTopicLite(frameworkId);
+  const framework = await getFrameworkRecord(frameworkId);
 
   if (!framework) {
     return null;

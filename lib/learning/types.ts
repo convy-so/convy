@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  normalizeCapabilityGuidance,
+  TUTOR_CAPABILITY_IDS,
+} from "@/lib/learning/tutor-capabilities";
 
 export const gradeBandSchema = z.enum([
   "nursery",
@@ -330,7 +334,10 @@ function coerceFrameworkExampleToText(value: unknown): string | null {
 export const expertFrameworkSchema = z.object({
   name: z.string().trim().min(1, "Framework name is required"),
   description: z.string().default(""),
-  toolUsageGuidance: z.string().default(""),
+  capabilityGuidance: z
+    .record(z.string())
+    .default({})
+    .transform((guidance) => normalizeCapabilityGuidance(guidance)),
   fewShotExamples: z
     .array(z.union([z.string(), legacyExpertFrameworkExampleSchema]))
     .default([])
@@ -344,6 +351,20 @@ export const expertFrameworkSchema = z.object({
 });
 
 export type ExpertFramework = z.infer<typeof expertFrameworkSchema>;
+
+export function getIncompleteExpertFrameworkCapabilityIds(
+  framework: Pick<ExpertFramework, "capabilityGuidance">,
+) {
+  return TUTOR_CAPABILITY_IDS.filter(
+    (id) => !framework.capabilityGuidance[id]?.trim(),
+  );
+}
+
+export function hasCompleteExpertFrameworkCapabilityGuidance(
+  framework: Pick<ExpertFramework, "capabilityGuidance">,
+) {
+  return getIncompleteExpertFrameworkCapabilityIds(framework).length === 0;
+}
 
 export const expertHeuristicSchema = z.object({
   id: z.string().min(1),
@@ -371,7 +392,6 @@ export type ExpertConflictPreview = z.infer<
 
 export const activeExpertFrameworkSchema = z.object({
   frameworkId: z.string().min(1),
-  frameworkVersionId: z.string().min(1),
   framework: expertFrameworkSchema,
   heuristics: z.array(expertHeuristicSchema).default([]),
   openConflicts: z.array(expertConflictPreviewSchema).default([]),
@@ -523,7 +543,7 @@ export type ContentScopeSnapshot = z.infer<typeof contentScopeSnapshotSchema>;
 export const learningSessionStateSchema = z.object({
   topicId: z.string().nullable().default(null),
   topicTitle: z.string().default(""),
-  frameworkVersionId: z.string().nullable().default(null),
+  frameworkId: z.string().nullable().default(null),
   activeFrameworkSnapshot: activeExpertFrameworkSchema.nullable().default(null),
   groundingPackVersion: z.number().int().nonnegative().default(0),
   contentScopeSnapshot: contentScopeSnapshotSchema.nullable().default(null),

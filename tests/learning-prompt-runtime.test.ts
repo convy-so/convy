@@ -91,12 +91,17 @@ function createContentScope(): ContentScopeSnapshot {
 function createFramework(): ActiveExpertFramework {
   return {
     frameworkId: "framework_1",
-    frameworkVersionId: "framework_version_1",
     seedSource: "expert_authored",
     framework: {
       name: "Socratic Math Tutoring",
       description: "Lead with diagnosis, then one precise nudge.",
-      toolUsageGuidance: "Use tools only when they directly support diagnosis or checking work.",
+      capabilityGuidance: {
+        search_image: "Use images only when they directly support diagnosis or checking work.",
+        search_video: "Use videos only for dynamic processes.",
+        administer_quiz: "Quiz after the student has had one supported attempt.",
+        grade_student_work: "Grade only a submitted quiz answer.",
+        finish_session: "Finish only with concrete completion evidence and a next step.",
+      },
       fewShotExamples: [
         "Student: I think the factors are x+2 and x+2. Tutor: Check the product and the middle term before we accept that.",
         "Student: I do not know what to multiply. Tutor: What two numbers multiply to 6 and add to 5?",
@@ -126,7 +131,7 @@ function createState(): LearningSessionState {
   return {
     topicId: "topic_1",
     topicTitle: "Quadratic Equations",
-    frameworkVersionId: "framework_version_1",
+    frameworkId: "framework_1",
     activeFrameworkSnapshot: createFramework(),
     groundingPackVersion: 3,
     contentScopeSnapshot: createContentScope(),

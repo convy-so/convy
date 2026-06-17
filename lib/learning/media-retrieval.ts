@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { generateStructuredOutput } from "@/lib/ai/runtime";
 import { createLogger, serializeError } from "@/lib/logger";
 
 const log = createLogger("media-retrieval");
@@ -240,6 +239,7 @@ Respond with a JSON object only, no other text:
 {"index": <0-9 or -1 if none are suitable>, "reason": "<one sentence>"}`;
 
   try {
+    const { generateStructuredOutput } = await import("@/lib/ai/runtime");
     return await generateStructuredOutput({
       schema: rerankSchema,
       prompt,
@@ -288,6 +288,7 @@ Respond with JSON only:
 {"index": <0-9 or -1 if none are suitable>, "reason": "<one sentence>"}`;
 
   try {
+    const { generateStructuredOutput } = await import("@/lib/ai/runtime");
     return await generateStructuredOutput({
       schema: rerankSchema,
       prompt,

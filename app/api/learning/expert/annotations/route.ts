@@ -68,13 +68,13 @@ export async function POST(request: Request) {
       );
     }
 
-    let frameworkVersionId: string | null = null;
+    let frameworkId: string | null = null;
     if (body.relevanceScope === "framework_specific" && anchor.sessionId) {
       const sessionRecord = await getDb().query.learningSessions.findFirst({
         where: eq(learningSessions.id, anchor.sessionId),
       });
 
-      frameworkVersionId = sessionRecord?.state?.frameworkVersionId ?? null;
+      frameworkId = sessionRecord?.state?.frameworkId ?? null;
     }
 
     const created = await createExpertReviewCase({
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         sessionId: anchor.sessionId,
         classroomStudentId: anchor.classroomStudentId,
         interactionId: anchor.interactionId,
-        frameworkVersionId,
+        frameworkId,
         relevanceScope: body.relevanceScope,
         reviewType: body.reviewType,
         priority: body.priority,
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
             topicId: anchor.topicId,
             reviewType: body.reviewType,
             relevanceScope: body.relevanceScope,
-            frameworkVersionId,
+            frameworkId,
           })
         : { created: false as const };
 

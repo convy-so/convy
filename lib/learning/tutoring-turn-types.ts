@@ -11,8 +11,18 @@ export type PreparedTutoringTurn = Awaited<ReturnType<typeof tutorRuntimeService
 
 export type FinalizeTurnStep = {
   text?: string;
-  toolCalls: unknown[];
-  toolResults: Array<{ toolName: string; output: unknown }>;
+  toolCalls: Array<{
+    toolCallId?: string;
+    toolName?: string;
+    input?: unknown;
+    args?: unknown;
+  }>;
+  toolResults: Array<{
+    toolCallId?: string;
+    toolName: string;
+    input?: unknown;
+    output: unknown;
+  }>;
 };
 
 export type FinalizeTutoringTurnParams = {

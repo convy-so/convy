@@ -347,7 +347,7 @@ export function TeacherLearningHome(
                                 {formatTopicStatusLabel(topic.status)}
                               </span>
                               <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
-                                {topic.subject ?? getSubjectDisplayLabel(topic.subjectKey)}
+                                {topic.courseTitle ?? getSubjectDisplayLabel(null)}
                               </span>
                             </div>
                             <div>

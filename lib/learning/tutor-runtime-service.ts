@@ -2,9 +2,10 @@ import { contentScopeService } from "@/lib/learning/content-scope-service";
 import { buildStudentTeachingPlaybook } from "@/lib/learning/pattern-memory-service";
 import { tutoringPromptService } from "@/lib/learning/tutoring-prompt-service";
 import { getCachedTopicWithMaterials } from "@/lib/learning/storage";
-import { getCachedActiveExpertFrameworkBundle } from "@/lib/learning/framework-runtime-storage";
+import { getCachedActiveFrameworkBundleForTopic } from "@/lib/learning/framework-runtime-storage";
 import {
   createDefaultLearningSessionState,
+  hasCompleteExpertFrameworkCapabilityGuidance,
   learningSessionStateSchema,
   type LearningSessionState,
   type StudentInterestProfile,
@@ -92,7 +93,7 @@ export class TutorRuntimeService {
           topicId: params.topicId,
           studyLanguage: params.studyLanguage,
         },
-        async () => await getCachedActiveExpertFrameworkBundle(params.topicId),
+        async () => await getCachedActiveFrameworkBundleForTopic(params.topicId),
       ),
       measureTutoringStep(
         "runtime:initialize-session-state:content-scope",
@@ -110,22 +111,28 @@ export class TutorRuntimeService {
     ]);
     logTutoringDebug("runtime:initialize-session-state:resolved", {
       topicId: params.topicId,
-      frameworkVersionId: activeFramework.frameworkVersionId,
+      frameworkId: activeFramework.frameworkId,
       contentScopeVersion: contentScope.groundingPackVersion,
       materialIds: contentScope.materialIds,
       durationMs: timer.elapsedMs(),
     });
 
+    if (!hasCompleteExpertFrameworkCapabilityGuidance(activeFramework.framework)) {
+      throw new Error(
+        "The active expert framework is missing required capability guidance. An expert must publish a complete framework before starting new tutoring sessions.",
+      );
+    }
+
     return learningSessionStateSchema.parse({
       ...createDefaultLearningSessionState(),
       topicId: params.topicId,
       topicTitle: params.topicTitle,
-      frameworkVersionId: activeFramework.frameworkVersionId,
+      frameworkId: activeFramework.frameworkId,
       activeFrameworkSnapshot: activeFramework,
       groundingPackVersion: contentScope.groundingPackVersion,
       contentScopeSnapshot: contentScope,
       tutorNotes: [
-        `Framework version ${activeFramework.frameworkVersionId} is active.`,
+        `Framework ${activeFramework.frameworkId} is active.`,
         `Topic grounding pack v${contentScope.groundingPackVersion} loaded for session.`,
       ],
     });
@@ -160,13 +167,13 @@ export class TutorRuntimeService {
           topicId: params.topicId,
           studyLanguage: params.studyLanguage,
         },
-        async () => await getCachedActiveExpertFrameworkBundle(params.topicId),
+        async () => await getCachedActiveFrameworkBundleForTopic(params.topicId),
       ));
     if (params.state.activeFrameworkSnapshot) {
       logTutoringDebug("runtime:prepare-turn:framework:reuse-snapshot", {
         topicId: params.topicId,
         studyLanguage: params.studyLanguage,
-        frameworkVersionId: activeFramework.frameworkVersionId,
+        frameworkId: activeFramework.frameworkId,
       });
     }
     const contentScope = await this.resolveContentScope({
@@ -223,14 +230,14 @@ export class TutorRuntimeService {
       ...params.state,
       topicId: params.topicId,
       topicTitle: params.topicTitle,
-      frameworkVersionId: activeFramework.frameworkVersionId,
+      frameworkId: activeFramework.frameworkId,
       activeFrameworkSnapshot: activeFramework,
       groundingPackVersion: contentScope.groundingPackVersion,
       contentScopeSnapshot: contentScope,
     });
     logTutoringDebug("runtime:prepare-turn:done", {
       topicId: params.topicId,
-      frameworkVersionId: activeFramework.frameworkVersionId,
+      frameworkId: activeFramework.frameworkId,
       contentScopeVersion: contentScope.groundingPackVersion,
       systemPromptLength: systemPrompt.dynamicSystemPrompt.length,
       staticPromptLength: systemPrompt.staticSystemPrompt.length,

@@ -36,7 +36,11 @@ export default async function ClassroomProgressPage({ params }: ClassroomProgres
         where: eq(studentProgressReports.classroomStudentId, membership.id),
         orderBy: [desc(studentProgressReports.createdAt)],
         with: {
-            topic: true
+            topic: {
+                with: {
+                    course: true,
+                },
+            }
         }
     });
 
@@ -50,7 +54,19 @@ export default async function ClassroomProgressPage({ params }: ClassroomProgres
     return (
         <ClassroomProgressClient 
             latestModel={latestModel} 
-            progressReports={progressReports} 
+            progressReports={progressReports.map((report) => ({
+                id: report.id,
+                topicId: report.topicId,
+                masteryPercent: report.masteryPercent,
+                createdAt: report.createdAt,
+                topic: report.topic
+                    ? {
+                        title: report.topic.title,
+                        courseTitle: report.topic.course?.title ?? null,
+                    }
+                    : null,
+                report: report.report,
+            }))} 
         />
     );
 }

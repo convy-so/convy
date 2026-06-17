@@ -1,6 +1,7 @@
 import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/lib/chat-ui-messages";
 import { getLatestAssistantLearningMessage } from "@/lib/learning/storage";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
+import { hasCompleteExpertFrameworkCapabilityGuidance } from "@/lib/learning/types";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
 import {
   logTutoringDebug,
@@ -12,10 +13,33 @@ import {
 
 import type { UIMessage } from "ai";
 import type { PrepareTutoringTurnParams } from "@/lib/learning/tutoring-turn-types";
+import type { ChatMessagePart } from "@/lib/chat-types";
 
 export function getLatestUserText(messages: UIMessage[]) {
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
   return extractMessageText(latestUserMessage ? toPersistedUIChatMessages([latestUserMessage])[0] : null).trim();
+}
+
+function collectPriorQuizIds(messages: UIMessage[]) {
+  const ids = new Set<string>();
+
+  for (const message of toPersistedUIChatMessages(messages)) {
+    for (const part of (message.parts ?? []) as ChatMessagePart[]) {
+      if (part.type !== "tool-result" || part.toolName !== "administer_quiz") {
+        continue;
+      }
+
+      const result =
+        typeof part.result === "object" && part.result !== null
+          ? (part.result as Record<string, unknown>)
+          : {};
+      if (typeof result.quizId === "string" && result.quizId.trim()) {
+        ids.add(result.quizId);
+      }
+    }
+  }
+
+  return Array.from(ids);
 }
 
 export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
@@ -41,26 +65,6 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
     previousAssistant: previousAssistant
       ? summarizeTutoringText(previousAssistant.content, 180)
       : null,
-    durationMs: timer.elapsedMs(),
-  });
-
-  const { createTutorTools } = await import("@/lib/learning/agent-tools");
-  const tools = await measureTutoringStep(
-    "turn:prepare:tools",
-    {
-      topicId: params.topicId,
-      tutorSessionId: params.tutorSessionId,
-    },
-    async () =>
-      createTutorTools({
-        topicTitle: params.access.topic.title,
-        studentContext: "Student learning " + params.access.topic.title,
-      }),
-  );
-  logTutoringDebug("turn:prepare:tools", {
-    topicId: params.topicId,
-    tutorSessionId: params.tutorSessionId,
-    toolNames: Object.keys(tools),
     durationMs: timer.elapsedMs(),
   });
 
@@ -97,8 +101,8 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
       await tutorRuntimeService.prepareTurn({
         topicId: params.topicId,
         topicTitle: params.access.topic.title,
-        subjectKey: params.access.topic.subjectKey,
-        subjectLabel: params.access.topic.subject,
+        subjectKey: params.access.topic.courseId,
+        subjectLabel: params.access.topic.course.title,
         sourceBoundary: params.access.topic.sourceBoundary,
         studentUserId: params.access.classroomStudent.userId,
         studyLanguage: params.studyLanguage,
@@ -119,6 +123,37 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
     tutorSessionId: params.tutorSessionId,
     groundingUnitCount: prepared.groundingUnits.length,
     contextBundleVersionId: prepared.contextBundle.versionId,
+    durationMs: timer.elapsedMs(),
+  });
+
+  const { createTutorTools } = await import("@/lib/learning/agent-tools");
+  const priorQuizIds = collectPriorQuizIds(sanitizedMessages);
+  const tools = await measureTutoringStep(
+    "turn:prepare:tools",
+    {
+      topicId: params.topicId,
+      tutorSessionId: params.tutorSessionId,
+      priorQuizCount: priorQuizIds.length,
+    },
+    async () =>
+      createTutorTools({
+        topicTitle: params.access.topic.title,
+        studentContext: "Student learning " + params.access.topic.title,
+        priorQuizIds,
+        canFinishSession: hasCompleteExpertFrameworkCapabilityGuidance(
+          prepared.activeFramework.framework,
+        ),
+      }),
+  );
+  logTutoringDebug("turn:prepare:tools", {
+    topicId: params.topicId,
+    tutorSessionId: params.tutorSessionId,
+    toolNames: Object.keys(tools),
+    priorQuizIds,
+    canFinishSession: Object.prototype.hasOwnProperty.call(
+      tools,
+      "finish_session",
+    ),
     durationMs: timer.elapsedMs(),
   });
 

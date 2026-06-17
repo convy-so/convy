@@ -22,6 +22,7 @@ import {
   ToolLoopAgent,
   createAgentUIStreamResponse,
   type ToolLoopAgentOnFinishCallback,
+  stepCountIs,
 } from "ai";
 import { logUsage, type UsageLogInput } from "./billing/logger";
 import {
@@ -257,6 +258,7 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     attribution?: Partial<UsageLogInput>;
     temperature?: number;
     maxTokens?: number;
+    stopWhen?: StopCondition<TOOLS> | Array<StopCondition<TOOLS>>;
     dynamicExamples?: PromptExample[];
     promptCache?: PromptCacheOptions;
     onFinish?: ToolLoopAgentOnFinishCallback<TOOLS>;
@@ -305,6 +307,7 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     instructions: preparedCache.systemPrompt ?? resolvedInstructions,
     temperature: options.temperature ?? 0.3,
     maxOutputTokens: options.maxTokens ?? 1000,
+    stopWhen: options.stopWhen ?? stepCountIs(4),
     providerOptions: preparedCache.providerOptions,
     onFinish: (result) => {
       if (isTutoringFeature) {

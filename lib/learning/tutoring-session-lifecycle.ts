@@ -7,6 +7,7 @@ import {
 import type { LearningSessionState } from "@/lib/learning/types";
 
 const STUDENT_COMPLETE_MESSAGE = "Tutoring session completed by the student.";
+const TUTOR_COMPLETE_MESSAGE = "Tutoring session completed by the tutor.";
 
 export async function finalizeTutoringSession(params: {
   sessionId: string;
@@ -16,11 +17,13 @@ export async function finalizeTutoringSession(params: {
   studentUserId: string;
   studentName: string;
   topicTitle: string;
+  courseId?: string | null;
+  courseTitle?: string | null;
   sourceLocale?: string | null;
   summary?: string | null;
   expectedStateVersion: number;
   state: LearningSessionState;
-  reason: "student_finished";
+  reason: "student_finished" | "tutor_finished";
 }) {
   const completedState: LearningSessionState = {
     ...params.state,
@@ -43,7 +46,10 @@ export async function finalizeTutoringSession(params: {
     sessionId: params.sessionId,
     role: "system",
     interactionType: "session_event",
-    content: STUDENT_COMPLETE_MESSAGE,
+    content:
+      params.reason === "tutor_finished"
+        ? TUTOR_COMPLETE_MESSAGE
+        : STUDENT_COMPLETE_MESSAGE,
     metadata: {
       reason: params.reason,
     },
@@ -62,6 +68,8 @@ export async function finalizeTutoringSession(params: {
     classroomStudentId: params.classroomStudentId,
     studentName: params.studentName,
     topicTitle: params.topicTitle,
+    courseId: params.courseId ?? null,
+    courseTitle: params.courseTitle ?? null,
     sourceLocale: params.sourceLocale ?? "en",
     previousReport:
       previousReport?.generatedFromSessionId === params.sessionId
