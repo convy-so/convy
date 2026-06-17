@@ -7,20 +7,6 @@ import toast from "react-hot-toast";
 import { ExpertFrameworkSubnav } from "@/components/expert/expert-framework-subnav";
 import type { ExpertFrameworkCourseSummary } from "@/lib/learning/expert-framework-summaries";
 
-type FrameworkStatus = "none" | "draft" | "live";
-
-function frameworkStatus(row: ExpertFrameworkCourseSummary): FrameworkStatus {
-  if (!row.id) return "none";
-  if (row.activeVersionId) return "live";
-  return "draft";
-}
-
-function statusLabel(status: FrameworkStatus) {
-  if (status === "live") return "Live";
-  if (status === "draft") return "Draft";
-  return "Not started";
-}
-
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     credentials: "include",
@@ -61,7 +47,6 @@ export function ExpertFrameworkCourses({
         success: true;
         data: {
           id: string;
-          key: string;
           title: string;
           description: string | null;
         };
@@ -76,15 +61,12 @@ export function ExpertFrameworkCourses({
       setFrameworks((current) => [
         ...current,
         {
-          id: null,
           courseId: result.data.id,
-          courseKey: result.data.key,
           courseTitle: result.data.title,
-          name: null,
           description: result.data.description,
-          topicId: null,
-          anchorTopicTitle: null,
-          activeVersionId: null,
+          frameworkCount: 0,
+          activeFrameworkId: null,
+          activeFrameworkName: null,
           updatedAt: null,
         },
       ]);
@@ -103,7 +85,7 @@ export function ExpertFrameworkCourses({
     <div>
       <ExpertFrameworkSubnav
         title="Courses"
-        description="Courses in the catalog. Each course can have one pedagogical framework."
+        description="Courses in the catalog. Each course can hold multiple frameworks, with one live at a time."
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
@@ -159,7 +141,7 @@ export function ExpertFrameworkCourses({
             {isCreatingCourse ? (
               <span className="inline-flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Creating…
+                Creating...
               </span>
             ) : (
               "Create course"
@@ -173,62 +155,38 @@ export function ExpertFrameworkCourses({
       ) : (
         <div className="mt-6 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <caption className="sr-only">Course catalog</caption>
             <thead>
               <tr className="border-b border-slate-200 text-xs font-medium uppercase tracking-wide text-slate-500">
-                <th scope="col" className="py-3 pr-4 font-medium">
-                  Course
-                </th>
-                <th scope="col" className="hidden py-3 pr-4 font-medium sm:table-cell">
-                  Framework
-                </th>
-                <th scope="col" className="py-3 pr-4 font-medium">
-                  Status
-                </th>
-                <th scope="col" className="hidden py-3 pr-4 font-medium md:table-cell">
-                  Updated
-                </th>
+                <th className="py-3 pr-4 font-medium">Course</th>
+                <th className="py-3 pr-4 font-medium">Frameworks</th>
+                <th className="py-3 pr-4 font-medium">Live framework</th>
+                <th className="hidden py-3 pr-4 font-medium md:table-cell">Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {frameworks.map((row) => {
-                const status = frameworkStatus(row);
-                return (
-                  <tr key={row.courseId} className="hover:bg-slate-50/80">
-                    <td className="py-4 pr-4">
-                      <div className="font-medium text-slate-950">{row.courseTitle}</div>
-                      {row.description ? (
-                        <p className="mt-0.5 line-clamp-1 text-slate-500">{row.description}</p>
-                      ) : null}
-                    </td>
-                    <td className="hidden py-4 pr-4 text-slate-600 sm:table-cell">
-                      {row.name ?? "—"}
-                    </td>
-                    <td className="py-4 pr-4">
-                      <span
-                        className={
-                          status === "live"
-                            ? "text-emerald-700"
-                            : status === "draft"
-                              ? "text-slate-600"
-                              : "text-slate-400"
-                        }
-                      >
-                        {statusLabel(status)}
-                      </span>
-                    </td>
-                    <td className="hidden py-4 pr-4 whitespace-nowrap text-slate-500 md:table-cell">
-                      {row.updatedAt
-                        ? new Date(row.updatedAt).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
+              {frameworks.map((row) => (
+                <tr key={row.courseId} className="hover:bg-slate-50/80">
+                  <td className="py-4 pr-4">
+                    <div className="font-medium text-slate-950">{row.courseTitle}</div>
+                    {row.description ? (
+                      <p className="mt-0.5 line-clamp-1 text-slate-500">{row.description}</p>
+                    ) : null}
+                  </td>
+                  <td className="py-4 pr-4 text-slate-600">{row.frameworkCount}</td>
+                  <td className="py-4 pr-4 text-slate-600">
+                    {row.activeFrameworkName ?? "None active"}
+                  </td>
+                  <td className="hidden py-4 pr-4 whitespace-nowrap text-slate-500 md:table-cell">
+                    {row.updatedAt
+                      ? new Date(row.updatedAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

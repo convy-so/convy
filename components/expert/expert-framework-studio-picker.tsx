@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, ChevronDown, Loader2, Plus } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { ExpertFrameworkSubnav } from "@/components/expert/expert-framework-subnav";
 import { useRouter } from "@/i18n/routing";
 import type { ExpertFrameworkCourseSummary } from "@/lib/learning/expert-framework-summaries";
 import { cn } from "@/lib/utils";
+
+type CourseFrameworkRecord = {
+  id: string;
+  name: string;
+  status: "draft" | "active" | "inactive" | "archived";
+  updatedAt: string;
+};
 
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -31,67 +38,90 @@ export function ExpertFrameworkStudioPicker({
   initialFrameworks: ExpertFrameworkCourseSummary[];
 }) {
   const router = useRouter();
-  const [frameworks] = useState(initialFrameworks);
+  const [courses] = useState(initialFrameworks);
   const [selectedCourseId, setSelectedCourseId] = useState(
     initialFrameworks[0]?.courseId ?? "",
   );
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [frameworks, setFrameworks] = useState<CourseFrameworkRecord[]>([]);
+  const [isLoadingFrameworks, setIsLoadingFrameworks] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const selectedCourse = useMemo(
+    () => courses.find((row) => row.courseId === selectedCourseId) ?? null,
+    [courses, selectedCourseId],
+  );
 
   useEffect(() => {
-    if (!isMenuOpen) {
+    if (!selectedCourseId) {
+      setFrameworks([]);
       return;
     }
 
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        menuRef.current &&
-        event.target instanceof Node &&
-        !menuRef.current.contains(event.target)
-      ) {
-        setIsMenuOpen(false);
+    let cancelled = false;
+
+    async function loadFrameworks() {
+      try {
+        setIsLoadingFrameworks(true);
+        const result = await fetchJson<{
+          success: true;
+          data: { frameworks: CourseFrameworkRecord[] };
+        }>(`/api/learning/expert/courses/${selectedCourseId}/frameworks`);
+        if (!cancelled) {
+          setFrameworks(result.data.frameworks);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to load frameworks",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingFrameworks(false);
+        }
       }
     }
 
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isMenuOpen]);
+    void loadFrameworks();
 
-  const selectedFramework = useMemo(
-    () => frameworks.find((row) => row.courseId === selectedCourseId) ?? null,
-    [frameworks, selectedCourseId],
-  );
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCourseId]);
 
-  const openStudio = async () => {
-    if (!selectedCourseId || !selectedFramework) {
+  const handleCreateFramework = async () => {
+    if (!selectedCourse) {
       toast.error("Select a course first");
       return;
     }
 
-    if (selectedFramework.id) {
-      router.push(`/expert/frameworks/${selectedFramework.id}/versions`);
-      return;
-    }
-
     try {
-      setIsSaving(true);
+      setIsCreating(true);
       const result = await fetchJson<{
         success: true;
-        data: { id: string };
-      }>("/api/learning/expert/frameworks", {
+        data: { id: string; name: string; status: CourseFrameworkRecord["status"] };
+      }>(`/api/learning/expert/courses/${selectedCourse.courseId}/frameworks`, {
         method: "POST",
         body: JSON.stringify({
-          courseId: selectedCourseId,
-          name: `${selectedFramework.courseTitle} framework`,
+          name: `${selectedCourse.courseTitle} framework`,
         }),
       });
 
-      router.push(`/expert/frameworks/${result.data.id}/versions`);
+      setFrameworks((current) => [
+        {
+          id: result.data.id,
+          name: result.data.name,
+          status: result.data.status,
+          updatedAt: new Date().toISOString(),
+        },
+        ...current,
+      ]);
+      router.push(`/expert/frameworks/${result.data.id}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to open studio");
+      toast.error(error instanceof Error ? error.message : "Failed to create framework");
     } finally {
-      setIsSaving(false);
+      setIsCreating(false);
     }
   };
 
@@ -99,38 +129,26 @@ export function ExpertFrameworkStudioPicker({
     <div>
       <ExpertFrameworkSubnav
         title="Framework studio"
-        description="Pick a course, then open its framework editor."
+        description="Pick a course, review its framework rows, and open the editor."
       />
 
-      <section className="max-w-lg rounded-xl border border-slate-200 bg-white p-6">
+      <section className="max-w-3xl rounded-xl border border-slate-200 bg-white p-6">
         <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
           Course
         </label>
 
-        {frameworks.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            No courses yet.{" "}
-            <button
-              type="button"
-              onClick={() => router.push("/expert/frameworks/courses")}
-              className="font-semibold text-slate-950 underline-offset-2 hover:underline"
-            >
-              Add a course
-            </button>{" "}
-            first.
-          </p>
+        {courses.length === 0 ? (
+          <p className="text-sm text-slate-500">No courses yet.</p>
         ) : (
           <>
-            <div className="relative" ref={menuRef}>
+            <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsMenuOpen((open) => !open)}
                 className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-left text-sm transition-colors hover:border-slate-400"
-                aria-expanded={isMenuOpen}
-                aria-haspopup="listbox"
               >
                 <span className="font-medium text-slate-950">
-                  {selectedFramework?.courseTitle ?? "Select a course"}
+                  {selectedCourse?.courseTitle ?? "Select a course"}
                 </span>
                 <ChevronDown
                   className={cn(
@@ -141,12 +159,9 @@ export function ExpertFrameworkStudioPicker({
               </button>
 
               {isMenuOpen ? (
-                <ul
-                  role="listbox"
-                  className="absolute mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1"
-                >
-                  {frameworks.map((row) => (
-                    <li key={row.courseId} role="option" aria-selected={row.courseId === selectedCourseId}>
+                <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1">
+                  {courses.map((row) => (
+                    <li key={row.courseId}>
                       <button
                         type="button"
                         onClick={() => {
@@ -169,20 +184,65 @@ export function ExpertFrameworkStudioPicker({
               ) : null}
             </div>
 
-            <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
+            <div className="mt-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-900">Framework rows</p>
+                <p className="text-sm text-slate-500">
+                  One framework can be live for this course at a time.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={openStudio}
-                disabled={isSaving || !selectedCourseId}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950 disabled:opacity-40"
+                onClick={handleCreateFramework}
+                disabled={isCreating || !selectedCourseId}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 disabled:opacity-50"
               >
-                {isSaving ? (
+                {isCreating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <ArrowRight className="h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                 )}
-                {selectedFramework?.id ? "Open studio" : "Create and open studio"}
+                New framework
               </button>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+              {isLoadingFrameworks ? (
+                <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading frameworks...
+                </div>
+              ) : frameworks.length === 0 ? (
+                <div className="px-4 py-6 text-sm text-slate-500">
+                  No frameworks yet for this course.
+                </div>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {frameworks.map((framework) => (
+                    <li key={framework.id} className="flex items-center justify-between gap-4 px-4 py-4">
+                      <div>
+                        <p className="font-medium text-slate-950">{framework.name}</p>
+                        <p className="text-sm text-slate-500">
+                          {framework.status} •{" "}
+                          {new Date(framework.updatedAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/expert/frameworks/${framework.id}`)}
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-950"
+                      >
+                        Open
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </>
         )}

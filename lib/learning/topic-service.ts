@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import { learningTopics } from "@/db/schema";
-import { getCourseById, getCourseByKey } from "@/lib/learning/course-service";
+import { getCourseById } from "@/lib/learning/course-service";
 import {
   learningOutcomeDefinitionSchema,
   topicSourceBoundarySchema,
@@ -33,8 +33,7 @@ export async function createLearningTopic(params: {
   createdByUserId: string;
   title: string;
   description?: string;
-  subjectKey: string;
-  courseId?: string;
+  courseId: string;
   contentLocale: "en" | "fr" | "de";
   learningOutcomes?: LearningOutcomeDefinition[];
   sourceBoundary?: Partial<TopicSourceBoundary>;
@@ -50,9 +49,7 @@ export async function createLearningTopic(params: {
     ...params.sourceBoundary,
     teacherSummary: params.sourceBoundary?.teacherSummary ?? params.description ?? "",
   });
-  const course =
-    (params.courseId ? await getCourseById(params.courseId) : null) ??
-    (await getCourseByKey(params.subjectKey));
+  const course = await getCourseById(params.courseId);
 
   if (!course) {
     throw new Error("Course not found");
@@ -65,9 +62,7 @@ export async function createLearningTopic(params: {
     courseId: course.id,
     title: params.title,
     description: params.description || null,
-    subject: course.title,
     contentLocale: params.contentLocale,
-    subjectKey: course.key,
     status: "draft",
     openingPreference: "auto",
     sourceBoundary,

@@ -168,8 +168,8 @@ export function TopicSetupPage({
   const [isGeneratingOutcomes, setIsGeneratingOutcomes] = useState(false);
 
   const subjectName = useMemo(
-    () => getSubjectDisplayLabel(topic.subjectKey),
-    [topic.subjectKey],
+    () => topic.courseTitle ?? getSubjectDisplayLabel(null),
+    [topic.courseTitle],
   );
   const visibleUploadAttempts = uploadAttempts.filter(
     (attempt) => attempt.status !== "succeeded",

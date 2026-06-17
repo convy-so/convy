@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useLocale } from "next-intl";
 import toast from "react-hot-toast";
 
-import { askOutOfSessionQuestionAction, completeTutoringSessionAction } from "@/app/actions/classroom";
+import { askOutOfSessionQuestionAction } from "@/app/actions/classroom";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import {
   ApiClientError,
@@ -36,6 +36,7 @@ function toTextUIMessages(
         id: string;
         role: string;
         content: string;
+        parts?: Array<Record<string, unknown>> | null;
         metadata?: Record<string, unknown>;
       }>
     | undefined,
@@ -49,7 +50,10 @@ function toTextUIMessages(
       {
         id: message.id,
         role: message.role,
-        parts: [{ type: "text", text: message.content }],
+        parts:
+          message.parts && message.parts.length > 0
+            ? (message.parts as UIMessage["parts"])
+            : [{ type: "text", text: message.content }],
         annotations: message.metadata
           ? [{ type: "metadata", data: message.metadata }]
           : [],
@@ -97,7 +101,6 @@ export function useStudentTutoringWorkspace({
     ReturnType<typeof getStudentLearningWorkspaceInitialData>
   >["initialTutoringSession"];
 }) {
-  const queryClient = useQueryClient();
   const locale = useLocale();
 
   const [selectedStudyLanguage, setSelectedStudyLanguage] = useState<AppLocale>(
@@ -141,6 +144,7 @@ export function useStudentTutoringWorkspace({
           id: message.id,
           role: message.role,
           content: message.content,
+          parts: message.parts ?? undefined,
           metadata: message.metadata ?? undefined,
         })),
       ),
@@ -233,38 +237,6 @@ export function useStudentTutoringWorkspace({
     },
   });
 
-  const completeTutoringMutation = useMutation({
-    mutationFn: async () => {
-      const tutoringSessionId = tutoringSessionQuery.data?.data.sessionId;
-      if (!tutoringSessionId) {
-        throw new Error("No active tutoring session to finish.");
-      }
-
-      const result = await completeTutoringSessionAction({
-        topicId: lessonId,
-        sessionId: tutoringSessionId,
-        language: selectedStudyLanguage,
-      });
-      if (!result.success) {
-        throw new Error(getFriendlyActionError(result.error));
-      }
-      return result.data;
-    },
-    onSuccess: async () => {
-      setTutoringChatMessages([]);
-      toast.success("Session finished. The teacher report is being prepared.");
-
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.tutoring(lessonId, selectedStudyLanguage),
-      });
-    },
-    onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to finish tutoring session",
-      );
-    },
-  });
-
   useEffect(() => {
     logTutoringDebug("client:session:query-state", {
       lessonId,
@@ -308,6 +280,9 @@ export function useStudentTutoringWorkspace({
   ]);
 
   const sessionState = tutoringSessionQuery.data?.data.sessionState ?? null;
+  const sessionStatus = tutoringSessionQuery.data?.data.sessionStatus ?? null;
+  const sessionCompleted =
+    sessionStatus === "completed" || sessionState?.completed === true;
   const tutoringInitializationState = useMemo(() => {
     if (!selectedMembership) {
       return {
@@ -361,7 +336,9 @@ export function useStudentTutoringWorkspace({
     return {
       status: "ready" as const,
       title: "Tutor ready",
-      message: "Your tutoring session is ready.",
+      message: sessionCompleted
+        ? "This tutoring session is complete."
+        : "Your tutoring session is ready.",
     };
   }, [
     selectedLesson,
@@ -369,6 +346,7 @@ export function useStudentTutoringWorkspace({
     tutoringSessionQuery.error,
     tutoringSessionQuery.isError,
     tutoringSessionQuery.isPending,
+    sessionCompleted,
   ]);
 
   useEffect(() => {
@@ -403,13 +381,14 @@ export function useStudentTutoringWorkspace({
     tutoringChatStatus,
     addTutoringToolResult,
     outOfSessionMutation,
-    completeTutoringMutation,
     outOfSessionReply,
     setOutOfSessionReply,
     selectedMembership,
     selectedLesson,
     sessionState,
+    sessionCompleted,
     tutoringInitializationState,
-    canUseTutoringChat: tutoringInitializationState.status === "ready",
+    canUseTutoringChat:
+      tutoringInitializationState.status === "ready" && !sessionCompleted,
   };
 }

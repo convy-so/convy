@@ -48,6 +48,8 @@ async function run() {
     const tools = createTutorTools({
       topicTitle: "Cell Biology",
       studentContext: "Prefers concrete visuals.",
+      priorQuizIds: ["quiz_123"],
+      canFinishSession: true,
     });
 
     const firstImageCall = await tools.search_image.execute({
@@ -75,6 +77,44 @@ async function run() {
     });
     assert.equal(parsedGradeInput.quizId, "quiz_123");
     assert.equal(parsedGradeInput.conceptKey, "mitosis");
+
+    const missingQuizContextTools = createTutorTools({
+      topicTitle: "Cell Biology",
+      studentContext: "Prefers concrete visuals.",
+      priorQuizIds: [],
+      canFinishSession: false,
+    });
+    const missingQuizGrade = await missingQuizContextTools.grade_student_work.execute({
+      quizId: "quiz_missing",
+      conceptKey: "mitosis",
+      studentAnswerSummary: "Student answered without a prior quiz context.",
+      score: 50,
+      feedback: "Review the quiz context first.",
+      masteryLevel: "surface",
+    });
+    assert.equal(missingQuizGrade.success, false);
+    assert.equal("finish_session" in missingQuizContextTools, false);
+
+    assert.equal("finish_session" in tools, true);
+    if (!("finish_session" in tools)) {
+      throw new Error("Expected finish_session tool to be available.");
+    }
+
+    const finishInput = tools.finish_session.inputSchema.parse({
+      completionRationale: "Student explained the phases and corrected the earlier error.",
+      coveredOutcomes: ["Identify mitosis phases"],
+      evidenceSummary: "Quiz answer and follow-up explanation were accurate.",
+      nextStepNote: "Review the diagram once more before the next lesson.",
+    });
+    assert.equal(finishInput.coveredOutcomes.length, 1);
+    assert.throws(() =>
+      tools.finish_session.inputSchema.parse({
+        completionRationale: "",
+        coveredOutcomes: [],
+        evidenceSummary: "",
+        nextStepNote: "",
+      }),
+    );
   } finally {
     if (typeof previousBingKey === "string") {
       process.env.BING_IMAGE_SEARCH_API_KEY = previousBingKey;

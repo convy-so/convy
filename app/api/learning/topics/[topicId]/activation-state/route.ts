@@ -5,7 +5,7 @@ import { getDb } from "@/db";
 import { topicMaterialUploadAttempts } from "@/db/schema";
 import { apiError } from "@/lib/api/error-contract";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getActiveFrameworkVersion } from "@/lib/learning/framework-runtime-storage";
+import { getActiveFrameworkForCourse } from "@/lib/learning/framework-runtime-storage";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import { getTeacherTopicOrNull } from "@/lib/learning/materials-route-service";
 import { getTopicActivationMaterialGate } from "@/lib/learning/materials-route-service";
@@ -41,14 +41,14 @@ export async function GET(
     });
 
     if (activationState.ready) {
-      const activeFrameworkVersion = await getActiveFrameworkVersion(topicId);
-      if (!activeFrameworkVersion) {
+      const activeFramework = await getActiveFrameworkForCourse(topicWithMaterials.courseId);
+      if (!activeFramework?.liveFramework) {
         return NextResponse.json({
           success: true,
           data: {
             ready: false,
             reason:
-              "Publish an expert framework version before activating tutoring for this lesson.",
+              "Activate an expert framework before activating tutoring for this lesson.",
           },
         });
       }

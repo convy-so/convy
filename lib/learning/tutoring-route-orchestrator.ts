@@ -205,7 +205,7 @@ export async function ensureTutoringSession(input: {
     sessionLocale: session.sessionLocale,
     stateVersion: session.stateVersion,
     contentScopeVersion: state.groundingPackVersion,
-    frameworkVersionId: state.frameworkVersionId,
+    frameworkId: state.frameworkId,
     durationMs: timer.elapsedMs(),
   });
 

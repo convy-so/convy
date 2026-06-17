@@ -11,12 +11,14 @@ export function QuizCard({
   questionText,
   acceptsImageUpload,
   onSubmit,
+  disabled = false,
 }: {
   quizId: string;
   conceptKey: string;
   questionText: string;
   acceptsImageUpload: boolean;
   onSubmit: (result: { answerText: string; attachments?: FileList }) => void;
+  disabled?: boolean;
 }) {
   const [answer, setAnswer] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -37,7 +39,7 @@ export function QuizCard({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!answer.trim() && files.length === 0) return;
+    if (disabled || (!answer.trim() && files.length === 0)) return;
 
     setSubmitted(true);
 
@@ -129,6 +131,7 @@ export function QuizCard({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={disabled}
                 className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-sm font-bold text-slate-400 hover:text-indigo-500 hover:border-indigo-200 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
               >
                 <Camera className="w-4 h-4" />
@@ -150,6 +153,7 @@ export function QuizCard({
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
+            disabled={disabled}
             placeholder={acceptsImageUpload ? "Type your answer or short summary here..." : "Type your answer here..."}
             className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-100 outline-none transition-all resize-none h-24 custom-scrollbar"
           />
@@ -157,7 +161,7 @@ export function QuizCard({
 
         <button
           type="submit"
-          disabled={!answer.trim() && files.length === 0}
+          disabled={disabled || (!answer.trim() && files.length === 0)}
           className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
         >
           <Send className="w-4 h-4" />

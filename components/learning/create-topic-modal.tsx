@@ -20,7 +20,6 @@ type CreateTopicModalProps = {
     classroomId: string;
     availableCourses: Array<{
         id: string;
-        key: string;
         title: string;
     }>;
 };
@@ -73,7 +72,6 @@ export function CreateTopicModal({
             const result = await createLearningTopicAction({
                 classroomId,
                 courseId: selectedCourse.id,
-                subjectKey: selectedCourse.key,
                 title: title.trim(),
                 description: description.trim() || undefined,
             });

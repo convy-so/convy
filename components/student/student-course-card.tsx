@@ -14,7 +14,7 @@ export type StudentCourseCardMembership = {
     title: string;
     gradeLabel: string;
   };
-  topics: Array<{ id: string; subject?: string | null; subjectKey?: string | null }>;
+  topics: Array<{ id: string; courseTitle?: string | null }>;
 };
 
 type Props = {
@@ -93,7 +93,7 @@ export function StudentCourseCard({
         <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-4">
           <span className="flex items-center gap-1.5 text-sm font-medium text-gray-500">
             <Clock className="h-4 w-4" aria-hidden />
-            {membership.topics[0]?.subject ?? getSubjectDisplayLabel(membership.topics[0]?.subjectKey)}
+            {membership.topics[0]?.courseTitle ?? getSubjectDisplayLabel(null)}
           </span>
           <span
             className={cn(

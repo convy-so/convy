@@ -4,7 +4,11 @@ import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { flashModel } from "@/lib/ai";
-import { listLearningMessages } from "@/lib/learning/storage";
+import {
+  getActiveLearningSession,
+  getLatestCompletedLearningSession,
+  listLearningMessages,
+} from "@/lib/learning/storage";
 import { learningSessionStateSchema } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { apiError } from "@/lib/api/error-contract";
@@ -66,11 +70,26 @@ export async function GET(
     }
     if (!access) return apiError("UNAUTHORIZED", "Unauthorized");
 
-    const tutorSession = await ensureTutoringSession({
+    const existingActiveSession = await getActiveLearningSession({
+      classroomStudentId: access.classroomStudent.id,
       topicId,
-      access,
-      studyLanguage,
+      sessionType: "tutoring",
+      sessionLocale: studyLanguage,
     });
+    const latestCompletedSession =
+      existingActiveSession ??
+      (await getLatestCompletedLearningSession({
+        classroomStudentId: access.classroomStudent.id,
+        topicId,
+        sessionType: "tutoring",
+      }));
+    const tutorSession =
+      latestCompletedSession ??
+      (await ensureTutoringSession({
+        topicId,
+        access,
+        studyLanguage,
+      }));
     const messages = await listLearningMessages(tutorSession.id);
     const state = learningSessionStateSchema.parse(tutorSession.state ?? {});
     logTutoringDebug("chat:get:ready", {
@@ -88,17 +107,19 @@ export async function GET(
       success: true,
       data: {
         sessionId: tutorSession.id,
+        sessionStatus: tutorSession.sessionStatus,
         sessionLocale: normalizeAppLocale(tutorSession.sessionLocale),
         sourceLocale: normalizeAppLocale(access.topic.contentLocale),
         lesson: {
           id: access.topic.id,
           title: access.topic.title,
-          subject: access.topic.subject,
-          subjectKey: access.topic.subjectKey,
+          courseId: access.topic.courseId,
+          courseTitle: access.topic.course.title,
         },
         sessionState: state,
         messages: messages.map((message) => ({
           ...message,
+          parts: message.parts ?? undefined,
           metadata: message.metadata ?? undefined,
         })),
       },
@@ -189,7 +210,7 @@ export async function POST(
       sessionLocale: tutorSession.sessionLocale,
       stateVersion: tutorSession.stateVersion,
       turnCount: state.turnCount,
-      frameworkVersionId: state.frameworkVersionId,
+      frameworkId: state.frameworkId,
       groundingPackVersion: state.groundingPackVersion,
       durationMs: timer.elapsedMs(),
     });
@@ -247,7 +268,7 @@ export async function POST(
       toolNames: Object.keys(tools),
       sanitizedMessages: summarizeTutoringMessages(sanitizedMessages),
       previousAssistant: previousAssistant ? summarizeTutoringText(previousAssistant.content, 180) : null,
-      activeFrameworkVersionId: prepared.activeFramework.frameworkVersionId,
+      activeFrameworkId: prepared.activeFramework.frameworkId,
       contentScopeVersion: prepared.contentScope.groundingPackVersion,
       contextBundleVersionId: prepared.contextBundle.versionId,
       groundingUnitCount: prepared.groundingUnits.length,

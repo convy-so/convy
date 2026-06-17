@@ -1,42 +1,40 @@
-import { listFrameworksWithTopicLite } from "@/lib/learning/framework-records";
 import { listCourses } from "@/lib/learning/course-service";
+import { listFrameworkRecords } from "@/lib/learning/framework-records";
 
 export type ExpertFrameworkCourseSummary = {
-  id: string | null;
   courseId: string;
-  courseKey: string;
   courseTitle: string;
-  name: string | null;
   description: string | null;
-  topicId: string | null;
-  anchorTopicTitle: string | null;
-  activeVersionId: string | null;
+  frameworkCount: number;
+  activeFrameworkId: string | null;
+  activeFrameworkName: string | null;
   updatedAt: string | null;
 };
 
 export async function listExpertFrameworkCourseSummaries(): Promise<
   ExpertFrameworkCourseSummary[]
 > {
-  const [frameworks, courses] = await Promise.all([
-    listFrameworksWithTopicLite(),
+  const [courses, frameworks] = await Promise.all([
     listCourses(),
+    listFrameworkRecords({ includeArchived: false }),
   ]);
 
   return courses.map((course) => {
-    const framework =
-      frameworks.find((candidate) => candidate.courseId === course.id) ?? null;
+    const courseFrameworks = frameworks.filter(
+      (framework) => framework.courseId === course.id,
+    );
+    const activeFramework =
+      courseFrameworks.find((framework) => framework.status === "active") ?? null;
+    const latestFramework = courseFrameworks[0] ?? null;
 
     return {
-      id: framework?.id ?? null,
       courseId: course.id,
-      courseKey: course.key,
       courseTitle: course.title,
-      name: framework?.name ?? null,
-      description: framework?.description ?? course.description,
-      topicId: framework?.topicId ?? null,
-      anchorTopicTitle: framework?.topic?.title ?? null,
-      activeVersionId: framework?.activeVersionId ?? null,
-      updatedAt: framework?.updatedAt.toISOString() ?? null,
+      description: course.description,
+      frameworkCount: courseFrameworks.length,
+      activeFrameworkId: activeFramework?.id ?? null,
+      activeFrameworkName: activeFramework?.name ?? null,
+      updatedAt: latestFramework?.updatedAt.toISOString() ?? null,
     };
   });
 }

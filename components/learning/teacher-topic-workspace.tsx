@@ -214,8 +214,7 @@ export function TeacherTopicWorkspace({
     title: string;
     description?: string | null;
     status: string;
-    subject?: string | null;
-    subjectKey?: string | null;
+    courseTitle?: string | null;
     contentLocale?: string | null;
     learningOutcomes?: Array<{
       id?: string;
@@ -258,8 +257,7 @@ export function TeacherTopicWorkspace({
 }) {
   const queryClient = useQueryClient();
   const topicSubjectLabel =
-    selectedTopic.subject ??
-    getSubjectDisplayLabel(selectedTopic.subjectKey ?? "general");
+    selectedTopic.courseTitle ?? getSubjectDisplayLabel(null);
   const topicLocaleLabel =
     appLocaleLabels[
       (selectedTopic.contentLocale ?? "en") as keyof typeof appLocaleLabels

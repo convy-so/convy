@@ -56,9 +56,9 @@ const topicSchema = z
     id: z.string(),
     title: z.string(),
     description: z.string().nullable().optional(),
-    subject: z.string().nullable().optional(),
+    courseId: z.string().optional(),
+    courseTitle: z.string().optional(),
     contentLocale: z.enum(appLocales).optional(),
-    subjectKey: z.string().nullable().optional(),
     status: z.string(),
   })
   .passthrough();
@@ -128,8 +128,8 @@ const learningStudentMembershipSchema = z.object({
       id: z.string(),
       title: z.string(),
       description: z.string().nullable().optional(),
-      subject: z.string().nullable().optional(),
-      subjectKey: z.string().optional(),
+      courseId: z.string().optional(),
+      courseTitle: z.string().optional(),
       status: z.string(),
     }),
   ),
@@ -174,6 +174,7 @@ const onboardingMessageSchema = z.object({
   id: z.string(),
   role: z.string(),
   content: z.string(),
+  parts: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   createdAt: z.union([z.string(), z.date()]).optional(),
 });
@@ -192,13 +193,14 @@ const onboardingStateSchema = z.discriminatedUnion("completed", [
 
 const tutoringSessionSchema = z.object({
   sessionId: z.string(),
+  sessionStatus: z.string().optional(),
   sessionLocale: z.enum(appLocales).optional(),
   sourceLocale: z.enum(appLocales).optional(),
   lesson: z.object({
     id: z.string(),
     title: z.string(),
-    subject: z.string().nullable().optional(),
-    subjectKey: z.string().optional(),
+    courseId: z.string().optional(),
+    courseTitle: z.string().optional(),
   }),
   sessionState: learningSessionStateSchema,
   messages: z.array(onboardingMessageSchema),
@@ -344,9 +346,9 @@ export const topicOverviewSchema = z.object({
       id: z.string(),
       title: z.string(),
       description: z.string().nullable().optional(),
-      subject: z.string().nullable().optional(),
+      courseId: z.string(),
+      courseTitle: z.string(),
       contentLocale: z.enum(appLocales).optional(),
-      subjectKey: z.string(),
       status: z.string(),
       classroom: z.object({
         id: z.string(),

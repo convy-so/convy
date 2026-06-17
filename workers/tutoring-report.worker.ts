@@ -28,9 +28,10 @@ const tutoringReportJobSchema = z.object({
   classroomStudentId: z.string().min(1),
   studentName: z.string().min(1),
   topicTitle: z.string().min(1),
+  courseId: z.string().nullable().optional(),
+  courseTitle: z.string().nullable().optional(),
   sourceLocale: z.string().nullable().optional(),
   previousReport: teacherProgressReportSchema.nullable().optional(),
-  subjectKey: z.string().nullable().optional(),
 });
 
 function computeMasteryPercent(
@@ -91,8 +92,8 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       : null;
     const teachingPlaybook = await buildStudentTeachingPlaybook({
       studentUserId: data.studentUserId,
-      subjectKey: data.subjectKey ?? null,
-      subjectLabel: data.subjectKey ?? data.topicTitle,
+      subjectKey: data.courseId ?? null,
+      subjectLabel: data.courseTitle ?? data.topicTitle,
       topicLocalGaps: [],
       topicLocalUsedExamples: [],
     });
@@ -139,8 +140,8 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
         classroomStudentId: data.classroomStudentId,
         topicId: data.topicId,
         topicTitle: data.topicTitle,
-        subjectKey: data.subjectKey ?? null,
-        subjectLabel: data.subjectKey ?? data.topicTitle,
+        subjectKey: data.courseId ?? null,
+        subjectLabel: data.courseTitle ?? data.topicTitle,
         sessionId: data.sessionId,
         interestProfile,
         state,

@@ -1,18 +1,23 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { type UIMessage } from "ai";
 import {
   AlertCircle,
   ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  Image as ImageIcon,
   Loader2,
   MessageSquare,
   Mic,
+  PlayCircle,
   RefreshCw,
   Send,
   Sparkles,
   Square,
-  XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -21,7 +26,7 @@ import { useStudentTutoringWorkspace } from "@/components/learning/hooks/use-stu
 import { QuizCard } from "@/components/learning/generative/quiz-card";
 import { GradeCard } from "@/components/learning/generative/grade-card";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
-import { Link, useRouter } from "@/i18n/routing";
+import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import type { LearningMeData } from "@/lib/api/learning";
 import type {
@@ -66,7 +71,106 @@ type ToolPartRecord = {
   args?: Record<string, unknown>;
   state?: string;
   result?: unknown;
+  output?: unknown;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getToolOutput(part: ToolPartRecord) {
+  if (part.toolInvocation && "result" in part.toolInvocation) {
+    return part.toolInvocation.result;
+  }
+
+  return part.output ?? part.result;
+}
+
+function getToolPayload(args: Record<string, unknown> | undefined, output: unknown) {
+  return isRecord(output) ? output : args ?? {};
+}
+
+function hasSuccessfulFinishSession(messages: LiveMessage[]) {
+  return messages.some((message) =>
+    message.parts?.some((part) => {
+      const toolPart = part as unknown as ToolPartRecord;
+      const toolName =
+        part.type === "tool-invocation"
+          ? toolPart.toolInvocation?.toolName
+          : toolPart.toolName;
+      if (toolName !== "finish_session") return false;
+      const output = getToolOutput(toolPart);
+      return isRecord(output) && output.success === true;
+    }),
+  );
+}
+
+function textValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function MediaResultCard({
+  mediaType,
+  result,
+}: {
+  mediaType: "image" | "video";
+  result: Record<string, unknown>;
+}) {
+  const title = textValue(result.title) || (mediaType === "image" ? "Image" : "Video");
+  const sourceLabel = textValue(result.sourceLabel) || textValue(result.provider);
+  const sourceUrl = textValue(result.sourceUrl) || textValue(result.watchUrl) || textValue(result.url);
+  const reason = textValue(result.reason);
+  const imageUrl = mediaType === "image" ? textValue(result.url) : "";
+  const videoUrl = mediaType === "video" ? textValue(result.watchUrl) || textValue(result.url) : "";
+
+  return (
+    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex gap-3">
+        <div className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-500">
+          {mediaType === "image" && imageUrl ? (
+            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+          ) : mediaType === "video" ? (
+            <PlayCircle className="h-6 w-6" />
+          ) : (
+            <ImageIcon className="h-6 w-6" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-sm font-semibold text-slate-900">
+            {title}
+          </p>
+          {sourceUrl ? (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-flex max-w-full items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900"
+            >
+              <span className="truncate">{sourceLabel || "Open source"}</span>
+              <ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          ) : null}
+          {reason ? (
+            <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-600">
+              {reason}
+            </p>
+          ) : null}
+          {mediaType === "video" && videoUrl ? (
+            <a
+              href={videoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-semibold text-white hover:bg-slate-800"
+            >
+              <PlayCircle className="h-3.5 w-3.5" />
+              Watch
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function LiveSessionClient({
   classroomId,
@@ -75,7 +179,6 @@ export function LiveSessionClient({
   initialPatterns,
   initialTutoringSession,
 }: Props) {
-  const router = useRouter();
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [sessionInput, setSessionInput] = useState("");
 
@@ -83,10 +186,9 @@ export function LiveSessionClient({
     tutoringSessionQuery,
     tutoringChatMessages,
     sendTutoringChatMessage,
-    addTutoringToolResult,
-    completeTutoringMutation,
     selectedLesson,
     sessionState,
+    sessionCompleted,
     tutoringInitializationState,
     canUseTutoringChat,
     tutoringChatStatus,
@@ -147,20 +249,6 @@ export function LiveSessionClient({
     }
   }, [liveMessages]);
 
-  const handleEndSession = () => {
-    if (
-      confirm(
-        "Are you sure you want to finish this tutoring session? Your teacher report will be prepared based on your progress so far.",
-      )
-    ) {
-      completeTutoringMutation.mutate(undefined, {
-        onSuccess: () => {
-          router.replace(`/student/classes/${classroomId}/progress`);
-        },
-      });
-    }
-  };
-
   const sessionFocus = useMemo(() => {
     return (
       sessionState?.contentScopeSnapshot?.learningOutcomes
@@ -168,9 +256,19 @@ export function LiveSessionClient({
         .slice(0, 4) ?? []
     );
   }, [sessionState?.contentScopeSnapshot?.learningOutcomes]);
+  const streamedCompletion = hasSuccessfulFinishSession(liveMessages);
+  const sessionFinished = sessionCompleted || streamedCompletion;
   const showEmptyReadyState =
-    tutoringInitializationState.status === "ready" && liveMessages.length === 0;
-  const composerDisabled = !canUseTutoringChat || completeTutoringMutation.isPending;
+    tutoringInitializationState.status === "ready" &&
+    liveMessages.length === 0 &&
+    !sessionFinished;
+  const composerDisabled = !canUseTutoringChat || sessionFinished;
+
+  useEffect(() => {
+    if (streamedCompletion && !sessionCompleted) {
+      void tutoringSessionQuery.refetch();
+    }
+  }, [sessionCompleted, streamedCompletion, tutoringSessionQuery]);
 
   useEffect(() => {
     logTutoringDebug("client:live-session:state", {
@@ -227,19 +325,11 @@ export function LiveSessionClient({
           )}
         </div>
 
-        {selectedLesson && tutoringSessionQuery.data?.data.sessionId ? (
-          <button
-            onClick={handleEndSession}
-            disabled={completeTutoringMutation.isPending}
-            className="inline-flex items-center gap-2 rounded-md bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-100 disabled:opacity-50"
-          >
-            {completeTutoringMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <XCircle className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">End session</span>
-          </button>
+        {sessionFinished ? (
+          <div className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700">
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Completed</span>
+          </div>
         ) : null}
       </header>
 
@@ -304,6 +394,22 @@ export function LiveSessionClient({
               />
             ) : null}
 
+            {sessionFinished ? (
+              <SessionStatusCard
+                icon={<CheckCircle2 className="h-6 w-6 text-emerald-600" />}
+                title="Session complete"
+                message="Your teacher report is being prepared. You can review the transcript here or return to progress."
+                action={
+                  <Link
+                    href={`/student/classes/${classroomId}/progress`}
+                    className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+                  >
+                    View progress
+                  </Link>
+                }
+              />
+            ) : null}
+
             {tutoringInitializationState.status === "ready"
               ? liveMessages.map((message) => (
                   <div
@@ -364,66 +470,61 @@ export function LiveSessionClient({
                           : toolPart.input || toolPart.args) as
                           | Record<string, unknown>
                           | undefined;
+                        const output = getToolOutput(toolPart);
+                        const payload = getToolPayload(args, output);
                         const isResolved =
                           part.type === "tool-invocation"
                             ? toolPart.toolInvocation !== undefined &&
                               "result" in toolPart.toolInvocation
                             : toolPart.state === "output-available" ||
-                              toolPart.result !== undefined;
+                              toolPart.result !== undefined ||
+                              toolPart.output !== undefined;
                         const resolvedToolCallId =
                           typeof toolCallId === "string" ? toolCallId : "tool-call";
 
                         if (toolName === "administer_quiz") {
-                          if (isResolved) return null;
-
                           return (
                             <div key={index} className="w-full min-w-[300px]">
                               <QuizCard
                                 quizId={
-                                  typeof args?.quizId === "string"
-                                    ? args.quizId
+                                  typeof payload.quizId === "string"
+                                    ? payload.quizId
                                     : resolvedToolCallId
                                 }
                                 conceptKey={
-                                  typeof args?.conceptKey === "string"
-                                    ? args.conceptKey
+                                  typeof payload.conceptKey === "string"
+                                    ? payload.conceptKey
                                     : ""
                                 }
                                 questionText={
-                                  typeof args?.questionText === "string"
-                                    ? args.questionText
+                                  typeof payload.questionText === "string"
+                                    ? payload.questionText
                                     : ""
                                 }
-                                acceptsImageUpload={args?.acceptsImageUpload === true}
+                                acceptsImageUpload={payload.acceptsImageUpload === true}
+                                disabled={sessionFinished}
                                 onSubmit={({ answerText, attachments }) => {
                                   const resolvedQuizId =
-                                    typeof args?.quizId === "string"
-                                      ? args.quizId
+                                    typeof payload.quizId === "string"
+                                      ? payload.quizId
                                       : resolvedToolCallId;
                                   const resolvedConceptKey =
-                                    typeof args?.conceptKey === "string"
-                                      ? args.conceptKey
+                                    typeof payload.conceptKey === "string"
+                                      ? payload.conceptKey
                                       : "";
                                   const resolvedQuestionText =
-                                    typeof args?.questionText === "string"
-                                      ? args.questionText
+                                    typeof payload.questionText === "string"
+                                      ? payload.questionText
                                       : "";
 
-                                  addTutoringToolResult({
-                                    toolCallId: resolvedToolCallId,
-                                    tool: toolName ?? "administer_quiz",
-                                    state: "output-available",
-                                    output: {
-                                      quizId: resolvedQuizId,
-                                      conceptKey: resolvedConceptKey,
-                                      questionText: resolvedQuestionText,
-                                      answerText,
-                                      hasAttachments: !!attachments,
-                                      attachmentCount: attachments?.length ?? 0,
-                                    },
-                                  } as Parameters<typeof addTutoringToolResult>[0]);
-                                  
-                                  const baseMessage = { role: "user" as const, parts: [{ type: "text" as const, text: answerText }] };
+                                  const answerMessage = [
+                                    `Quiz answer`,
+                                    `quizId: ${resolvedQuizId}`,
+                                    `conceptKey: ${resolvedConceptKey}`,
+                                    `question: ${resolvedQuestionText}`,
+                                    `answer: ${answerText}`,
+                                  ].join("\n");
+                                  const baseMessage = { role: "user" as const, parts: [{ type: "text" as const, text: answerMessage }] };
                                   if (attachments) {
                                     sendTutoringChatMessage({
                                       ...baseMessage,
@@ -439,31 +540,54 @@ export function LiveSessionClient({
                         }
 
                         if (toolName === "grade_student_work") {
-                          if (isResolved) return null;
+                          if (!isResolved) return null;
+                          if (isRecord(output) && output.success === false) return null;
 
                           return (
                             <div key={index} className="w-full min-w-[300px]">
                               <GradeCard
                                 conceptKey={
-                                  typeof args?.conceptKey === "string"
-                                    ? args.conceptKey
+                                  typeof payload.conceptKey === "string"
+                                    ? payload.conceptKey
                                     : undefined
                                 }
                                 score={
-                                  args?.score !== undefined && typeof args.score === "number"
-                                    ? args.score
-                                    : Number(args?.score ?? 0)
+                                  payload.score !== undefined && typeof payload.score === "number"
+                                    ? payload.score
+                                    : Number(payload.score ?? 0)
                                 }
-                                feedback={String(args?.feedback ?? "")}
+                                feedback={String(payload.feedback ?? "")}
                                 masteryLevel={
-                                  args?.masteryLevel === "applied" ||
-                                  args?.masteryLevel === "generative"
-                                    ? args.masteryLevel
+                                  payload.masteryLevel === "applied" ||
+                                  payload.masteryLevel === "generative"
+                                    ? payload.masteryLevel
                                     : "surface"
                                 }
                               />
                             </div>
                           );
+                        }
+
+                        if (toolName === "search_image" || toolName === "search_video") {
+                          if (!isResolved || !isRecord(output) || output.success !== true) {
+                            return null;
+                          }
+
+                          return (
+                            <MediaResultCard
+                              key={index}
+                              mediaType={toolName === "search_image" ? "image" : "video"}
+                              result={output}
+                            />
+                          );
+                        }
+
+                        if (toolName === "finish_session") {
+                          if (!isResolved || !isRecord(output) || output.success !== true) {
+                            return null;
+                          }
+
+                          return null;
                         }
 
                         return null;
