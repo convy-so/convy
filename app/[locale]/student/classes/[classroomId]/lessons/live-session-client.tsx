@@ -1,19 +1,13 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { type UIMessage } from "ai";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertCircle,
   ArrowLeft,
   CheckCircle2,
-  ExternalLink,
-  Image as ImageIcon,
+  AlertCircle,
   Loader2,
   MessageSquare,
   Mic,
-  PlayCircle,
   RefreshCw,
   Send,
   Sparkles,
@@ -21,23 +15,32 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { useAudioTranscription } from "@/hooks/use-audio-transcription";
-import { useStudentTutoringWorkspace } from "@/components/learning/hooks/use-student-tutoring-workspace";
-import { QuizCard } from "@/components/learning/generative/quiz-card";
-import { GradeCard } from "@/components/learning/generative/grade-card";
-import { MarkdownMessage } from "@/components/ui/markdown-message";
+import { useAudioTranscription } from "@/features/surveys/client/hooks/use-audio-transcription";
+import {
+  type TutoringOutgoingMessage,
+  useStudentTutoringWorkspace,
+} from "@/features/tutoring/client/hooks/use-student-tutoring-workspace";
+import { QuizCard } from "@/features/tutoring/ui/generative/quiz-card";
+import { GradeCard } from "@/features/tutoring/ui/generative/grade-card";
+import { MarkdownMessage } from "@/shared/ui/markdown-message";
 import { Link } from "@/i18n/routing";
-import { cn } from "@/lib/utils";
-import type { LearningMeData } from "@/lib/api/learning";
+import { cn } from "@/shared/ui/tailwind-class-utils";
+import type { LearningMeData } from "@/features/tutoring/public-client";
+import { STUDENT_MASTERY_LEVEL } from "@/shared/learning/constants";
 import type {
   getStudentLearningWorkspaceInitialData,
-} from "@/lib/server/app-queries";
-import { logTutoringDebug, summarizeTutoringText } from "@/lib/learning/tutoring-debug";
-
-type LiveMessage = UIMessage & {
-  metadata: Record<string, unknown>;
-  createdAt?: string | Date;
-};
+} from "@/shared/http/page-data";
+import { logTutoringDebug, summarizeTutoringText } from "@/features/tutoring/public-server";
+import {
+  appendTranscript,
+  getToolPayload,
+  hasSuccessfulFinishSession,
+  isToolPayloadRecord,
+  MediaResultCard,
+  normalizeLiveMessage,
+  type LiveMessage,
+} from "./live-session-message-parts";
+import { LiveSessionStatusCard } from "./live-session-status-card";
 
 interface Props {
   classroomId: string;
@@ -51,125 +54,39 @@ interface Props {
   >["initialTutoringSession"];
 }
 
-function appendTranscript(currentValue: string, transcript: string) {
-  const trimmedCurrent = currentValue.trim();
-  return trimmedCurrent ? `${trimmedCurrent} ${transcript}`.trim() : transcript;
+function getPayloadString(
+  payload: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  return typeof payload[key] === "string" ? payload[key] : undefined;
 }
 
-type ToolInvocationPayload = {
-  toolName?: string;
-  toolCallId?: string;
-  args?: Record<string, unknown>;
-  result?: unknown;
-};
-
-type ToolPartRecord = {
-  toolInvocation?: ToolInvocationPayload;
-  toolName?: string;
-  toolCallId?: string;
-  input?: Record<string, unknown>;
-  args?: Record<string, unknown>;
-  state?: string;
-  result?: unknown;
-  output?: unknown;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function getPayloadBoolean(
+  payload: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
+  return typeof payload[key] === "boolean" ? payload[key] : undefined;
 }
 
-function getToolOutput(part: ToolPartRecord) {
-  if (part.toolInvocation && "result" in part.toolInvocation) {
-    return part.toolInvocation.result;
+function getPayloadNumber(
+  payload: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  return typeof payload[key] === "number" ? payload[key] : undefined;
+}
+
+function getMasteryLevel(
+  payload: Record<string, unknown>,
+): "surface" | "applied" | "generative" {
+  const masteryLevel = getPayloadString(payload, "masteryLevel");
+  if (
+    masteryLevel === STUDENT_MASTERY_LEVEL.APPLIED ||
+    masteryLevel === STUDENT_MASTERY_LEVEL.GENERATIVE
+  ) {
+    return masteryLevel;
   }
 
-  return part.output ?? part.result;
-}
-
-function getToolPayload(args: Record<string, unknown> | undefined, output: unknown) {
-  return isRecord(output) ? output : args ?? {};
-}
-
-function hasSuccessfulFinishSession(messages: LiveMessage[]) {
-  return messages.some((message) =>
-    message.parts?.some((part) => {
-      const toolPart = part as unknown as ToolPartRecord;
-      const toolName =
-        part.type === "tool-invocation"
-          ? toolPart.toolInvocation?.toolName
-          : toolPart.toolName;
-      if (toolName !== "finish_session") return false;
-      const output = getToolOutput(toolPart);
-      return isRecord(output) && output.success === true;
-    }),
-  );
-}
-
-function textValue(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
-function MediaResultCard({
-  mediaType,
-  result,
-}: {
-  mediaType: "image" | "video";
-  result: Record<string, unknown>;
-}) {
-  const title = textValue(result.title) || (mediaType === "image" ? "Image" : "Video");
-  const sourceLabel = textValue(result.sourceLabel) || textValue(result.provider);
-  const sourceUrl = textValue(result.sourceUrl) || textValue(result.watchUrl) || textValue(result.url);
-  const reason = textValue(result.reason);
-  const imageUrl = mediaType === "image" ? textValue(result.url) : "";
-  const videoUrl = mediaType === "video" ? textValue(result.watchUrl) || textValue(result.url) : "";
-
-  return (
-    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex gap-3">
-        <div className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-500">
-          {mediaType === "image" && imageUrl ? (
-            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
-          ) : mediaType === "video" ? (
-            <PlayCircle className="h-6 w-6" />
-          ) : (
-            <ImageIcon className="h-6 w-6" />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-sm font-semibold text-slate-900">
-            {title}
-          </p>
-          {sourceUrl ? (
-            <a
-              href={sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1 inline-flex max-w-full items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900"
-            >
-              <span className="truncate">{sourceLabel || "Open source"}</span>
-              <ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
-          ) : null}
-          {reason ? (
-            <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-600">
-              {reason}
-            </p>
-          ) : null}
-          {mediaType === "video" && videoUrl ? (
-            <a
-              href={videoUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-flex items-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-            >
-              <PlayCircle className="h-3.5 w-3.5" />
-              Watch
-            </a>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
+  return STUDENT_MASTERY_LEVEL.SURFACE;
 }
 
 export function LiveSessionClient({
@@ -181,6 +98,12 @@ export function LiveSessionClient({
 }: Props) {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [sessionInput, setSessionInput] = useState("");
+  const voiceBarTimings = [0.55, 0.8, 1, 0.65, 0.9, 0.5, 0.75, 0.4, 0.85, 0.6];
+
+  const createUserTextMessage = (text: string): TutoringOutgoingMessage => ({
+    role: "user",
+    parts: [{ type: "text", text }],
+  });
 
   const {
     tutoringSessionQuery,
@@ -214,32 +137,7 @@ export function LiveSessionClient({
   const isTranscribing = transcriptionPhase === "transcribing" && transcriptionTarget === "student-session";
 
   const liveMessages = useMemo<LiveMessage[]>(
-    () =>
-      tutoringChatMessages.map((message) => {
-        const hasAnnotations = (
-          msg: unknown,
-        ): msg is { annotations: Array<{ type: string; data?: Record<string, unknown> }> } => {
-          return typeof msg === "object" && msg !== null && "annotations" in msg;
-        };
-        const metadataAnnotation = hasAnnotations(message)
-          ? message.annotations?.find((ann) => ann.type === "metadata")
-          : undefined;
-
-        const messageRecord = message as unknown as Record<string, unknown>;
-        const messageText = typeof messageRecord.text === "string" ? messageRecord.text : typeof messageRecord.content === "string" ? messageRecord.content : undefined;
-        const parts =
-          message.parts && message.parts.length > 0
-            ? message.parts
-            : messageText
-              ? [{ type: "text" as const, text: messageText }]
-              : [];
-
-        return {
-          ...message,
-          parts,
-          metadata: metadataAnnotation?.data ?? {},
-        } as LiveMessage;
-      }),
+    () => tutoringChatMessages.map(normalizeLiveMessage),
     [tutoringChatMessages],
   );
 
@@ -340,7 +238,7 @@ export function LiveSessionClient({
         >
           <div className="mx-auto flex max-w-4xl flex-col gap-6">
             {tutoringInitializationState.status === "loading" ? (
-              <SessionStatusCard
+              <LiveSessionStatusCard
                 icon={<Loader2 className="h-6 w-6 animate-spin text-slate-400" />}
                 title={tutoringInitializationState.title}
                 message={tutoringInitializationState.message}
@@ -348,7 +246,7 @@ export function LiveSessionClient({
             ) : null}
 
             {tutoringInitializationState.status === "blocked" ? (
-              <SessionStatusCard
+              <LiveSessionStatusCard
                 icon={<AlertCircle className="h-6 w-6 text-amber-500" />}
                 title={tutoringInitializationState.title}
                 message={tutoringInitializationState.message}
@@ -367,7 +265,7 @@ export function LiveSessionClient({
             ) : null}
 
             {tutoringInitializationState.status === "error" ? (
-              <SessionStatusCard
+              <LiveSessionStatusCard
                 icon={<AlertCircle className="h-6 w-6 text-rose-500" />}
                 title={tutoringInitializationState.title}
                 message={tutoringInitializationState.message}
@@ -387,7 +285,7 @@ export function LiveSessionClient({
             ) : null}
 
             {showEmptyReadyState ? (
-              <SessionStatusCard
+              <LiveSessionStatusCard
                 icon={<MessageSquare className="h-6 w-6 text-emerald-600" />}
                 title="Your tutor is ready"
                 message="Start with what feels unclear, what you want to practice, or the exact question you need help with."
@@ -395,7 +293,7 @@ export function LiveSessionClient({
             ) : null}
 
             {sessionFinished ? (
-              <SessionStatusCard
+              <LiveSessionStatusCard
                 icon={<CheckCircle2 className="h-6 w-6 text-emerald-600" />}
                 title="Session complete"
                 message="Your teacher report is being prepared. You can review the transcript here or return to progress."
@@ -426,8 +324,8 @@ export function LiveSessionClient({
                     ) : null}
 
                     <div className="flex max-w-[85%] flex-col gap-3 lg:max-w-[75%]">
-                      {message.parts?.map((part, index) => {
-                        if (part.type === "text" && part.text.trim().length > 0) {
+                      {message.parts.map((part, index) => {
+                        if (part.kind === "text" && part.text.trim().length > 0) {
                           return (
                             <div
                               key={index}
@@ -447,91 +345,45 @@ export function LiveSessionClient({
                           );
                         }
 
-                        const toolPart = part as unknown as ToolPartRecord;
-                        const isToolCall =
-                          part.type === "tool-invocation" ||
-                          part.type === "dynamic-tool" ||
-                          part.type.startsWith("tool-");
-
-                        if (!isToolCall) {
+                        if (part.kind !== "tool") {
                           return null;
                         }
 
-                        const toolName =
-                          part.type === "tool-invocation"
-                            ? toolPart.toolInvocation?.toolName
-                            : toolPart.toolName;
-                        const toolCallId =
-                          part.type === "tool-invocation"
-                            ? toolPart.toolInvocation?.toolCallId
-                            : toolPart.toolCallId;
-                        const args = (part.type === "tool-invocation"
-                          ? toolPart.toolInvocation?.args
-                          : toolPart.input || toolPart.args) as
-                          | Record<string, unknown>
-                          | undefined;
-                        const output = getToolOutput(toolPart);
-                        const payload = getToolPayload(args, output);
-                        const isResolved =
-                          part.type === "tool-invocation"
-                            ? toolPart.toolInvocation !== undefined &&
-                              "result" in toolPart.toolInvocation
-                            : toolPart.state === "output-available" ||
-                              toolPart.result !== undefined ||
-                              toolPart.output !== undefined;
-                        const resolvedToolCallId =
-                          typeof toolCallId === "string" ? toolCallId : "tool-call";
+                        const toolName = part.toolName;
+                        const payload = getToolPayload(part.input, part.output);
+                        const resolvedToolCallId = part.toolCallId ?? "tool-call";
+                        const quizId = getPayloadString(payload, "quizId");
+                        const conceptKey = getPayloadString(payload, "conceptKey");
+                        const questionText = getPayloadString(payload, "questionText");
+                        const acceptsImageUpload =
+                          getPayloadBoolean(payload, "acceptsImageUpload") === true;
 
                         if (toolName === "administer_quiz") {
                           return (
                             <div key={index} className="w-full min-w-[300px]">
                               <QuizCard
-                                quizId={
-                                  typeof payload.quizId === "string"
-                                    ? payload.quizId
-                                    : resolvedToolCallId
-                                }
-                                conceptKey={
-                                  typeof payload.conceptKey === "string"
-                                    ? payload.conceptKey
-                                    : ""
-                                }
-                                questionText={
-                                  typeof payload.questionText === "string"
-                                    ? payload.questionText
-                                    : ""
-                                }
-                                acceptsImageUpload={payload.acceptsImageUpload === true}
+                                quizId={quizId ?? resolvedToolCallId}
+                                conceptKey={conceptKey ?? ""}
+                                questionText={questionText ?? ""}
+                                acceptsImageUpload={acceptsImageUpload}
                                 disabled={sessionFinished}
                                 onSubmit={({ answerText, attachments }) => {
-                                  const resolvedQuizId =
-                                    typeof payload.quizId === "string"
-                                      ? payload.quizId
-                                      : resolvedToolCallId;
-                                  const resolvedConceptKey =
-                                    typeof payload.conceptKey === "string"
-                                      ? payload.conceptKey
-                                      : "";
-                                  const resolvedQuestionText =
-                                    typeof payload.questionText === "string"
-                                      ? payload.questionText
-                                      : "";
-
                                   const answerMessage = [
                                     `Quiz answer`,
-                                    `quizId: ${resolvedQuizId}`,
-                                    `conceptKey: ${resolvedConceptKey}`,
-                                    `question: ${resolvedQuestionText}`,
+                                    `quizId: ${quizId ?? resolvedToolCallId}`,
+                                    `conceptKey: ${conceptKey ?? ""}`,
+                                    `question: ${questionText ?? ""}`,
                                     `answer: ${answerText}`,
                                   ].join("\n");
-                                  const baseMessage = { role: "user" as const, parts: [{ type: "text" as const, text: answerMessage }] };
                                   if (attachments) {
-                                    sendTutoringChatMessage({
-                                      ...baseMessage,
-                                      experimental_attachments: attachments,
-                                    } as Parameters<typeof sendTutoringChatMessage>[0]);
+                                    void sendTutoringChatMessage({
+                                      text: answerMessage,
+                                      files: attachments,
+                                    });
                                   } else {
-                                    sendTutoringChatMessage(baseMessage as Parameters<typeof sendTutoringChatMessage>[0]);
+                                    void sendTutoringChatMessage(
+                                      createUserTextMessage(answerMessage),
+                                    );
                                   }
                                 }}
                               />
@@ -540,36 +392,35 @@ export function LiveSessionClient({
                         }
 
                         if (toolName === "grade_student_work") {
-                          if (!isResolved) return null;
-                          if (isRecord(output) && output.success === false) return null;
+                          if (!part.isResolved) return null;
+                          if (
+                            isToolPayloadRecord(part.output) &&
+                            getPayloadBoolean(part.output, "success") === false
+                          ) {
+                            return null;
+                          }
 
                           return (
                             <div key={index} className="w-full min-w-[300px]">
                               <GradeCard
-                                conceptKey={
-                                  typeof payload.conceptKey === "string"
-                                    ? payload.conceptKey
-                                    : undefined
-                                }
+                                conceptKey={conceptKey}
                                 score={
-                                  payload.score !== undefined && typeof payload.score === "number"
-                                    ? payload.score
-                                    : Number(payload.score ?? 0)
+                                  getPayloadNumber(payload, "score") ??
+                                  Number(getPayloadString(payload, "score") ?? 0)
                                 }
-                                feedback={String(payload.feedback ?? "")}
-                                masteryLevel={
-                                  payload.masteryLevel === "applied" ||
-                                  payload.masteryLevel === "generative"
-                                    ? payload.masteryLevel
-                                    : "surface"
-                                }
+                                feedback={getPayloadString(payload, "feedback") ?? ""}
+                                masteryLevel={getMasteryLevel(payload)}
                               />
                             </div>
                           );
                         }
 
                         if (toolName === "search_image" || toolName === "search_video") {
-                          if (!isResolved || !isRecord(output) || output.success !== true) {
+                          if (
+                            !part.isResolved ||
+                            !isToolPayloadRecord(part.output) ||
+                            getPayloadBoolean(part.output, "success") !== true
+                          ) {
                             return null;
                           }
 
@@ -577,13 +428,17 @@ export function LiveSessionClient({
                             <MediaResultCard
                               key={index}
                               mediaType={toolName === "search_image" ? "image" : "video"}
-                              result={output}
+                              result={part.output}
                             />
                           );
                         }
 
                         if (toolName === "finish_session") {
-                          if (!isResolved || !isRecord(output) || output.success !== true) {
+                          if (
+                            !part.isResolved ||
+                            !isToolPayloadRecord(part.output) ||
+                            getPayloadBoolean(part.output, "success") !== true
+                          ) {
                             return null;
                           }
 
@@ -638,11 +493,11 @@ export function LiveSessionClient({
                   sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
                   text: summarizeTutoringText(sessionInput.trim(), 180),
                 });
-                sendTutoringChatMessage({ role: "user", parts: [{ type: "text", text: sessionInput.trim() }] } as Parameters<typeof sendTutoringChatMessage>[0]);
+                void sendTutoringChatMessage(createUserTextMessage(sessionInput.trim()));
                 setSessionInput("");
               }}
             >
-              {/* ── VOICE RECORDING STATE ── */}
+              {/* Ã¢â€â‚¬Ã¢â€â‚¬ VOICE RECORDING STATE Ã¢â€â‚¬Ã¢â€â‚¬ */}
               {isRecording ? (
                 <div className="flex flex-col items-center gap-4 rounded-2xl border border-rose-200 bg-white px-6 py-5">
                   {/* mic + animated waveform */}
@@ -653,7 +508,7 @@ export function LiveSessionClient({
                     </div>
                     {/* waveform bars */}
                     <div className="flex h-8 items-center gap-[3px]">
-                      {([0.55, 0.8, 1, 0.65, 0.9, 0.5, 0.75, 0.4, 0.85, 0.6] as number[]).map((delay, i) => (
+                      {voiceBarTimings.map((delay, i) => (
                         <div
                           key={i}
                           className="w-[3px] rounded-full bg-rose-400 origin-bottom"
@@ -664,7 +519,7 @@ export function LiveSessionClient({
                         />
                       ))}
                     </div>
-                    <span className="text-sm font-medium text-rose-600 tracking-wide">Listening…</span>
+                    <span className="text-sm font-medium text-rose-600 tracking-wide">ListeningÃ¢â‚¬Â¦</span>
                   </div>
 
                   {/* live transcript preview */}
@@ -675,7 +530,7 @@ export function LiveSessionClient({
                         <span className="ml-1 inline-block h-4 w-[2px] animate-pulse bg-rose-400 align-middle" />
                       </p>
                     ) : (
-                      <p className="text-sm text-slate-400">Start speaking — your words will appear here…</p>
+                      <p className="text-sm text-slate-400">Start speaking Ã¢â‚¬â€ your words will appear hereÃ¢â‚¬Â¦</p>
                     )}
                   </div>
 
@@ -691,14 +546,14 @@ export function LiveSessionClient({
                 </div>
 
               ) : isTranscribing ? (
-                /* ── PROCESSING STATE ── */
+                /* Ã¢â€â‚¬Ã¢â€â‚¬ PROCESSING STATE Ã¢â€â‚¬Ã¢â€â‚¬ */
                 <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-5">
                   <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                  <span className="text-sm text-slate-500">Processing your speech…</span>
+                  <span className="text-sm text-slate-500">Processing your speechÃ¢â‚¬Â¦</span>
                 </div>
 
               ) : (
-                /* ── NORMAL COMPOSER ── */
+                /* Ã¢â€â‚¬Ã¢â€â‚¬ NORMAL COMPOSER Ã¢â€â‚¬Ã¢â€â‚¬ */
                 <div className="flex items-end gap-3">
                   <div className="relative flex-1">
                     <textarea
@@ -717,7 +572,9 @@ export function LiveSessionClient({
                               sessionId: tutoringSessionQuery.data?.data.sessionId ?? null,
                               text: summarizeTutoringText(sessionInput.trim(), 180),
                             });
-                            sendTutoringChatMessage({ role: "user", parts: [{ type: "text", text: sessionInput.trim() }] } as Parameters<typeof sendTutoringChatMessage>[0]);
+                            void sendTutoringChatMessage(
+                              createUserTextMessage(sessionInput.trim()),
+                            );
                             setSessionInput("");
                           }
                         }
@@ -726,16 +583,16 @@ export function LiveSessionClient({
                     {isVoiceInputSupported ? (
                       <button
                         type="button"
-                        onClick={() =>
-                          startTranscription({
+                        onClick={() => {
+                          void startTranscription({
                             target: "student-session",
                             language: "multi",
                             onTranscript: (transcript) =>
                               setSessionInput((current) =>
                                 appendTranscript(current, transcript),
                               ),
-                          })
-                        }
+                          });
+                        }}
                         disabled={composerDisabled}
                         className={cn(
                           "absolute bottom-2.5 right-2.5 rounded-xl p-2 transition-colors",
@@ -762,10 +619,10 @@ export function LiveSessionClient({
                 <p className="text-xs text-slate-500">
                   {canUseTutoringChat
                     ? isRecording
-                      ? "Tap 'Stop recording' when you're done speaking — then review and send."
+                      ? "Tap 'Stop recording' when you're done speaking Ã¢â‚¬â€ then review and send."
                       : isTranscribing
-                        ? "Converting your speech to text…"
-                        : "Press Enter to send · Shift + Enter for a new line."
+                        ? "Converting your speech to textÃ¢â‚¬Â¦"
+                        : "Press Enter to send Ã‚Â· Shift + Enter for a new line."
                     : tutoringInitializationState.message}
                 </p>
               </div>
@@ -773,35 +630,6 @@ export function LiveSessionClient({
           </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-function SessionStatusCard({
-  icon,
-  title,
-  message,
-  action,
-}: {
-  icon: ReactNode;
-  title: string;
-  message: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-slate-400 ring-1 ring-slate-100">
-        {icon}
-      </div>
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold text-slate-900">
-          {title}
-        </h2>
-        <p className="max-w-xs text-sm text-slate-500">
-          {message}
-        </p>
-      </div>
-      {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );
 }

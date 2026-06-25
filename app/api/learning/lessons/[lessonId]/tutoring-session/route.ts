@@ -1,11 +1,24 @@
-import { GET as getTopicChat } from "../../../topics/[topicId]/chat/route";
+import {
+  GET as getLessonTutoringSession,
+  POST as postLessonTutoringSession,
+} from "@/features/tutoring/server/api/lesson-tutoring-session-route";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
   const { lessonId } = await params;
-  return getTopicChat(request, {
+  return getLessonTutoringSession(request, {
+    params: Promise.resolve({ topicId: lessonId }),
+  });
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ lessonId: string }> },
+) {
+  const { lessonId } = await params;
+  return postLessonTutoringSession(request, {
     params: Promise.resolve({ topicId: lessonId }),
   });
 }

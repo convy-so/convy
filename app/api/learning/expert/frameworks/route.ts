@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { listExpertFrameworkCourseSummaries } from "@/lib/learning/expert-framework-summaries";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
+import { listExpertFrameworkCourseSummaries } from "@/features/tutoring/server/expert-framework-summaries";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 export async function GET() {
   try {

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { ExpertFrameworkVersionStudio } from "@/components/expert/expert-framework-version-studio";
-import { getFrameworkById } from "@/lib/learning/framework-runtime-storage";
+import { ExpertFrameworkVersionStudio } from "@/features/tutoring/expert/ui/expert-framework-version-studio";
+import { getFrameworkById } from "@/features/tutoring/server/framework-runtime-storage";
 
 export default async function ExpertFrameworkPage({
   params,

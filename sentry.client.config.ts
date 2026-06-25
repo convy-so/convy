@@ -1,11 +1,11 @@
 import * as Sentry from "@sentry/nextjs";
-import { clientEnv } from "@/lib/env.client";
+import { clientEnv } from "@/shared/config/client-env";
 import {
   CONSENT_COOKIE_NAME,
   hasAnalyticsConsent,
   parseConsentState,
-} from "@/lib/privacy/shared";
-import { scrubSentryEvent } from "@/lib/privacy/sentry";
+} from "@/features/privacy/public-server";
+import { scrubSentryEvent } from "@/features/privacy/public-server";
 
 function readConsentFromDocumentCookie() {
   if (typeof document === "undefined") {

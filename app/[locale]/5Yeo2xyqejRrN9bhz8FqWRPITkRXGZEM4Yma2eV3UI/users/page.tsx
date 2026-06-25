@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { Loader2 } from "lucide-react";
 
 import { getUserGrowthData } from "@/app/actions/admin";
-import { GrowthChart } from "@/components/admin/growth-chart";
+import { GrowthChart } from "@/features/admin/ui/growth-chart";
 
 export default async function AdminUsersPage({
   params,

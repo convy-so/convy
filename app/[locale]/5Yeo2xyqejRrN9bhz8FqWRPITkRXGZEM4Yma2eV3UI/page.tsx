@@ -6,9 +6,9 @@ import {
   getUsageCostData,
   getUsageTypeBreakdown,
 } from "@/app/actions/admin";
-import { GrowthChart } from "@/components/admin/growth-chart";
-import { StatsCard } from "@/components/admin/stats-card";
-import { UsageTypeChart } from "@/components/admin/usage-type-chart";
+import { GrowthChart } from "@/features/admin/ui/growth-chart";
+import { StatsCard } from "@/features/admin/ui/admin-stats-card";
+import { UsageTypeChart } from "@/features/admin/ui/usage-type-chart";
 
 export default async function AdminOverviewPage({
   params,

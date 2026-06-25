@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/api/error-contract";
+import { apiError } from "@/shared/http/api-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { toApiAuthError } from "@/lib/auth/error-map";
-import * as ClassroomService from "@/lib/learning/classroom-service";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { toApiAuthError } from "@/features/auth/public-server";
+import * as ClassroomService from "@/features/tutoring/server/classroom-service";
 
 export async function GET() {
   try {

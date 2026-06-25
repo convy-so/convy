@@ -1,13 +1,13 @@
-import Navbar from "@/components/navbar";
-import HeroSection from "@/components/hero-section";
-import VideoSection from "@/components/video-section";
-import VisualShowcaseSection from "@/components/visual-showcase-section";
-import FeaturesSection from "@/components/features-section";
-import FAQSection from "@/components/faq-section";
-import CtaSection from "@/components/cta-section";
-import FooterSection from "@/components/footer-section";
+import Navbar from "@/features/marketing/ui/navbar";
+import HeroSection from "@/features/marketing/ui/hero-section";
+import VideoSection from "@/features/marketing/ui/video-section";
+import VisualShowcaseSection from "@/features/marketing/ui/visual-showcase-section";
+import FeaturesSection from "@/features/marketing/ui/features-section";
+import FAQSection from "@/features/marketing/ui/faq-section";
+import CtaSection from "@/features/marketing/ui/cta-section";
+import FooterSection from "@/features/marketing/ui/footer-section";
 
-export default async function Home() {
+export default function Home() {
   return (
     <>
       <Navbar />

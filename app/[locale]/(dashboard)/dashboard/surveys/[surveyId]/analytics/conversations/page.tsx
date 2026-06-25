@@ -1,15 +1,15 @@
 import { Suspense } from "react";
 import { ArrowLeft, Loader2, Search } from "lucide-react";
 
-import { ConversationCard } from "@/components/analytics/ConversationCard";
+import { ConversationCard } from "@/features/surveys/ui/analytics/conversation-card";
 import { Link, redirect } from "@/i18n/routing";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 import { getTranslations } from "next-intl/server";
-import { getConversationInsightsSummary } from "@/lib/analytics/conversation-queries";
+import { getConversationInsightsSummary } from "@/features/surveys/server/analytics/conversation-queries";
 
 interface PageProps {
   params: Promise<{ surveyId: string; locale: string }>;

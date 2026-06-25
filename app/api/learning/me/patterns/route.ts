@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { summarizeStudentPatternMemory } from "@/lib/learning/pattern-memory-service";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { summarizeStudentPatternMemory } from "@/features/tutoring/server/pattern-memory-service";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 export async function GET() {
   try {

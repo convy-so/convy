@@ -11,8 +11,8 @@ import { headers } from "next/headers";
 
 import { getSurveysForFeedback } from "@/app/actions/admin";
 import { Link } from "@/i18n/routing";
-import { getAdminAppPath } from "@/lib/auth/admin-path";
-import { cn } from "@/lib/utils";
+import { getAdminAppPath } from "@/features/auth/public-server";
+import { cn } from "@/shared/ui/tailwind-class-utils";
 
 export default async function AdminSurveysPage({
   params,

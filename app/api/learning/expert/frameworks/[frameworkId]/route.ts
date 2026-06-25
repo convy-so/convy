@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
 import {
   deleteDraftFramework,
   getFrameworkById,
   updateFrameworkDraft,
-} from "@/lib/learning/storage";
-import { expertFrameworkSchema } from "@/lib/learning/types";
-import { apiError } from "@/lib/api/error-contract";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+} from "@/features/tutoring/public-server";
+import { expertFrameworkSchema } from "@/features/tutoring/public-server";
+import { apiError } from "@/shared/http/api-error";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 const updateFrameworkSchema = z.object({
   draftFramework: expertFrameworkSchema,

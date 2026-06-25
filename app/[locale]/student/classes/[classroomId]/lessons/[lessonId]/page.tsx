@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getStudentLearningWorkspaceInitialData } from "@/lib/server/app-queries";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getStudentLearningWorkspaceInitialData } from "@/shared/http/page-data";
 import { LiveSessionClient } from "../live-session-client";
 
 interface LessonTutoringPageProps {

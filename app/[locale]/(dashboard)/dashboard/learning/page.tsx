@@ -1,6 +1,6 @@
-import { LearningHub } from "@/components/learning/learning-hub";
-import { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { LearningHub } from "@/features/tutoring/ui/learning-hub";
+import { getTeacherLearningWorkspaceInitialData } from "@/shared/http/page-data";
+import { getVerifiedSession } from "@/features/auth/public-server";
 
 export default async function LearningPage() {
   const session = await getVerifiedSession();

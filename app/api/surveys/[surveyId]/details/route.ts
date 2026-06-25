@@ -1,16 +1,16 @@
 import { eq, count, and, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 
-import { getDb } from "@/db";
-import { surveyBriefs, surveys, surveyConversations } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { env } from "@/lib/env";
+import { getDb } from "@/shared/db";
+import { surveyBriefs, surveys, surveyConversations } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { env } from "@/shared/config/server-env";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 
 /**
  * GET - Get detailed survey info for the owner

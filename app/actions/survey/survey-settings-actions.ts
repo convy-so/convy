@@ -3,25 +3,25 @@
 import { and, eq, ne, or } from "drizzle-orm";
 import { z } from "zod";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import { SURVEY_LIMITS } from "@/lib/config";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import { SURVEY_LIMITS } from "@/shared/config/app-config";
 import {
   assertState,
   validateInput,
   withErrorHandling,
   type ActionResult,
-} from "@/lib/action-wrapper";
+} from "@/shared/http/action-result";
 import {
   updateSurveySchema,
-} from "@/lib/validation/survey-schemas";
+} from "@/features/surveys/server/validation/survey-schemas";
 
 import {
   invalidateSurveyCaches,
   requireSurveyActionSession,
   requireSurveyWithPermission,
 } from "./shared";
-import { buildSurveyPublicPath } from "@/lib/surveys/utils";
+import { buildSurveyPublicPath } from "@/features/surveys/public-server";
 
 /**
  * Update survey settings (only if it's in draft or sample_review status)

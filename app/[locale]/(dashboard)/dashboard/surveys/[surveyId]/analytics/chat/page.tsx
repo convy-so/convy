@@ -1,15 +1,15 @@
-import { ChatWithData } from "@/components/analytics/ChatWithData";
+import { ChatWithData } from "@/features/surveys/ui/analytics/chat-with-data";
 import { ArrowLeft, MessageSquare, Loader2 } from "lucide-react";
 import { Link, redirect } from "@/i18n/routing";
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
 import { eq } from "drizzle-orm";
 import { Suspense } from "react";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
     getSurveyPermissionForSession,
     hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 import { getTranslations } from "next-intl/server";
 
 interface PageProps {

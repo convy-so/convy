@@ -8,15 +8,16 @@
  */
 
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { readJsonRequestValue } from "@/shared/http/json";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, and } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { surveyConversations, participantFeedback } from "@/db/schema";
-import { resolveRespondentAccess } from "@/lib/privacy/respondent";
-import { getClientIP } from "@/lib/ratelimit";
+import { getDb } from "@/shared/db";
+import { surveyConversations, participantFeedback } from "@/shared/db/schema";
+import { resolveRespondentAccess } from "@/features/privacy/public-server";
+import { getClientIP } from "@/shared/security/client-ip";
 
 const bodySchema = z.object({
   rating: z.number().int().min(1).max(5).optional(),
@@ -48,7 +49,7 @@ export async function POST(
     if (!conv) { return apiError("NOT_FOUND", "Conversation not found"); }
 
     // Parse + validate body
-    const body = await request.json();
+    const body = await readJsonRequestValue(request);
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) { return apiError("VALIDATION_ERROR", "Invalid body", { details: parsed.error.flatten() }); }
 

@@ -8,7 +8,7 @@ import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { Suspense } from "react";
-import { CookieConsent } from "@/components/cookie-consent";
+import { CookieConsent } from "@/features/privacy/ui/cookie-consent";
 
 // App pages load user/session data from Postgres at request time. Skip static
 // prerender during `next build` so Docker CI does not need a live database.
@@ -18,7 +18,7 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
-import { env } from "@/lib/env";
+import { env } from "@/shared/config/server-env";
 
 const BASE_URL = env.NEXT_PUBLIC_APP_URL;
 
@@ -49,7 +49,7 @@ const fasthand = localFont({
   variable: "--font-fasthand",
 });
 
-import { SupportedLanguage } from "@/lib/i18n/ai-translator";
+import { SupportedLanguage } from "@/shared/i18n/ai-translator";
 
 function isSupportedLanguage(value: string): value is SupportedLanguage {
   return (
@@ -67,15 +67,15 @@ function isRoutingLocale(
 
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {
-    title: "Convyy — AI Tutoring Infrastructure for Schools",
+    title: "Convyy â€” AI Tutoring Infrastructure for Schools",
     description: "Launch adaptive tutoring, expert-guided pedagogy, and evidence-backed learning workflows in one AI-native platform.",
   },
   fr: {
-    title: "Convyy — Infrastructure de tutorat IA pour les écoles",
-    description: "Déployez un tutorat adaptatif, une pédagogie guidée par des experts et des workflows d'apprentissage pilotés par des preuves.",
+    title: "Convyy â€” Infrastructure de tutorat IA pour les Ã©coles",
+    description: "DÃ©ployez un tutorat adaptatif, une pÃ©dagogie guidÃ©e par des experts et des workflows d'apprentissage pilotÃ©s par des preuves.",
   },
   de: {
-    title: "Convyy — KI-Tutoring-Infrastruktur für Schulen",
+    title: "Convyy â€” KI-Tutoring-Infrastruktur fÃ¼r Schulen",
     description: "Starten Sie adaptives Tutoring, expertengesteuerte Didaktik und evidenzbasierte Lern-Workflows auf einer KI-nativen Plattform.",
   },
 };

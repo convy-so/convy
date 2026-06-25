@@ -1,11 +1,11 @@
 "use client";
 
-import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-student-learning-workspace";
-import { StudentInvitationCard } from "@/components/learning/student-invitation-card";
-import { StudentCourseCard } from "@/components/student/student-course-card";
+import { useStudentLearningWorkspace } from "@/features/tutoring/client/hooks/use-student-learning-workspace";
+import { StudentInvitationCard } from "@/features/tutoring/ui/student-invitation-card";
+import { StudentCourseCard } from "@/features/tutoring/ui/student-course-card";
 import { Sparkles, CheckCircle2, GraduationCap } from "lucide-react";
-import type { LearningMeData } from "@/lib/api/learning";
-import type { getStudentLearningWorkspaceInitialData } from "@/lib/server/app-queries";
+import type { LearningMeData } from "@/features/tutoring/public-client";
+import type { getStudentLearningWorkspaceInitialData } from "@/shared/http/page-data";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }>;
 

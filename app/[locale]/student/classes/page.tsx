@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { Loader2, GraduationCap, AlertCircle } from "lucide-react";
-import { getLearningMeData, getMyPatternSummaries } from "@/lib/server/app-queries";
+import { getLearningMeData, getMyPatternSummaries } from "@/shared/http/page-data";
 import { StudentClassesClient } from "./student-classes-client";
 
 export default async function StudentClassesPage() {

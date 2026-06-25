@@ -1,6 +1,6 @@
-import { apiUnhandledError } from "@/lib/api/error-contract";
+import { apiUnhandledError } from "@/shared/http/api-error";
 
-export async function GET() {
+export function GET() {
     try {
         throw new Error("Sentry Test API Error: This is a test error from an API route.");
     } catch (error) {

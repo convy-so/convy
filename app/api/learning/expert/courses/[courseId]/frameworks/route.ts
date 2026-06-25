@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCourseById } from "@/lib/learning/course-service";
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { getCourseFrameworks, createExpertFrameworkForCourse } from "@/lib/learning/storage";
-import { apiError } from "@/lib/api/error-contract";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { getCourseById } from "@/features/tutoring/server/course-service";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
+import { getCourseFrameworks, createExpertFrameworkForCourse } from "@/features/tutoring/public-server";
+import { apiError } from "@/shared/http/api-error";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 const createFrameworkSchema = z.object({
   name: z.string().min(2),

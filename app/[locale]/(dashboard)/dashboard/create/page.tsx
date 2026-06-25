@@ -1,12 +1,12 @@
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
-import { CreateSurveyPageClient } from "@/components/surveys/pages/create-survey-page-client";
+import { CreateSurveyPageClient } from "@/features/surveys/ui/create-survey-page-client";
 import {
   getCurrentUiLocaleValue,
   getSurveyCreationInitialData,
   getSurveyDetailsData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function CreateSurveyPage({
   params,

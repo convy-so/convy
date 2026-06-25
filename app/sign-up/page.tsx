@@ -1,4 +1,4 @@
-import { redirectLegacyLocalizedRoute } from "@/lib/i18n/legacy-localized-route";
+import { redirectLegacyLocalizedRoute } from "@/shared/i18n/legacy-localized-route";
 
 type SignUpRedirectPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

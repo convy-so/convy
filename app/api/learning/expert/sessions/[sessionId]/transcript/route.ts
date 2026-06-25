@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/api/error-contract";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { apiError } from "@/shared/http/api-error";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { listLearningMessages } from "@/lib/learning/storage";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
+import { listLearningMessages } from "@/features/tutoring/public-server";
 
 export async function GET(
   request: Request,

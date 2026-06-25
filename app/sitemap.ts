@@ -1,6 +1,6 @@
 import { MetadataRoute } from "next";
 import { routing } from "@/i18n/routing";
-import { env } from "@/lib/env";
+import { env } from "@/shared/config/server-env";
 
 const BASE_URL = env.NEXT_PUBLIC_APP_URL;
 

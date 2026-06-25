@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
-import { FeedbackForm } from "@/components/feedback/feedback-form";
-import { isExpert } from "@/lib/auth/dal";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { resolveFeedbackFormContext } from "@/lib/feedback/service";
+import { FeedbackForm } from "@/features/feedback/ui/feedback-form";
+import { isExpert } from "@/features/auth/public-server";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { resolveFeedbackFormContext } from "@/features/feedback/server/feedback-service";
 
 export default async function ExpertFeedbackPage({
   params,

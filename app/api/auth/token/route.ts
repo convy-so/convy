@@ -1,9 +1,9 @@
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getRedisClient } from "@/lib/redis";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getRedisClient } from "@/shared/infra/redis";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { apiUnhandledError } from "@/lib/api/error-contract";
-import { toApiAuthError } from "@/lib/auth/error-map";
+import { apiUnhandledError } from "@/shared/http/api-error";
+import { toApiAuthError } from "@/features/auth/public-server";
 
 export async function GET() {
   try {

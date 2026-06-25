@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getLearningMeDataForSession } from "@/lib/server/app-queries";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getLearningMeDataForSession } from "@/shared/http/page-data";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 export async function GET() {
   try {

@@ -1,13 +1,13 @@
 import { headers } from "next/headers";
 
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { auth } from "@/lib/auth";
-import { getCurrentSession, isAdmin } from "@/lib/auth/dal";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { auth } from "@/features/auth/public-server";
+import { getCurrentSession, isAdmin } from "@/features/auth/public-server";
 import {
   getExpertInvitationById,
   isExpertInvitationExpired,
   markExpertInvitationSent,
-} from "@/lib/auth/expert-invitations";
+} from "@/features/auth/public-server";
 
 export async function POST(
   _req: Request,

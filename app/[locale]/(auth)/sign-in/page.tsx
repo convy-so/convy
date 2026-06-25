@@ -5,16 +5,16 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
-import { AuthCard } from "@/components/auth/auth-card";
-import { GoogleButton } from "@/components/auth/google-button";
-import { FormDivider } from "@/components/auth/form-divider";
-import { InputField } from "@/components/auth/input-field";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { LoadingOverlay } from "@/components/auth/loading-overlay";
-import { authClient } from "@/lib/auth-client";
+import { AuthCard } from "@/features/auth/ui/auth-card";
+import { GoogleButton } from "@/features/auth/ui/google-button";
+import { FormDivider } from "@/features/auth/ui/form-divider";
+import { InputField } from "@/features/auth/public-ui";
+import { SubmitButton } from "@/features/auth/ui/submit-button";
+import { LoadingOverlay } from "@/features/auth/ui/loading-overlay";
+import { authClient } from "@/features/auth/public-client";
 import toast from "react-hot-toast";
-import { prepareAuthIntent } from "@/lib/auth/intent-client";
-import { getAuthContinueHref, getSignUpHref, getVerifyEmailHref } from "@/lib/auth/hrefs";
+import { prepareAuthIntent } from "@/features/auth/public-client";
+import { getAuthContinueHref, getSignUpHref, getVerifyEmailHref } from "@/features/auth/public-server";
 
 export default function SignInPage() {
   const params = useParams<{ locale?: string | string[] }>();
@@ -115,13 +115,22 @@ export default function SignInPage() {
       title={t('Title')}
       subtitle={t('Subtitle')}
     >
-      <GoogleButton onClick={handleGoogleSignIn} />
+      <GoogleButton
+        onClick={() => {
+          void handleGoogleSignIn();
+        }}
+      />
 
       <div className="my-6">
         <FormDivider />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+        className="space-y-4"
+      >
         <InputField
           id="email"
           type="email"

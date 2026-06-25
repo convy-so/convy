@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
-import { fetchActiveSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
+import { fetchActiveSurveyByShareableLink } from "@/features/surveys/server/public-survey-access";
 
 /**
  * Get a survey by its shareable link (public endpoint)

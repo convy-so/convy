@@ -5,8 +5,8 @@ import {
   getPlatformFeedbackItems,
   updatePlatformFeedbackStatus,
 } from "@/app/actions/admin";
-import { getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
-import { normalizeAppLocale } from "@/lib/i18n/config";
+import { getLocalizedAdminAppPath } from "@/features/auth/public-server";
+import { normalizeAppLocale } from "@/shared/i18n/config";
 
 type FeedbackStatus = "open" | "reviewing" | "resolved" | "dismissed";
 
@@ -16,6 +16,20 @@ const statusClasses: Record<FeedbackStatus, string> = {
   resolved: "bg-emerald-50 text-emerald-700",
   dismissed: "bg-slate-100 text-slate-600",
 };
+
+function isFeedbackStatus(value: string): value is FeedbackStatus {
+  return (
+    value === "open" ||
+    value === "reviewing" ||
+    value === "resolved" ||
+    value === "dismissed"
+  );
+}
+
+function getFormDataString(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
 
 export default async function AdminFeedbackPage({
   params,
@@ -28,25 +42,19 @@ export default async function AdminFeedbackPage({
   const result = await getPlatformFeedbackItems(cookieHeader);
   const items = result.success ? result.data : [];
 
-  const validStatuses: FeedbackStatus[] = [
-    "open",
-    "reviewing",
-    "resolved",
-    "dismissed",
-  ];
-
   async function setFeedbackStatus(formData: FormData) {
     "use server";
 
-    const feedbackId = String(formData.get("feedbackId") || "").trim();
-    const rawStatus = String(formData.get("status") || "");
-    if (!feedbackId || !validStatuses.includes(rawStatus as FeedbackStatus)) {
+    const feedbackId = getFormDataString(formData, "feedbackId");
+    const rawStatus = getFormDataString(formData, "status");
+
+    if (!feedbackId || !isFeedbackStatus(rawStatus)) {
       return;
     }
 
     const result = await updatePlatformFeedbackStatus(
       feedbackId,
-      rawStatus as FeedbackStatus,
+      rawStatus,
     );
     if (result.success) {
       revalidatePath(getLocalizedAdminAppPath(appLocale, "/feedback"));
@@ -81,9 +89,9 @@ export default async function AdminFeedbackPage({
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
                     <span>{item.kind}</span>
-                    <span>•</span>
+                    <span>â€¢</span>
                     <span>{item.submitterRole}</span>
-                    <span>•</span>
+                    <span>â€¢</span>
                     <span>{item.sourceArea}</span>
                   </div>
                   <div>
@@ -115,7 +123,11 @@ export default async function AdminFeedbackPage({
 
                 <div className="space-y-3 sm:w-56">
                   <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusClasses[item.status as FeedbackStatus] ?? statusClasses.open}`}
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                      isFeedbackStatus(item.status)
+                        ? statusClasses[item.status]
+                        : statusClasses.open
+                    }`}
                   >
                     {item.status}
                   </span>

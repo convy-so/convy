@@ -1,8 +1,8 @@
 import { Suspense } from "react";
 import { headers } from "next/headers";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { AuthProvider } from "@/components/providers/auth-provider";
-import { ProfileContent } from "@/components/dashboard/profile-content";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { AuthProvider } from "@/features/auth/public-ui";
+import { ProfileContent } from "@/features/auth/ui/account-profile-page-client";
 
 import { Loader2 } from "lucide-react";
 

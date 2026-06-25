@@ -3,23 +3,23 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   assertExists,
   assertPermission,
-} from "@/lib/action-wrapper";
+} from "@/shared/http/action-result";
 import {
   invalidateDashboardCaches,
   type DashboardCacheSection,
-} from "@/lib/cache";
+} from "@/shared/infra/cache";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
   type SurveyPermissionCapability,
   type SurveyPermissionContext,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 
 export type SurveyActionSession = Awaited<ReturnType<typeof getVerifiedSession>>;
 export type SurveyRecord = typeof surveys.$inferSelect;

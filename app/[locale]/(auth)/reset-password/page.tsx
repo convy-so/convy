@@ -6,16 +6,16 @@ import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Lock, Check } from "lucide-react";
 import { Suspense } from "react";
-import { AuthCard } from "@/components/auth/auth-card";
+import { AuthCard } from "@/features/auth/ui/auth-card";
 
-import { StatusCard } from "@/components/auth/status-card";
-import { InputField } from "@/components/auth/input-field";
-import { PasswordStrength } from "@/components/auth/password-strength";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { authClient } from "@/lib/auth-client";
+import { StatusCard } from "@/features/auth/ui/status-card";
+import { InputField } from "@/features/auth/public-ui";
+import { PasswordStrength } from "@/features/auth/ui/password-strength";
+import { SubmitButton } from "@/features/auth/ui/submit-button";
+import { authClient } from "@/features/auth/public-client";
 import toast from "react-hot-toast";
-import { sanitizeReturnTo } from "@/lib/auth/redirect";
-import { getSafeReturnToHref, getSignInHref } from "@/lib/auth/hrefs";
+import { sanitizeReturnTo } from "@/features/auth/public-server";
+import { getSafeReturnToHref, getSignInHref } from "@/features/auth/public-server";
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
@@ -105,7 +105,12 @@ function ResetPasswordContent() {
       title={t('Title')}
       subtitle={t('Subtitle')}
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+        className="space-y-4"
+      >
         <div>
           <InputField
             id="password"

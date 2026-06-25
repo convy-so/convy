@@ -1,9 +1,9 @@
-import { TeacherReportsPage } from "@/components/learning/teacher-reports-page";
+import { TeacherReportsPage } from "@/features/tutoring/ui/teacher-reports-page";
 import {
   getClassroomTopicsData,
   getTeacherClassroomsData,
   getTopicReportsData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function LearningReportsPage() {
   const initialClassrooms = await getTeacherClassroomsData();

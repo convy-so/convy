@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 import { z } from "zod";
 
-import { env } from "@/lib/env";
+import { env } from "@/shared/config/server-env";
 import {
   issueRespondentResumeToken,
   resolveRespondentAccess,
-} from "@/lib/privacy/respondent";
-import { getClientIP } from "@/lib/ratelimit";
-import { fetchSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
+} from "@/features/privacy/public-server";
+import { getClientIP } from "@/shared/security/client-ip";
+import { fetchSurveyByShareableLink } from "@/features/surveys/server/public-survey-access";
 
 const bodySchema = z.object({
   conversationId: z.string().min(1),

@@ -1,24 +1,24 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db";
-import { sampleConversations, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { sampleConversations, surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   getActiveSurveyLease,
   getCurrentSurveyRevision,
-} from "@/lib/collaboration-service";
+} from "@/features/surveys/server/collaboration-service";
 import {
   toPersistedUIChatMessages,
   toVisibleConversationMessages,
-} from "@/lib/chat-ui-messages";
-import { getSessionBySourceId } from "@/lib/education/storage";
+} from "@/shared/chat/chat-ui-messages";
+import { getSessionBySourceId } from "@/features/surveys/server/education/storage";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { parseSampleRouteBody, submitSampleTurn } from "@/lib/surveys/use-cases/submit-sample-turn";
+} from "@/features/surveys/public-server";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { parseSampleRouteBody, submitSampleTurn } from "@/features/surveys/server/use-cases/submit-sample-turn";
 
 export const maxDuration = 300;
 

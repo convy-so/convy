@@ -1,8 +1,8 @@
-import { TeacherStudentDetailPage } from "@/components/learning/teacher-student-detail-page";
+import { TeacherStudentDetailPage } from "@/features/tutoring/ui/teacher-student-detail-page";
 import {
   getClassroomStudentOverviewData,
   getClassroomStudentPatternData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function LearningStudentDetailPage({
   params,

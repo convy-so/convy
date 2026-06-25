@@ -4,17 +4,17 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { folders, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { invalidateDashboardCaches } from "@/lib/cache";
+import { getDb } from "@/shared/db";
+import { folders, surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { invalidateDashboardCaches } from "@/shared/infra/cache";
 
 import {
   withErrorHandling,
   ActionResult,
   validateInput,
   ActionError
-} from "@/lib/action-wrapper";
+} from "@/shared/http/action-result";
 
 const createFolderSchema = z.object({
   name: z.string().min(1).max(50),

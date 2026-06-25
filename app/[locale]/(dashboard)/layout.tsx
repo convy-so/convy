@@ -1,19 +1,19 @@
-import { requireVerifiedSession } from "@/lib/auth/dal";
-import { AuthProvider } from "@/components/providers/auth-provider";
-import { DashboardHeader } from "@/components/dashboard/header";
-import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
+import { requireVerifiedSession } from "@/features/auth/public-server";
+import { AuthProvider } from "@/features/auth/public-ui";
+import { DashboardHeader } from "@/shared/ui/workspace/dashboard-header";
+import { DashboardSidebar } from "@/shared/ui/workspace/dashboard-sidebar";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
-import { isInvalidAccountStateError } from "@/lib/auth/dal";
-import { getLocalizedAuthIssuePath, getLocalizedSignedInHomePath } from "@/lib/auth/redirect";
-import { normalizeAppLocale } from "@/lib/i18n/config";
-import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
-import { resolveViewerAccess, type ViewerAccessContext } from "@/lib/auth/viewer-access";
-import { getNotificationsForSession } from "@/lib/server/app-queries";
+import { isInvalidAccountStateError } from "@/features/auth/public-server";
+import { getLocalizedAuthIssuePath, getLocalizedSignedInHomePath } from "@/features/auth/public-server";
+import { normalizeAppLocale } from "@/shared/i18n/config";
+import { resolvePreferredUiLocale } from "@/shared/i18n/resolve-locale";
+import { resolveViewerAccess, type ViewerAccessContext } from "@/features/auth/public-server";
+import { getNotificationsForSession } from "@/shared/http/page-data";
 
 export default function DashboardLayout({
   children,

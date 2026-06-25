@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getDb } from "@/db";
-import { notifications } from "@/db/schema";
+import { getDb } from "@/shared/db";
+import { notifications } from "@/shared/db/schema";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { ActionResult, withErrorHandling, UnauthorizedError, NotFoundError } from "@/lib/action-wrapper";
-import { requireVerifiedSession } from "@/lib/auth/dal";
+import { ActionResult, withErrorHandling, UnauthorizedError, NotFoundError } from "@/shared/http/action-result";
+import { requireVerifiedSession } from "@/features/auth/public-server";
 
 export async function markNotificationAsRead(id: string): Promise<ActionResult<void>> {
     return withErrorHandling(async () => {

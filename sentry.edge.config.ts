@@ -4,7 +4,7 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
-import { env } from "@/lib/env";
+import { env } from "@/shared/config/server-env";
 
 Sentry.init({
   dsn: env.SENTRY_DSN,

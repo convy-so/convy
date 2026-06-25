@@ -3,15 +3,16 @@ import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { auth } from "@/lib/auth";
-import { getCurrentSession, isAdmin } from "@/lib/auth/dal";
-import { createExpertInvitation } from "@/lib/auth/expert-invitations";
-import { buildPendingExpertName } from "@/lib/auth/expert-profile";
-import { normalizeIdentityEmail } from "@/lib/auth/auth-intent";
-import { getDb } from "@/db";
-import { users } from "@/db/schema";
-import { defaultAppLocale, isAppLocale } from "@/lib/i18n/config";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { auth } from "@/features/auth/public-server";
+import { getCurrentSession, isAdmin } from "@/features/auth/public-server";
+import { createExpertInvitation } from "@/features/auth/public-server";
+import { buildPendingExpertName } from "@/features/auth/public-server";
+import { normalizeIdentityEmail } from "@/features/auth/public-server";
+import { getDb } from "@/shared/db";
+import { users } from "@/shared/db/schema";
+import { readJsonRequestValue } from "@/shared/http/json";
+import { defaultAppLocale, isAppLocale } from "@/shared/i18n/config";
 
 function buildTemporaryPassword() {
   return `${randomBytes(24).toString("base64url")}A1!`;
@@ -39,6 +40,18 @@ function buildAuthHeadersWithoutSession(source: Headers) {
   return nextHeaders;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getRequestedEmail(value: unknown): string {
+  if (!isRecord(value) || typeof value.email !== "string") {
+    return "";
+  }
+
+  return value.email;
+}
+
 async function rollbackProvisionedExpert(userId: string) {
   await getDb().delete(users).where(eq(users.id, userId));
 }
@@ -52,8 +65,8 @@ export async function POST(req: Request) {
       return apiError("UNAUTHORIZED", "Admin access required.");
     }
 
-    const { email } = await req.json();
-    const normalizedEmail = typeof email === "string" ? normalizeIdentityEmail(email) : "";
+    const body = await readJsonRequestValue(req);
+    const normalizedEmail = normalizeIdentityEmail(getRequestedEmail(body));
 
     if (!normalizedEmail) {
       return apiError("VALIDATION_ERROR", "Email is required.");

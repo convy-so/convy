@@ -1,7 +1,7 @@
-import { apiUnhandledError } from "@/lib/api/error-contract";
+import { apiUnhandledError } from "@/shared/http/api-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getSurveyAnalyticsViewModel } from "@/lib/surveys/use-cases/get-survey-analytics";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getSurveyAnalyticsViewModel } from "@/features/surveys/server/use-cases/get-survey-analytics";
 
 export async function GET(
   request: Request,

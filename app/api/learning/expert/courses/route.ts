@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { createCourse } from "@/lib/learning/course-service";
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { apiError } from "@/lib/api/error-contract";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { createCourse } from "@/features/tutoring/server/course-service";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
+import { apiError } from "@/shared/http/api-error";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 const createCourseSchema = z.object({
   title: z.string().min(2, "Course title must be at least 2 characters long"),

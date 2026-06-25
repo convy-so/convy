@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { readJsonRequestValue } from "@/shared/http/json";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
+  feedbackSubmissionSchema,
   resolveFeedbackFormContext,
   submitPlatformFeedback,
-} from "@/lib/feedback/service";
+} from "@/features/feedback/server/feedback-service";
 
 export async function GET() {
   try {
@@ -24,8 +26,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
-    const body = await request.json();
-    const created = await submitPlatformFeedback(session.user, body);
+    const body = await readJsonRequestValue(request);
+    const parsedBody = feedbackSubmissionSchema.parse(body);
+    const created = await submitPlatformFeedback(session.user, parsedBody);
 
     return NextResponse.json({
       success: true,

@@ -1,9 +1,9 @@
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import { UserCircle, Compass, Target, Brain, Sparkles, ArrowRight } from "lucide-react";
 import { Link } from "@/i18n/routing";
 
-import { getUniversalStudentInterestProfile, listStudentMemberships } from "@/lib/learning/access";
-import type { StudentInterestProfile } from "@/lib/learning/types";
+import { getUniversalStudentInterestProfile, listStudentMemberships } from "@/features/tutoring/server/access";
+import type { StudentInterestProfile } from "@/features/tutoring/public-server";
 
 export default async function StudentProfilePage() {
   const session = await getVerifiedSession();

@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { ActionResult } from "@/lib/action-wrapper";
+import { ActionResult } from "@/shared/http/action-result";
 
 const SURVEY_MEDIA_DISABLED_ERROR =
   "Survey media has been removed from creation, rehearsal, and respondent flows.";
@@ -59,31 +59,43 @@ export type SurveyMediaItem = {
   contextForUse?: string;
 };
 
-export async function uploadSurveyMediaAction(
+export function uploadSurveyMediaAction(
   formData: FormData,
 ): Promise<ActionResult<{ mediaId: string; media: SurveyMediaItem }>> {
   void uploadSurveyMediaSchema;
   void formData;
-  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
+  return Promise.resolve({
+    success: false,
+    error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR },
+  });
 }
 
-export async function addSurveyMediaAction(
+export function addSurveyMediaAction(
   input: unknown,
 ): Promise<ActionResult<{ mediaId: string }>> {
   void input;
-  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
+  return Promise.resolve({
+    success: false,
+    error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR },
+  });
 }
 
-export async function updateSurveyMediaAction(
+export function updateSurveyMediaAction(
   input: unknown,
 ): Promise<ActionResult<{ media: unknown }>> {
   void input;
-  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
+  return Promise.resolve({
+    success: false,
+    error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR },
+  });
 }
 
-export async function removeSurveyMediaAction(
+export function removeSurveyMediaAction(
   input: unknown,
 ): Promise<ActionResult<{ success: boolean }>> {
   void input;
-  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
+  return Promise.resolve({
+    success: false,
+    error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR },
+  });
 }

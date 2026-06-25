@@ -1,5 +1,5 @@
-import { SurveyDetailPageClient } from "@/components/surveys/pages/survey-detail-page-client";
-import { getSurveyDetailsData } from "@/lib/server/app-queries";
+import { SurveyDetailPageClient } from "@/features/surveys/ui/survey-detail-page-client";
+import { getSurveyDetailsData } from "@/shared/http/page-data";
 
 export default async function SurveyDetailPage({
   params,

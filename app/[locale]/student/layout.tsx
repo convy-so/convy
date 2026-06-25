@@ -1,21 +1,21 @@
-import { requireVerifiedSession } from "@/lib/auth/dal";
+import { requireVerifiedSession } from "@/features/auth/public-server";
 import { redirect } from "next/navigation";
-import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
-import { DashboardHeader } from "@/components/dashboard/header";
+import { DashboardSidebar } from "@/shared/ui/workspace/dashboard-sidebar";
+import { DashboardHeader } from "@/shared/ui/workspace/dashboard-header";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
 import {
     getLearningMeDataForSession,
     getNotificationsForSession,
-} from "@/lib/server/app-queries";
-import { AuthProvider } from "@/components/providers/auth-provider";
+} from "@/shared/http/page-data";
+import { AuthProvider } from "@/features/auth/public-ui";
 import { getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocalizedAuthIssuePath, getLocalizedSignedInHomePath } from "@/lib/auth/redirect";
-import { normalizeAppLocale } from "@/lib/i18n/config";
-import { resolveViewerAccess, type ViewerAccessContext } from "@/lib/auth/viewer-access";
-import { isInvalidAccountStateError } from "@/lib/auth/dal";
+import { getLocalizedAuthIssuePath, getLocalizedSignedInHomePath } from "@/features/auth/public-server";
+import { normalizeAppLocale } from "@/shared/i18n/config";
+import { resolveViewerAccess, type ViewerAccessContext } from "@/features/auth/public-server";
+import { isInvalidAccountStateError } from "@/features/auth/public-server";
 
 export default function StudentLayout(props: {
     children: React.ReactNode;

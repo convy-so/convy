@@ -1,9 +1,9 @@
-import { apiError } from "@/lib/api/error-contract";
-import { apiUnhandledError } from "@/lib/api/error-contract";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { toApiAuthError } from "@/lib/auth/error-map";
-import { resolveTeacherOwnedClassroomAccess } from "@/lib/access/classroom-access";
-import { getRedisSubscriber } from "@/lib/redis";
+import { apiError } from "@/shared/http/api-error";
+import { apiUnhandledError } from "@/shared/http/api-error";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { toApiAuthError } from "@/features/auth/public-server";
+import { resolveTeacherOwnedClassroomAccess } from "@/features/tutoring/public-server";
+import { getRedisSubscriber } from "@/shared/infra/redis";
 
 const encoder = new TextEncoder();
 

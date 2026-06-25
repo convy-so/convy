@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { translateConversationListItems } from "@/lib/analytics";
-import { getConversationInsights } from "@/lib/analytics/conversation-queries";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { translateConversationListItems } from "@/features/surveys/server/analytics/dashboard-analytics";
+import { getConversationInsights } from "@/features/surveys/server/analytics/conversation-queries";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
-import { getUserPreferredLanguage } from "@/lib/translation-service";
-import { normalizeAppLocale } from "@/lib/i18n/config";
+} from "@/features/surveys/public-server";
+import { getUserPreferredLanguage } from "@/features/surveys/public-server";
+import { normalizeAppLocale } from "@/shared/i18n/config";
 
 export async function GET(
   request: Request,

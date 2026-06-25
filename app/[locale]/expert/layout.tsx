@@ -3,8 +3,8 @@ import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { ExpertSidebar } from "@/components/expert/expert-sidebar";
-import { requireExpertUser } from "@/lib/auth/dal";
+import { ExpertSidebar } from "@/features/tutoring/expert/ui/expert-sidebar";
+import { requireExpertUser } from "@/features/auth/public-server";
 
 export default function ExpertLayout(props: {
   children: React.ReactNode;

@@ -2,15 +2,15 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 
 import { Link } from "@/i18n/routing";
-import { getCurrentSession } from "@/lib/auth/dal";
+import { getCurrentSession } from "@/features/auth/public-server";
 import {
   getExpertLoginHref,
   getVerifyEmailHref,
-} from "@/lib/auth/hrefs";
-import { resolveExpertInvitationAccess } from "@/lib/auth/expert-invitation-access";
-import { localizeAppPath } from "@/lib/auth/redirect";
-import { normalizeAppLocale } from "@/lib/i18n/config";
-import { ExpertInviteActions } from "@/components/expert/expert-invite-actions";
+} from "@/features/auth/public-server";
+import { resolveExpertInvitationAccess } from "@/features/auth/public-server";
+import { localizeAppPath } from "@/features/auth/public-server";
+import { normalizeAppLocale } from "@/shared/i18n/config";
+import { ExpertInviteActions } from "@/features/tutoring/expert/ui/expert-invite-actions";
 
 function Card({
   title,

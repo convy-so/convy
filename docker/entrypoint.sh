@@ -51,5 +51,5 @@ echo "Starting Next.js, workers, and WebSocket server..."
 # Use standalone server (output: standalone in next.config). Avoid pnpm/corepack at runtime.
 exec node ./node_modules/concurrently/dist/bin/concurrently.js -k \
   "node .next/standalone/server.js" \
-  "node ./node_modules/tsx/dist/cli.mjs workers/index.ts" \
-  "node ./node_modules/tsx/dist/cli.mjs websocket/server.ts"
+  "node ./node_modules/tsx/dist/cli.mjs shared/infra/workers/index.ts" \
+  "node ./node_modules/tsx/dist/cli.mjs shared/realtime/server.ts"

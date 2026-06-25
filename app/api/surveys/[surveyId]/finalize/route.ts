@@ -1,15 +1,17 @@
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { env } from "@/lib/env";
-import { getDb } from "@/db";
+import { surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { env } from "@/shared/config/server-env";
+import { getDb } from "@/shared/db";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
+import { SURVEY_STATUS } from "@/shared/surveys/constants";
+import { requireValue } from "@/shared/utils/collections";
 
 export async function POST(
   _request: Request,
@@ -29,7 +31,9 @@ export async function POST(
     const permission = await getSurveyPermissionForSession(session, surveyId);
     if (!hasSurveyPermission(permission, "canPublish")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
-    if (survey.status !== "creating") { return apiError("VALIDATION_ERROR", "Survey is not in creation mode"); }
+    if (survey.status !== SURVEY_STATUS.CREATING) {
+      return apiError("VALIDATION_ERROR", "Survey is not in creation mode");
+    }
 
     // Generate shareable link if not exists
     let shareableLink = survey.shareableLink;
@@ -41,21 +45,25 @@ export async function POST(
     const [updatedSurvey] = await getDb()
       .update(surveys)
       .set({
-        status: "active",
+        status: SURVEY_STATUS.ACTIVE,
         shareableLink,
         confirmed: true,
         updatedAt: new Date(),
       })
       .where(eq(surveys.id, surveyId))
       .returning();
+    const finalizedSurvey = requireValue(
+      updatedSurvey,
+      `Failed to finalize survey ${surveyId}`,
+    );
 
     return new Response(
       JSON.stringify({
-        id: updatedSurvey.id,
-        title: updatedSurvey.title,
-        status: updatedSurvey.status,
-        shareableLink: updatedSurvey.shareableLink,
-        participantLimit: updatedSurvey.participantLimit,
+        id: finalizedSurvey.id,
+        title: finalizedSurvey.title,
+        status: finalizedSurvey.status,
+        shareableLink: finalizedSurvey.shareableLink,
+        participantLimit: finalizedSurvey.participantLimit,
       }),
       {
         status: 200,

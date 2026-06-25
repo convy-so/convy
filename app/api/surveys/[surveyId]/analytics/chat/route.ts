@@ -1,21 +1,21 @@
 import { NextRequest } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import type { ChatSessionMessage } from "@/db/schema/surveys";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { askAnalyticsQuestion } from "@/lib/education/analytics-workflow";
-import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import type { ChatSessionMessage } from "@/shared/db/schema/surveys";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { askAnalyticsQuestion } from "@/features/surveys/server/education/analytics-workflow";
+import { normalizeSpeechToTextLanguage } from "@/features/surveys/voice/voice-locales";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 import { z } from "zod";
-import { getMessageText } from "@/lib/chat-message-text";
+import { getMessageText } from "@/shared/chat/chat-message-text";
 
 export const maxDuration = 300;
 
@@ -48,7 +48,7 @@ export async function POST(
     if (body.audio) {
       try {
         const { transcribeAudioBuffer } =
-          await import("@/lib/voice/analytics-stt");
+          await import("@/features/surveys/voice/speech-to-text-provider");
         const normalizedAudio = body.audio.includes(",")
           ? body.audio.split(",").pop() || ""
           : body.audio;
@@ -95,7 +95,7 @@ export async function POST(
 
     return createUIMessageStreamResponse({
       stream: createUIMessageStream({
-        execute: async ({ writer }) => {
+        execute: ({ writer }) => {
           const messageId = crypto.randomUUID();
           writer.write({
             id: messageId,

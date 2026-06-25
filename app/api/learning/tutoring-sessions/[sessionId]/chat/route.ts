@@ -1,6 +1,7 @@
-import { apiError } from "@/lib/api/error-contract";
-import { getLearningSessionById } from "@/lib/learning/storage";
-import { logTutoringDebug, logTutoringError } from "@/lib/learning/tutoring-debug";
+import { apiError } from "@/shared/http/api-error";
+import { readJsonRequestValue } from "@/shared/http/json";
+import { getLearningSessionById } from "@/features/tutoring/public-server";
+import { logTutoringDebug, logTutoringError } from "@/features/tutoring/public-server";
 import { POST as postTopicChat } from "../../../topics/[topicId]/chat/route";
 
 export async function POST(
@@ -20,16 +21,18 @@ export async function POST(
     return apiError("NOT_FOUND", "Tutoring session not found.");
   }
 
-  if (tutoringSession.sessionType !== "tutoring" || !tutoringSession.topicId) {
+  const { topicId } = tutoringSession;
+
+  if (tutoringSession.sessionType !== "tutoring" || !topicId) {
     logTutoringError("session-chat:forward:invalid-session", new Error("This route only accepts tutoring session ids."), {
       sessionId,
       sessionType: tutoringSession.sessionType,
-      topicId: tutoringSession.topicId,
+      topicId,
     });
     return apiError("VALIDATION_ERROR", "This route only accepts tutoring session ids.");
   }
 
-  const body = await request.json();
+  const body = await readJsonRequestValue(request);
   const forwardedRequest = new Request(request.url, {
     method: request.method,
     headers: request.headers,
@@ -41,10 +44,10 @@ export async function POST(
 
   logTutoringDebug("session-chat:forward:dispatch", {
     sessionId,
-    topicId: tutoringSession.topicId,
+    topicId,
   });
 
   return postTopicChat(forwardedRequest, {
-    params: Promise.resolve({ topicId: tutoringSession.topicId! }),
+    params: Promise.resolve({ topicId }),
   });
 }

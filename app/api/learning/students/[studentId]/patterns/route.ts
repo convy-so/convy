@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { apiError } from "@/lib/api/error-contract";
-import { summarizeStudentPatternMemory } from "@/lib/learning/pattern-memory-service";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
-import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
+import { getDb } from "@/shared/db";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { apiError } from "@/shared/http/api-error";
+import { summarizeStudentPatternMemory } from "@/features/tutoring/server/pattern-memory-service";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
+import { resolveTeacherStudentAccess } from "@/features/tutoring/server/teacher-route-access";
 
 export async function GET(
   _request: Request,

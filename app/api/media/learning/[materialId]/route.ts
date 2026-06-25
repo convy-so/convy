@@ -1,12 +1,12 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
-import { getDb } from "@/db";
-import { topicMaterials } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getTeacherTopicAccess } from "@/lib/learning/access";
-import { createSignedLearningMaterialUrl } from "@/lib/storage";
+import { getDb } from "@/shared/db";
+import { topicMaterials } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getTeacherTopicAccess } from "@/features/tutoring/server/access";
+import { createSignedLearningMaterialUrl } from "@/shared/infra/supabase-storage";
 
 export async function GET(
   _request: Request,

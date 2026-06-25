@@ -1,5 +1,5 @@
-import { SurveysPageClient } from "@/components/surveys/pages/surveys-page-client";
-import { getSurveyListData } from "@/lib/server/app-queries";
+import { SurveysPageClient } from "@/features/surveys/ui/surveys-page-client";
+import { getSurveyListData } from "@/shared/http/page-data";
 
 export default async function SurveysPage() {
   const initialSurveys = await getSurveyListData();
