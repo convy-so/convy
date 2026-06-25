@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentSession } from "@/lib/auth/dal";
-import { recordConsentEvent } from "@/lib/privacy/compliance";
+import { getCurrentSession } from "@/features/auth/public-server";
+import { recordConsentEvent } from "@/features/privacy/server/compliance";
 import {
   CONSENT_COOKIE_NAME,
   buildConsentState,
   serializeConsentState,
-} from "@/lib/privacy/shared";
-import { env } from "@/lib/env";
+} from "@/features/privacy/public-server";
+import { env } from "@/shared/config/server-env";
 
 const bodySchema = z.object({
   analytics: z.boolean().default(false),

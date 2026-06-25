@@ -1,11 +1,11 @@
-import { POST as retryTopicMaterialUploadAttempt } from "../../../../../topics/[topicId]/material-upload-attempts/[attemptId]/retry/route";
+import { POST as retryLessonMaterialUpload } from "@/features/tutoring/server/api/retry-lesson-material-upload-route";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ lessonId: string; attemptId: string }> },
 ) {
   const { lessonId, attemptId } = await params;
-  return retryTopicMaterialUploadAttempt(request, {
+  return retryLessonMaterialUpload(request, {
     params: Promise.resolve({ topicId: lessonId, attemptId }),
   });
 }

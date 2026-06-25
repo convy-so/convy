@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getPrimaryStudentMembership } from "@/lib/learning/access";
-import { getOnboardingStateData } from "@/lib/server/app-queries";
-import { StudentOnboardingClient } from "@/components/learning/student-onboarding-client";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getPrimaryStudentMembership } from "@/features/tutoring/server/access";
+import { getOnboardingStateData } from "@/shared/http/page-data";
+import { StudentOnboardingClient } from "@/features/tutoring/ui/student-onboarding-client";
 
 export default async function StudentProfileEditPage() {
   const session = await getVerifiedSession();

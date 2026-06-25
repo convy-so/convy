@@ -1,18 +1,18 @@
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { assertAudioUploadFile } from "@/lib/security/uploads";
-import { transcribeAudioBuffer } from "@/lib/voice/analytics-stt";
-import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { assertAudioUploadFile } from "@/shared/security/uploads";
+import { transcribeAudioBuffer } from "@/features/surveys/voice/speech-to-text-provider";
+import { normalizeSpeechToTextLanguage } from "@/features/surveys/voice/voice-locales";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 
 export async function POST(
   request: NextRequest,

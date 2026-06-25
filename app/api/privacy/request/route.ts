@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { createPrivacyRequest } from "@/lib/privacy/service";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { createPrivacyRequest } from "@/features/privacy/public-server";
 
 const bodySchema = z.object({
   scope: z.enum(["user"]).default("user"),

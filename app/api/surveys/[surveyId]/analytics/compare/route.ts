@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 import { eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { buildAnalyticsCompareData } from "@/lib/analytics";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { buildAnalyticsCompareData } from "@/features/surveys/server/analytics/dashboard-analytics";
 import {
   getActiveCoveragePlan,
   getAnalyticsSnapshotByVersion,
-} from "@/lib/education/storage";
+} from "@/features/surveys/server/education/storage";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 
 export async function GET(
   request: Request,

@@ -1,8 +1,8 @@
-import { FoldersPageClient } from "@/components/dashboard/folders-page-client";
+import { FoldersPageClient } from "@/features/surveys/creator/ui/folders-page-client";
 import {
   getAvailableFolderSurveysData,
   getFolderListData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function FoldersPage() {
   const [folders, availableSurveys] = await Promise.all([

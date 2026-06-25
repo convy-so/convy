@@ -1,5 +1,5 @@
-import { TeacherStudentReportDetailPage } from "@/components/learning/teacher-student-report-detail-page";
-import { getClassroomStudentReportDetailData } from "@/lib/server/app-queries";
+import { TeacherStudentReportDetailPage } from "@/features/tutoring/ui/teacher-student-report-detail-page";
+import { getClassroomStudentReportDetailData } from "@/shared/http/page-data";
 
 export default async function LearningStudentReportDetailPage({
   params,

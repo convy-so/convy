@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import * as InterventionService from "@/lib/learning/intervention-service";
-import { resolveTeacherClassroomAccess } from "@/lib/learning/teacher-route-access";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import * as InterventionService from "@/features/tutoring/server/intervention-service";
+import { resolveTeacherClassroomAccess } from "@/features/tutoring/server/teacher-route-access";
 
 export async function GET(request: Request) {
   try {

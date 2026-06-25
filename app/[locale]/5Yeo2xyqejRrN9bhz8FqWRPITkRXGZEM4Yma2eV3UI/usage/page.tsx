@@ -2,8 +2,8 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 
 import { getUsageCostData, getUsageTypeBreakdown } from "@/app/actions/admin";
-import { GrowthChart } from "@/components/admin/growth-chart";
-import { UsageTypeChart } from "@/components/admin/usage-type-chart";
+import { GrowthChart } from "@/features/admin/ui/growth-chart";
+import { UsageTypeChart } from "@/features/admin/ui/usage-type-chart";
 
 async function UsageDashboard({ cookieHeader }: { cookieHeader: string | null }) {
   const [usageCostsResult, breakdownResult] = await Promise.all([

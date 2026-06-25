@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { apiUnhandledError } from "@/lib/api/error-contract";
+import { apiUnhandledError } from "@/shared/http/api-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { listSurveysForUser } from "@/lib/surveys/surveys-route-service";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { listSurveysForUser } from "@/features/surveys/server/surveys-route-service";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 
 export async function GET() {
   try {

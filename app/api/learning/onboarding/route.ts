@@ -1,16 +1,16 @@
 import { type UIMessage } from "ai";
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/api/error-contract";
+import { apiError } from "@/shared/http/api-error";
 import { z } from "zod";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 import {
   createOnboardingResponseStream,
   finalizeOnboardingTurn,
   getOnboardingState,
   prepareOnboardingTurn,
-} from "@/lib/learning/onboarding-route-service";
+} from "@/features/tutoring/server/onboarding-route-service";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),

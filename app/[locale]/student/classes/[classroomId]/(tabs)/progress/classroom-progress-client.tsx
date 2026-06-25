@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Award, Sparkles, AlertCircle, Lightbulb, Map, Target, Calendar, ChevronDown, ChevronUp } from "lucide-react";
-import type { KnowledgeStateNode } from "@/lib/learning/types";
-import { getSubjectDisplayLabel } from "@/lib/learning/subject-packages";
-import { cn } from "@/lib/utils";
+import type { KnowledgeStateNode } from "@/features/tutoring/public-server";
+import { getSubjectDisplayLabel } from "@/features/tutoring/server/subject-packages";
+import { cn } from "@/shared/ui/tailwind-class-utils";
 
 type SkillMapNode = Pick<
   KnowledgeStateNode,
@@ -39,9 +39,9 @@ type Props = {
 };
 
 function masteryLabelForStudent(level: string) {
-    if (level === "generative") return { text: "Strong — can use this in new situations", short: "Strong", tone: "good" as const };
-    if (level === "applied") return { text: "Getting there — you can use it with support", short: "Practice more", tone: "mid" as const };
-    return { text: "Still building — keep studying this idea", short: "Building", tone: "low" as const };
+    if (level === "generative") return { text: "Strong â€” can use this in new situations", short: "Strong", tone: "good" as const };
+    if (level === "applied") return { text: "Getting there â€” you can use it with support", short: "Practice more", tone: "mid" as const };
+    return { text: "Still building â€” keep studying this idea", short: "Building", tone: "low" as const };
 }
 
 export function ClassroomProgressClient({ latestModel, progressReports }: Props) {

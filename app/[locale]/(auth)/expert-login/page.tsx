@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Mail, Lock, Loader2, ShieldCheck, ArrowRight } from "lucide-react";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/features/auth/public-client";
 import toast from "react-hot-toast";
 import { Link, useRouter } from "@/i18n/routing";
-import { prepareAuthIntent } from "@/lib/auth/intent-client";
+import { prepareAuthIntent } from "@/features/auth/public-client";
 
 export default function ExpertLoginPage() {
   const params = useParams<{ locale?: string | string[] }>();
@@ -70,7 +70,12 @@ export default function ExpertLoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-[440px]">
         <div className="bg-white py-8 px-4 shadow-sm border border-slate-100 sm:rounded-[24px] sm:px-10">
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form
+            className="space-y-5"
+            onSubmit={(event) => {
+              void handleSubmit(event);
+            }}
+          >
             <div>
               <label 
                 htmlFor="email" 
@@ -116,7 +121,7 @@ export default function ExpertLoginPage() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="block w-full rounded-xl border-0 py-2.5 pl-10 text-slate-900 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-slate-950 sm:text-sm sm:leading-6 transition-all"
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 />
               </div>
             </div>

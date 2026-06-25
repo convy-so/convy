@@ -1,8 +1,8 @@
-import { SampleReviewPageClient } from "@/components/surveys/pages/sample-review-page-client";
+import { SampleReviewPageClient } from "@/features/surveys/ui/sample-review-page-client";
 import {
   getSampleConversationInitialData,
   getSurveyDetailsData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function SampleReviewPage({
   params,

@@ -1,7 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db";
+import { getDb } from "@/shared/db";
 import {
   surveyCoveragePlans,
   surveyEvidence,
@@ -9,24 +9,24 @@ import {
   surveySessions,
   surveyTurns,
   surveys,
-} from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import type { AnalyticsSessionDetail } from "@/lib/analytics";
+} from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import type { AnalyticsSessionDetail } from "@/features/surveys/server/analytics/dashboard-analytics";
 import type {
   ConversationInsight,
   CoverageNode,
   EvidenceRecord,
-} from "@/lib/education/types";
+} from "@/features/surveys/server/education/types";
 import {
   conversationInsightSchema,
   evidenceRecordSchema,
-} from "@/lib/education/types";
+} from "@/features/surveys/server/education/types";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+} from "@/features/surveys/public-server";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 
 export async function GET(
   _request: Request,

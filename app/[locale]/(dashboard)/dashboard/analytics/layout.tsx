@@ -5,12 +5,12 @@ import {
   isInvalidAccountStateError,
   requirePlatformRole,
   type PlatformRole,
-} from "@/lib/auth/dal";
+} from "@/features/auth/public-server";
 import {
   getLocalizedAuthIssuePath,
   getLocalizedSignedInHomePath,
-} from "@/lib/auth/redirect";
-import { normalizeAppLocale } from "@/lib/i18n/config";
+} from "@/features/auth/public-server";
+import { normalizeAppLocale } from "@/shared/i18n/config";
 
 export default async function SurveysLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
   const { locale } = await params;

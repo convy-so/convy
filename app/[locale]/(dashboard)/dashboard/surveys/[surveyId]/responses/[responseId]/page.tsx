@@ -1,5 +1,5 @@
-import { ResponseDetailPageClient } from "@/components/surveys/pages/response-detail-page-client";
-import { getSurveyResponseDetailData } from "@/lib/server/app-queries";
+import { ResponseDetailPageClient } from "@/features/surveys/ui/response-detail-page-client";
+import { getSurveyResponseDetailData } from "@/shared/http/page-data";
 
 export default async function ResponseDetailPage({
   params,

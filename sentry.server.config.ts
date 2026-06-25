@@ -3,8 +3,8 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
-import { scrubSentryEvent } from "@/lib/privacy/sentry";
-import { env } from "@/lib/env";
+import { scrubSentryEvent } from "@/features/privacy/public-server";
+import { env } from "@/shared/config/server-env";
 
 Sentry.init({
   dsn: env.SENTRY_DSN,

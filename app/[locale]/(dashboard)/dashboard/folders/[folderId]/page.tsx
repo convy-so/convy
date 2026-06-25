@@ -1,8 +1,8 @@
-import { FolderDetailPageClient } from "@/components/dashboard/folder-detail-page-client";
+import { FolderDetailPageClient } from "@/features/surveys/creator/ui/folder-detail-page-client";
 import {
   getAvailableFolderSurveysData,
   getFolderDetailData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function FolderDetailPage({
   params,

@@ -1,14 +1,14 @@
 import {
-  GET as getTopicMaterials,
-  POST as postTopicMaterials,
-} from "../../../topics/[topicId]/materials/route";
+  GET as getLessonMaterials,
+  POST as postLessonMaterials,
+} from "@/features/tutoring/server/api/lesson-materials-route";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
   const { lessonId } = await params;
-  return getTopicMaterials(request, {
+  return getLessonMaterials(request, {
     params: Promise.resolve({ topicId: lessonId }),
   });
 }
@@ -18,7 +18,7 @@ export async function POST(
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
   const { lessonId } = await params;
-  return postTopicMaterials(request, {
+  return postLessonMaterials(request, {
     params: Promise.resolve({ topicId: lessonId }),
   });
 }

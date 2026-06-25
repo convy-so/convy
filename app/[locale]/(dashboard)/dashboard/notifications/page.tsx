@@ -1,5 +1,5 @@
-import { NotificationsPageClient } from "@/components/dashboard/notifications-page-client";
-import { getNotificationsForCurrentUser } from "@/lib/server/app-queries";
+import { NotificationsPageClient } from "@/shared/ui/workspace/notifications-page-client";
+import { getNotificationsForCurrentUser } from "@/shared/http/page-data";
 
 export default async function NotificationsDashboardPage() {
   const notifications = await getNotificationsForCurrentUser();

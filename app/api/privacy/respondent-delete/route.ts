@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
 import {
   createDeletionJob,
@@ -8,13 +8,13 @@ import {
   deleteRespondentPrivacyData,
   markDeletionJobStatus,
   markPrivacyRequestResolved,
-} from "@/lib/privacy/service";
+} from "@/features/privacy/public-server";
 import {
   getRespondentSessionCookieName,
   getRespondentSessionCookieOptions,
   resolveRespondentAccess,
-} from "@/lib/privacy/respondent";
-import { getClientIP } from "@/lib/ratelimit";
+} from "@/features/privacy/public-server";
+import { getClientIP } from "@/shared/security/client-ip";
 
 const bodySchema = z.object({
   conversationId: z.string().min(1),

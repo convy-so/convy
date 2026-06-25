@@ -1,6 +1,6 @@
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getDb } from "@/db";
-import { classroomStudents, studentProgressReports } from "@/db/schema/learning";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getDb } from "@/shared/db";
+import { classroomStudents, studentProgressReports } from "@/shared/db/schema/learning";
 import { and, eq, desc } from "drizzle-orm";
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";

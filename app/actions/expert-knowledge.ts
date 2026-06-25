@@ -4,22 +4,22 @@ import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { getDb } from "@/db";
-import { expertCrystallizations } from "@/db/schema/learning";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { expertCrystallizations } from "@/shared/db/schema/learning";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { isExpert } from "@/features/auth/public-server";
 import {
   expertHeuristicSchema,
   type ExpertHeuristic,
-} from "@/lib/learning/types";
+} from "@/features/tutoring/public-server";
 import {
   withErrorHandling,
   ActionResult,
   UnauthorizedError,
   validateInput,
-} from "@/lib/action-wrapper";
+} from "@/shared/http/action-result";
 import { InferSelectModel } from "drizzle-orm";
-import { learningTopics } from "@/db/schema/learning";
+import { learningTopics } from "@/shared/db/schema/learning";
 
 export type ExpertCrystallizationWithTopic = InferSelectModel<typeof expertCrystallizations> & {
   topic: InferSelectModel<typeof learningTopics> | null;

@@ -1,5 +1,5 @@
-import { redirectLegacyLocalizedRoute } from "@/lib/i18n/legacy-localized-route";
-import { getAdminAppPath } from "@/lib/auth/admin-path";
+import { redirectLegacyLocalizedRoute } from "@/shared/i18n/legacy-localized-route";
+import { getAdminAppPath } from "@/features/auth/public-server";
 
 type AdminRedirectPageProps = {
   params: Promise<{ rest?: string[] }>;

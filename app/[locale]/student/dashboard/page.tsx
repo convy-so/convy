@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
-import { LearningHub } from "@/components/learning/learning-hub";
-import { getLearningMeData } from "@/lib/server/app-queries";
-import { getDb } from "@/db";
-import { learningSessions } from "@/db/schema/learning";
+import { LearningHub } from "@/features/tutoring/ui/learning-hub";
+import { getLearningMeData } from "@/shared/http/page-data";
+import { getDb } from "@/shared/db";
+import { learningSessions } from "@/shared/db/schema/learning";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 export default async function StudentDashboardPage() {

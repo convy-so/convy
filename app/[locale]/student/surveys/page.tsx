@@ -1,5 +1,5 @@
 import { Link } from "@/i18n/routing";
-import { getLearningMeData } from "@/lib/server/app-queries";
+import { getLearningMeData } from "@/shared/http/page-data";
 import {
   ClipboardList,
   ExternalLink,

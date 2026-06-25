@@ -5,41 +5,46 @@ import {
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db";
-import { surveyCreationConversations, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { type ChatMessage } from "@/lib/chat-types";
+import { getDb } from "@/shared/db";
+import { surveyCreationConversations, surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { type ChatMessage } from "@/shared/chat/chat-types";
 import {
   getActiveSurveyLease,
   getCurrentSurveyRevision,
   incrementSurveyRevision,
-} from "@/lib/collaboration-service";
+} from "@/features/surveys/server/collaboration-service";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 import {
   deriveCreationMediaDecision,
-} from "@/lib/education/agent-tools";
+} from "@/features/surveys/server/education/agent-tools";
 import {
   buildCreationCollectedInfo, buildCreationExtractedData,
-} from "@/lib/education/creation-state";
+} from "@/features/surveys/server/education/creation-state";
 import {
   persistCreationConversation,
   runCreationWorkflow,
-} from "@/lib/education/creation-workflow";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
-import { getResearchBrief } from "@/lib/education/storage/brief-storage";
+} from "@/features/surveys/server/education/creation-workflow";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
+import { getResearchBrief } from "@/features/surveys/server/education/storage/brief-storage";
 import {
   ensureCreationLease,
   loadSurveyCreationContext,
   normalizeCreationMessages,
   normalizeExtractedData,
-} from "@/lib/education/survey-create-orchestrator";
+} from "@/features/surveys/server/education/survey-create-orchestrator";
+import { SURVEY_STATUS } from "@/shared/surveys/constants";
 
 
 export const maxDuration = 300;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 function isBriefReadyForSampling(brief: Awaited<ReturnType<typeof getResearchBrief>>) {
   if (!brief) return false;
@@ -107,7 +112,11 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
+    if (!isRecord(body)) {
+      return apiError("VALIDATION_ERROR", "Invalid request body");
+    }
+
     const incomingMessages = Array.isArray(body.messages)
       ? body.messages
       : null;
@@ -122,7 +131,7 @@ export async function POST(
     if (!hasSurveyPermission(permission, "canEdit")) {
       return apiError("UNAUTHORIZED", "Editor access required");
     }
-    if (survey.status !== "creating") {
+    if (survey.status !== SURVEY_STATUS.CREATING) {
       return apiError("VALIDATION_ERROR", `Survey is not in creation mode. Status: ${survey.status}`);
     }
 
@@ -192,8 +201,9 @@ export async function POST(
         updatedAt: new Date(),
       })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
+    const assistantMessageId = crypto.randomUUID();
     const assistantMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: assistantMessageId,
       role: "assistant",
       content: result.responseText,
       parts: [{ type: "text", text: result.responseText }],
@@ -225,18 +235,18 @@ export async function POST(
 
     const response = createUIMessageStreamResponse({
       stream: createUIMessageStream({
-        execute: async ({ writer }) => {
+        execute: ({ writer }) => {
           writer.write({
-            id: assistantMessage.id!,
+            id: assistantMessageId,
             type: "text-start",
           });
           writer.write({
-            id: assistantMessage.id!,
+            id: assistantMessageId,
             type: "text-delta",
             delta: result.responseText,
           });
           writer.write({
-            id: assistantMessage.id!,
+            id: assistantMessageId,
             type: "text-end",
           });
         },
@@ -260,7 +270,11 @@ export async function PUT(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
+    if (!isRecord(body)) {
+      return apiError("VALIDATION_ERROR", "Invalid request body");
+    }
+
     const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
 
     const { survey } = await loadSurveyCreationContext(surveyId);

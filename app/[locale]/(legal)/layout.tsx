@@ -1,5 +1,5 @@
-import Navbar from "@/components/navbar";
-import FooterSection from "@/components/footer-section";
+import Navbar from "@/features/marketing/ui/navbar";
+import FooterSection from "@/features/marketing/ui/footer-section";
 
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
     return (

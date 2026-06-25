@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { assertAudioUploadFile } from "@/lib/security/uploads";
-import { transcribeAudioBuffer } from "@/lib/voice/speech-to-text-provider";
-import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { assertAudioUploadFile } from "@/shared/security/uploads";
+import { transcribeAudioBuffer } from "@/features/surveys/voice/speech-to-text-provider";
+import { normalizeSpeechToTextLanguage } from "@/features/surveys/voice/voice-locales";
 
 export async function POST(request: NextRequest) {
   try {

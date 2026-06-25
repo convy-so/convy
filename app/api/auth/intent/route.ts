@@ -6,10 +6,10 @@ import {
   createAuthIntent,
   readAuthIntentCookie,
   setAuthIntentCookie,
-} from "@/lib/auth/auth-intent";
-import { logAuthAuditEvent } from "@/lib/auth/audit";
-import { localizeAppPath, sanitizeReturnTo } from "@/lib/auth/redirect";
-import { defaultAppLocale, normalizeAppLocale } from "@/lib/i18n/config";
+} from "@/features/auth/public-server";
+import { logAuthAuditEvent } from "@/features/auth/public-server";
+import { localizeAppPath, sanitizeReturnTo } from "@/features/auth/public-server";
+import { defaultAppLocale, normalizeAppLocale } from "@/shared/i18n/config";
 
 const requestSchema = z.object({
   kind: z.enum(["direct-signup", "invite-signup", "invite-signin", "plain-signin"]),

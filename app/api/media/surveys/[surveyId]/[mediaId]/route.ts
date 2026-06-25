@@ -1,17 +1,17 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/api/error-contract";
+import { apiError } from "@/shared/http/api-error";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import { getCurrentSession } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import { getCurrentSession } from "@/features/auth/public-server";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
-import { createSignedSurveyMediaUrl } from "@/lib/storage";
-import { resolveRespondentAccess } from "@/lib/privacy/respondent";
-import { getClientIP } from "@/lib/ratelimit";
+} from "@/features/surveys/public-server";
+import { createSignedSurveyMediaUrl } from "@/shared/infra/supabase-storage";
+import { resolveRespondentAccess } from "@/features/privacy/public-server";
+import { getClientIP } from "@/shared/security/client-ip";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

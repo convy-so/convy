@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
-import { createPrivacyRequest, exportRespondentPrivacyData, markPrivacyRequestResolved } from "@/lib/privacy/service";
-import { resolveRespondentAccess } from "@/lib/privacy/respondent";
-import { getClientIP } from "@/lib/ratelimit";
+import { createPrivacyRequest, exportRespondentPrivacyData, markPrivacyRequestResolved } from "@/features/privacy/public-server";
+import { resolveRespondentAccess } from "@/features/privacy/public-server";
+import { getClientIP } from "@/shared/security/client-ip";
 
 const bodySchema = z.object({
   conversationId: z.string().min(1),

@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 import { eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { getAnalyticsState } from "@/lib/education/storage";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { getAnalyticsState } from "@/features/surveys/server/education/storage";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 
 export async function GET(
   _request: Request,

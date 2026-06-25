@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, usePathname } from "@/i18n/routing";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/ui/tailwind-class-utils";
 
 export function ActiveTabLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
     const pathname = usePathname();

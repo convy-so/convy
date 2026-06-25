@@ -1,48 +1,38 @@
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 import { and, desc, eq } from "drizzle-orm";
-import { getDb } from "@/db";
-import { surveyConversations } from "@/db/schema";
+import { getDb } from "@/shared/db";
+import { surveyConversations } from "@/shared/db/schema";
 import {
   ensureSession,
   getActiveCoveragePlan,
   getResearchBrief,
   getSessionBySourceId,
-} from "@/lib/education/storage";
-import { createInitialSessionState } from "@/lib/education/conducting-runtime";
+} from "@/features/surveys/server/education/storage";
+import { createInitialSessionState } from "@/features/surveys/server/education/conducting-runtime";
 import {
   admitParticipantOnFirstUserTurn,
   buildCanonicalConversationTurn,
   type RespondentLanguage,
-} from "@/lib/respondent-conversation";
+} from "@/features/surveys/server/respondent-conversation";
 import {
   RESPONDENT_RESUME_QUERY_PARAM,
   resolveRespondentAccess,
-} from "@/lib/privacy/respondent";
-import { getClientIP } from "@/lib/ratelimit";
+} from "@/features/privacy/public-server";
+import { getClientIP } from "@/shared/security/client-ip";
 import { 
   resolveClassroomAssignedAccess, 
   respondWithExistingConversation, 
   createNewConversation
-} from "@/lib/surveys/respondent-session-service";
-import { processRespondentTurn } from "@/lib/surveys/respondent-runtime-service";
-import { fetchActiveSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
+} from "@/features/surveys/server/respondent-session-service";
+import { processRespondentTurn } from "@/features/surveys/server/respondent-runtime-service";
+import { fetchActiveSurveyByShareableLink } from "@/features/surveys/server/public-survey-access";
 import { nanoid } from "nanoid";
+import { normalizeSurveyLanguage } from "@/shared/surveys/constants";
+import { requireValue } from "@/shared/utils/collections";
 import { z } from "zod";
 
-const supportedRespondentLanguages = new Set<RespondentLanguage>([
-  "en",
-  "fr",
-  "de",
-  "es",
-  "it",
-]);
-
 function getRequestedLanguage(language: unknown): RespondentLanguage {
-  if (typeof language === "string" && supportedRespondentLanguages.has(language as RespondentLanguage)) {
-    return language as RespondentLanguage;
-  }
-
-  return "en";
+  return normalizeSurveyLanguage(language);
 }
 
 const respondentRequestSchema = z.object({
@@ -184,10 +174,9 @@ export async function POST(
 
     if (!canonicalTurn.hasNewUserTurn) { return apiError("VALIDATION_ERROR", "No new user turn detected"); }
 
-    const firstUserTurn = !conversation.rawConversation || 
-      !(conversation.rawConversation as Array<{ role?: string }>).some(
-        (m) => m.role === "user",
-      );
+    const firstUserTurn = !canonicalTurn.storedMessages.some(
+      (message) => message.role === "user",
+    );
 
     if (firstUserTurn) {
       const admission = await admitParticipantOnFirstUserTurn({
@@ -217,13 +206,17 @@ export async function POST(
         }),
       });
     }
+    const readySessionRow = requireValue(
+      sessionRow,
+      `Failed to resolve respondent session for conversation ${conversation.id}`,
+    );
 
     return await processRespondentTurn({
       survey,
       conversation,
       brief: briefRow,
       coveragePlan: planRow,
-      sessionRow,
+      sessionRow: readySessionRow,
       canonicalTurn,
       language,
     });

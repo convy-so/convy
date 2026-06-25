@@ -4,32 +4,41 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
-import { getDb } from "@/db";
-import { surveyCreationConversations, surveys } from "@/db/schema";
+import { getDb } from "@/shared/db";
+import { surveyCreationConversations, surveys } from "@/shared/db/schema";
 import {
   assertState,
   validateInput,
   withErrorHandling,
   type ActionResult,
-} from "@/lib/action-wrapper";
-import { SURVEY_LIMITS } from "@/lib/config";
-import { env } from "@/lib/env";
-import { createSurveyForUser } from "@/lib/surveys/surveys-route-service";
-import { createSurveySchema } from "@/lib/validation/survey-schemas";
-import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
+} from "@/shared/http/action-result";
+import { SURVEY_LIMITS } from "@/shared/config/app-config";
+import { env } from "@/shared/config/server-env";
+import { createSurveyForUser } from "@/features/surveys/server/surveys-route-service";
+import { createSurveySchema } from "@/features/surveys/server/validation/survey-schemas";
+import { scheduleAnalyticsRefresh } from "@/features/surveys/server/analytics/analytics-refresh-scheduler";
+import {
+  SURVEY_ANALYTICS_STATE,
+  CREATION_CONVERSATION_STATUS,
+  SURVEY_DEFAULTS,
+  SURVEY_SESSION_TYPE,
+  SURVEY_STATUS,
+  normalizeSurveyDeliveryMode,
+  type SurveyDeliveryMode,
+} from "@/shared/surveys/constants";
 
 import {
   invalidateSurveyCaches,
   requireSurveyActionSession,
   requireSurveyWithPermission,
 } from "./shared";
-import { buildSurveyPublicPath } from "@/lib/surveys/utils";
+import { buildSurveyPublicPath } from "@/features/surveys/public-server";
 import {
   getActiveConductingProfile,
   getActiveCoveragePlan,
   getResearchBrief,
   replaceConductingProfile,
-} from "@/lib/education/storage";
+} from "@/features/surveys/server/education/storage";
 
 async function activateSurveyWithCanonicalData(params: {
   surveyId: string;
@@ -41,7 +50,8 @@ async function activateSurveyWithCanonicalData(params: {
   const { surveyId, survey, titleOverride, descriptionOverride, isVoiceOverride } = params;
 
   assertState(
-    survey.status === "sample_review" || survey.status === "draft",
+    survey.status === SURVEY_STATUS.SAMPLE_REVIEW ||
+      survey.status === SURVEY_STATUS.DRAFT,
     "Survey must be in draft or sample_review status to activate",
   );
 
@@ -56,7 +66,7 @@ async function activateSurveyWithCanonicalData(params: {
     "The brief is incomplete.",
   );
 
-  if (survey.status === "sample_review") {
+  if (survey.status === SURVEY_STATUS.SAMPLE_REVIEW) {
     assertState(
       survey.confirmed,
       "Please confirm at least one sample conversation before activating the survey",
@@ -67,11 +77,11 @@ async function activateSurveyWithCanonicalData(params: {
   if (activeSampleProfile?.profile) {
     await replaceConductingProfile({
       surveyId,
-      mode: "live",
+      mode: SURVEY_SESSION_TYPE.LIVE,
       sourcePatchId: activeSampleProfile.sourcePatchId,
       profile: {
         ...activeSampleProfile.profile,
-        mode: "live",
+        mode: SURVEY_SESSION_TYPE.LIVE,
         version: activeSampleProfile.profile.version,
         createdAt: new Date().toISOString(),
       },
@@ -88,7 +98,7 @@ async function activateSurveyWithCanonicalData(params: {
   await getDb()
     .update(surveys)
     .set({
-      status: "active",
+      status: SURVEY_STATUS.ACTIVE,
       shareableLink,
       title,
       description,
@@ -116,7 +126,7 @@ export async function createSurveyDraftAction(
   ActionResult<{
     id: string;
     title: string;
-    deliveryMode: "link" | "classroom_assigned";
+    deliveryMode: SurveyDeliveryMode;
     classroomId: string | null;
     messages: Array<{
       id: string;
@@ -150,7 +160,7 @@ export async function createSurveyDraftAction(
     const { createdSurvey } = await createSurveyForUser({
       session,
       body: {
-        deliveryMode: body.deliveryMode ?? "link",
+        deliveryMode: body.deliveryMode ?? SURVEY_DEFAULTS.deliveryMode,
         classroomId: body.classroomId ?? null,
         language: body.language,
         isVoice: body.isVoice ?? false,
@@ -165,7 +175,7 @@ export async function createSurveyDraftAction(
       data: {
         id: createdSurvey.id,
         title: createdSurvey.title ?? "Untitled Survey",
-        deliveryMode: createdSurvey.deliveryMode as "link" | "classroom_assigned",
+        deliveryMode: normalizeSurveyDeliveryMode(createdSurvey.deliveryMode),
         classroomId: createdSurvey.classroomId,
         messages: [],
       },
@@ -223,11 +233,11 @@ export async function deactivateSurveyAction(
       message: "Unauthorized",
     });
 
-    assertState(survey.status === "active", "Survey is not active");
+    assertState(survey.status === SURVEY_STATUS.ACTIVE, "Survey is not active");
 
     await getDb()
       .update(surveys)
-      .set({ status: "completed" })
+      .set({ status: SURVEY_STATUS.COMPLETED })
       .where(eq(surveys.id, surveyId));
 
     await invalidateSurveyCaches(session.user.id, ["stats", "recentSurveys"]);
@@ -251,7 +261,10 @@ export async function reactivateSurveyAction(
       message: "Unauthorized",
     });
 
-    assertState(survey.status === "completed", "Survey is not completed");
+    assertState(
+      survey.status === SURVEY_STATUS.COMPLETED,
+      "Survey is not completed",
+    );
     assertState(
       survey.currentParticipants < survey.participantLimit,
       "Survey has reached participant limit. Increase the limit to reactivate.",
@@ -259,7 +272,7 @@ export async function reactivateSurveyAction(
 
     await getDb()
       .update(surveys)
-      .set({ status: "active" })
+      .set({ status: SURVEY_STATUS.ACTIVE })
       .where(eq(surveys.id, surveyId));
 
     await invalidateSurveyCaches(session.user.id, ["stats", "recentSurveys"]);
@@ -293,14 +306,19 @@ export async function deleteSurveyAction(
 
 export async function setSurveyStatusAction(
   input: unknown,
-): Promise<ActionResult<{ id: string; status: "active" | "paused" }>> {
+): Promise<
+  ActionResult<{
+    id: string;
+    status: typeof SURVEY_STATUS.ACTIVE | typeof SURVEY_STATUS.PAUSED;
+  }>
+> {
   return withErrorHandling(async () => {
     const session = await requireSurveyActionSession();
     const body = validateInput(
       input,
       z.object({
         surveyId: z.string().min(1),
-        status: z.enum(["active", "paused"]),
+        status: z.enum([SURVEY_STATUS.ACTIVE, SURVEY_STATUS.PAUSED]),
       }),
     );
 
@@ -311,7 +329,7 @@ export async function setSurveyStatusAction(
       message: "Unauthorized",
     });
 
-    if (body.status === "active") {
+    if (body.status === SURVEY_STATUS.ACTIVE) {
       assertState(
         survey.currentParticipants < survey.participantLimit,
         "Survey has reached participant limit. Increase the limit to reactivate.",
@@ -391,7 +409,9 @@ export async function publishSurveyAction(
 
 export async function finalizeSurveyCreationAction(
   surveyId: string,
-): Promise<ActionResult<{ id: string; status: "sample_review" }>> {
+): Promise<
+  ActionResult<{ id: string; status: typeof SURVEY_STATUS.SAMPLE_REVIEW }>
+> {
   return withErrorHandling(async () => {
     const session = await requireSurveyActionSession();
     const { survey } = await requireSurveyWithPermission({
@@ -402,7 +422,7 @@ export async function finalizeSurveyCreationAction(
     });
 
     assertState(
-      survey.status === "creating",
+      survey.status === SURVEY_STATUS.CREATING,
       "Survey has already been finalized",
     );
 
@@ -419,7 +439,7 @@ export async function finalizeSurveyCreationAction(
     await getDb()
       .update(surveys)
       .set({
-        status: "sample_review",
+        status: SURVEY_STATUS.SAMPLE_REVIEW,
         title: briefRow.brief.title,
         description: briefRow.brief.learningContext,
         coreObjective: briefRow.brief.researchGoal,
@@ -431,7 +451,7 @@ export async function finalizeSurveyCreationAction(
     await getDb()
       .update(surveyCreationConversations)
       .set({
-        status: "completed",
+        status: CREATION_CONVERSATION_STATUS.COMPLETED,
         extractedData: {
           programId: briefRow.programId,
           brief: briefRow.brief,
@@ -444,7 +464,10 @@ export async function finalizeSurveyCreationAction(
 
     await invalidateSurveyCaches(session.user.id, ["recentSurveys", "stats"]);
 
-    return { success: true, data: { id: surveyId, status: "sample_review" } };
+    return {
+      success: true,
+      data: { id: surveyId, status: SURVEY_STATUS.SAMPLE_REVIEW },
+    };
   }, "finalizeSurveyCreationAction");
 }
 
@@ -492,9 +515,9 @@ export async function duplicateSurveyAction(
         id: newSurveyId,
         userId: session.user.id,
         title: `${existingSurvey.title || "Untitled Survey"} (Copy)`,
-        status: "draft",
-        confirmed: false,
-        currentParticipants: 0,
+        status: SURVEY_STATUS.DRAFT,
+        confirmed: SURVEY_DEFAULTS.confirmed,
+        currentParticipants: SURVEY_DEFAULTS.currentParticipants,
         shareableLink: null,
         customSlug: null,
         createdAt: now,
@@ -530,7 +553,9 @@ export async function duplicateSurveyAction(
 
 export async function refreshSurveyAnalyticsAction(
   input: unknown,
-): Promise<ActionResult<{ surveyId: string; status: "queued" }>> {
+): Promise<
+  ActionResult<{ surveyId: string; status: typeof SURVEY_ANALYTICS_STATE.QUEUED }>
+> {
   return withErrorHandling(async () => {
     const session = await requireSurveyActionSession();
     const body = validateInput(
@@ -559,7 +584,7 @@ export async function refreshSurveyAnalyticsAction(
       success: true,
       data: {
         surveyId: body.surveyId,
-        status: "queued",
+        status: SURVEY_ANALYTICS_STATE.QUEUED,
       },
     };
   }, "refreshSurveyAnalyticsAction");

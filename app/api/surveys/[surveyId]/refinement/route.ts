@@ -1,11 +1,12 @@
 import { desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { readJsonRequestValue } from "@/shared/http/json";
 
-import { getDb } from "@/db";
-import { sampleConversations, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { buildRefinementAssistantResponse } from "@/lib/education/refinement";
+import { getDb } from "@/shared/db";
+import { sampleConversations, surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { buildRefinementAssistantResponse } from "@/features/surveys/server/education/refinement";
 import {
   appendRefinementMessage,
   createRefinementProposal,
@@ -13,12 +14,24 @@ import {
   getResearchBrief,
   listRefinementMessages,
   listRefinementProposals,
-} from "@/lib/education/storage";
+} from "@/features/surveys/server/education/storage";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
-import type { ChatMessage } from "@/lib/chat-types";
+} from "@/features/surveys/public-server";
+import type { ChatMessage } from "@/shared/chat/chat-types";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getRefinementContent(value: unknown): string {
+  if (!isRecord(value) || typeof value.content !== "string") {
+    return "";
+  }
+
+  return value.content.trim();
+}
 
 export async function GET(
   _req: NextRequest,
@@ -64,8 +77,8 @@ export async function POST(
     const permission = await getSurveyPermissionForSession(session, surveyId);
     if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
-    const body = await req.json();
-    const content = String(body.content || "").trim();
+    const body = await readJsonRequestValue(req);
+    const content = getRefinementContent(body);
     if (!content) { return apiError("VALIDATION_ERROR", "content is required"); }
 
     const [briefRow, latestSample] = await Promise.all([

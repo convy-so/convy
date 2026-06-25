@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRuntimeProcessorHealth } from "@/lib/privacy/compliance";
+import { getRuntimeProcessorHealth } from "@/features/privacy/server/compliance";
 
 /**
  * GET /api/health
@@ -11,7 +11,7 @@ import { getRuntimeProcessorHealth } from "@/lib/privacy/compliance";
  * Returns 200 OK when the server is running.
  * You can extend this later to check DB connectivity etc.
  */
-export async function GET() {
+export function GET() {
   const processorHealth = getRuntimeProcessorHealth();
 
   return NextResponse.json(

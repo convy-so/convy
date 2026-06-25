@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { normalizeAppLocale } from "@/lib/i18n/config";
-import { env } from "@/lib/env";
-import { sanitizeReturnTo } from "@/lib/auth/redirect";
-import { logAuthAuditEvent } from "@/lib/auth/audit";
+import { normalizeAppLocale } from "@/shared/i18n/config";
+import { env } from "@/shared/config/server-env";
+import { sanitizeReturnTo } from "@/features/auth/public-server";
+import { logAuthAuditEvent } from "@/features/auth/public-server";
 
 /**
  * GET /api/user/language/sync

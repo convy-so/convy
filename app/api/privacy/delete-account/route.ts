@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   createDeletionJob,
   createPrivacyRequest,
   deleteUserPrivacyData,
   markDeletionJobStatus,
   markPrivacyRequestResolved,
-} from "@/lib/privacy/service";
+} from "@/features/privacy/public-server";
 
 export async function POST() {
   let privacyRequestId: string | null = null;

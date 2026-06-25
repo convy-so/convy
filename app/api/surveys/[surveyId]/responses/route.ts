@@ -1,14 +1,14 @@
 import { eq, desc, count, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db";
-import { surveyConversations } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { surveyConversations } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+} from "@/features/surveys/public-server";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 
 type ConversationMessage = {
   role: string;
@@ -16,13 +16,17 @@ type ConversationMessage = {
   timestamp?: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function normalizeConversationMessages(value: unknown): ConversationMessage[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value.flatMap((item) => {
-    if (typeof item !== "object" || item === null) {
+    if (!isRecord(item)) {
       return [];
     }
 
@@ -39,6 +43,15 @@ function normalizeConversationMessages(value: unknown): ConversationMessage[] {
   });
 }
 
+function getPositiveIntegerParam(
+  value: string | null,
+  fallback: number,
+): number {
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 /**
  * GET - Get all responses for a survey
  */
@@ -51,8 +64,8 @@ export async function GET(
     const { surveyId } = await params;
     const { searchParams } = new URL(request.url);
 
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = getPositiveIntegerParam(searchParams.get("page"), 1);
+    const limit = getPositiveIntegerParam(searchParams.get("limit"), 10);
     const status = searchParams.get("status") || "all";
     const offset = (page - 1) * limit;
 

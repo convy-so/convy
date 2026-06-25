@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/shared/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { toast } from "sonner";
 
 export default function SentryTestPage() {
@@ -22,7 +22,7 @@ export default function SentryTestPage() {
     }
   };
 
-  const triggerServerError = async () => {
+  const triggerServerError = () => {
     // We'll use a dynamic import or a non-existent function to trigger a server-side error
     // in a way that Sentry captures it during the request.
     window.location.href = "/sentry-test?error=true";
@@ -49,7 +49,9 @@ export default function SentryTestPage() {
           <Button 
             variant="outline" 
             className="w-full" 
-            onClick={triggerApiError}
+            onClick={() => {
+              void triggerApiError();
+            }}
           >
             Trigger API Route Error
           </Button>
@@ -57,7 +59,9 @@ export default function SentryTestPage() {
           <Button 
             variant="secondary" 
             className="w-full" 
-            onClick={triggerServerError}
+            onClick={() => {
+              triggerServerError();
+            }}
           >
             Trigger Server-Side Error
           </Button>

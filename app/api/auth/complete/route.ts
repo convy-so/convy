@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { clearAuthIntentCookie } from "@/lib/auth/auth-intent";
-import { resolvePublicRedirectUrl } from "@/lib/auth/public-url";
-import { sanitizeReturnTo } from "@/lib/auth/redirect";
+import { clearAuthIntentCookie } from "@/features/auth/public-server";
+import { resolvePublicRedirectUrl } from "@/features/auth/public-server";
+import { sanitizeReturnTo } from "@/features/auth/public-server";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

@@ -1,13 +1,13 @@
 "use server";
 
-import { getCurrentSession, requireVerifiedSession } from "@/lib/auth/dal";
-import { getDb } from "@/db";
-import { users } from "@/db/schema/auth";
+import { getCurrentSession, requireVerifiedSession } from "@/features/auth/public-server";
+import { getDb } from "@/shared/db";
+import { users } from "@/shared/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
-import { withErrorHandling, ActionResult, UnauthorizedError } from "@/lib/action-wrapper";
+import { normalizeAppLocale, type AppLocale } from "@/shared/i18n/config";
+import { withErrorHandling, ActionResult, UnauthorizedError } from "@/shared/http/action-result";
 
 /**
  * Server Action to update the user's preferred language

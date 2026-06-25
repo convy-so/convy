@@ -1,20 +1,34 @@
 import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { users } from "@/db/schema";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { auth } from "@/lib/auth";
+import { getDb } from "@/shared/db";
+import { users } from "@/shared/db/schema";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { readJsonRequestValue } from "@/shared/http/json";
+import { auth } from "@/features/auth/public-server";
 import {
   getCurrentSession,
   isInvalidAccountStateError,
   requirePlatformRole,
   type PlatformRole,
-} from "@/lib/auth/dal";
+} from "@/features/auth/public-server";
 import {
   getExpertInvitationById,
   isExpertInvitationExpired,
-} from "@/lib/auth/expert-invitations";
+} from "@/features/auth/public-server";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getRequestedName(value: unknown): string {
+  if (!isRecord(value)) {
+    return "";
+  }
+
+  const name = value["name"];
+  return typeof name === "string" ? name.trim() : "";
+}
 
 export async function POST(
   req: Request,
@@ -59,8 +73,8 @@ export async function POST(
       return apiError("VALIDATION_ERROR", "Verify your email before requesting password setup.");
     }
 
-    const body = await req.json();
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const body = await readJsonRequestValue(req);
+    const name = getRequestedName(body);
     if (!name) {
       return apiError("VALIDATION_ERROR", "Name is required.");
     }

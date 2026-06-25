@@ -4,12 +4,12 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useRouter } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/features/auth/public-client";
 import toast from "react-hot-toast";
-import { StatusCard } from "@/components/auth/status-card";
-import { LoadingOverlay } from "@/components/auth/loading-overlay";
-import { getAuthContinueHref, getSafeReturnToHref, getSignInHref } from "@/lib/auth/hrefs";
-import { sanitizeReturnTo } from "@/lib/auth/redirect";
+import { StatusCard } from "@/features/auth/ui/status-card";
+import { LoadingOverlay } from "@/features/auth/ui/loading-overlay";
+import { getAuthContinueHref, getSafeReturnToHref, getSignInHref } from "@/features/auth/public-server";
+import { sanitizeReturnTo } from "@/features/auth/public-server";
 
 import { Suspense } from "react";
 
@@ -80,7 +80,7 @@ function VerifyEmailContent() {
         }
       };
 
-      verify();
+      void verify();
     }
   }, [callbackURL, locale, router, searchParams, t, token]);
 
@@ -123,7 +123,9 @@ function VerifyEmailContent() {
       showLogo
       actionButton={email ? {
         text: isResending ? t('ResendingButton') : t('ResendButton'),
-        onClick: handleResendVerification,
+        onClick: () => {
+          void handleResendVerification();
+        },
         disabled: isResending
       } : undefined}
       secondaryAction={{

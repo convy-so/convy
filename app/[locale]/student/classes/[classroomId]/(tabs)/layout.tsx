@@ -1,7 +1,7 @@
-import { getDb } from "@/db";
-import { classroomStudents } from "@/db/schema/learning";
+import { getDb } from "@/shared/db";
+import { classroomStudents } from "@/shared/db/schema/learning";
 import { eq, and } from "drizzle-orm";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import { redirect, notFound } from "next/navigation";
 import { Link } from "@/i18n/routing";
 import { GraduationCap, ArrowLeft, BookOpen, BarChart3 } from "lucide-react";

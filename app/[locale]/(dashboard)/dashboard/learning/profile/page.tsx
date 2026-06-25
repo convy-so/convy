@@ -1,9 +1,9 @@
-import { StudentProfilePage } from "@/components/learning/student-profile-page";
+import { StudentProfilePage } from "@/features/tutoring/ui/student-profile-page";
 import {
   getLearningMeData,
   getMyPatternSummaries,
   getOnboardingStateData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function LearningProfilePage() {
   const [learningMe, patterns] = await Promise.all([

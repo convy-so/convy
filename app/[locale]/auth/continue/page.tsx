@@ -1,18 +1,18 @@
 import { redirect } from "next/navigation";
 
-import { readAuthIntentCookie } from "@/lib/auth/auth-intent";
-import { getCurrentSession } from "@/lib/auth/dal";
-import { isInvalidAccountStateError } from "@/lib/auth/dal";
-import { logAuthAuditEvent } from "@/lib/auth/audit";
-import { findActivePendingExpertInvitationForUser } from "@/lib/auth/expert-invitations";
+import { readAuthIntentCookie } from "@/features/auth/public-server";
+import { getCurrentSession } from "@/features/auth/public-server";
+import { isInvalidAccountStateError } from "@/features/auth/public-server";
+import { logAuthAuditEvent } from "@/features/auth/public-server";
+import { findActivePendingExpertInvitationForUser } from "@/features/auth/public-server";
 import {
   getLocalizedAuthIssuePath,
   getLocalizedSignedInHomePath,
   sanitizeReturnTo,
-} from "@/lib/auth/redirect";
-import { resolveViewerAccess, type ViewerAccessContext } from "@/lib/auth/viewer-access";
-import { localizeAppPath } from "@/lib/auth/redirect";
-import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
+} from "@/features/auth/public-server";
+import { resolveViewerAccess, type ViewerAccessContext } from "@/features/auth/public-server";
+import { localizeAppPath } from "@/features/auth/public-server";
+import { normalizeAppLocale, type AppLocale } from "@/shared/i18n/config";
 
 function redirectViaCompletion(target: string): never {
   redirect(`/api/auth/complete?target=${encodeURIComponent(target)}`);

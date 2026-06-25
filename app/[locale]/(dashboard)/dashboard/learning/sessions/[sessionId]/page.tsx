@@ -1,8 +1,8 @@
-import { TopicSetupPage } from "@/components/learning/topic-setup-page";
+import { LessonSetupPage } from "@/features/tutoring/ui/lesson-setup-page";
 import {
   getTopicMaterialsData,
   getTopicSetupData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function LearningSessionDetailPage({
   params,
@@ -16,7 +16,7 @@ export default async function LearningSessionDetailPage({
   ]);
 
   return (
-    <TopicSetupPage
+    <LessonSetupPage
       initialData={topicSetup}
       initialMaterials={materials}
     />

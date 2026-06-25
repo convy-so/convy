@@ -1,13 +1,13 @@
 import { and, desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { apiError } from "@/lib/api/error-contract";
+import { apiError } from "@/shared/http/api-error";
 
-import { getDb } from "@/db";
-import { teacherStudentChatSessions } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { getDb } from "@/shared/db";
+import { teacherStudentChatSessions } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
+import { resolveTeacherStudentAccess } from "@/features/tutoring/server/teacher-route-access";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 
 export async function GET(
   _request: NextRequest,

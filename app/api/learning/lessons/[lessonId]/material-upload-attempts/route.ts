@@ -1,11 +1,11 @@
-import { GET as getTopicMaterialUploadAttempts } from "../../../topics/[topicId]/material-upload-attempts/route";
+import { GET as getLessonMaterialUploadAttempts } from "@/features/tutoring/server/api/lesson-material-upload-attempts-route";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
   const { lessonId } = await params;
-  return getTopicMaterialUploadAttempts(request, {
+  return getLessonMaterialUploadAttempts(request, {
     params: Promise.resolve({ topicId: lessonId }),
   });
 }

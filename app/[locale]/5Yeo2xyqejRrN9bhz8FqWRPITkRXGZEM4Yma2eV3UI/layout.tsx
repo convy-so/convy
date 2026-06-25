@@ -3,8 +3,8 @@ import { headers } from "next/headers";
 import { Loader2 } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { AdminSidebar } from "@/components/admin/admin-sidebar";
-import { requireRole } from "@/lib/auth/dal";
+import { AdminSidebar } from "@/features/admin/ui/admin-sidebar";
+import { requireRole } from "@/features/auth/public-server";
 
 export default function AdminLayout(props: {
   children: React.ReactNode;

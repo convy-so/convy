@@ -1,15 +1,16 @@
 "use server";
 
-import { getDb } from "@/db";
-import { users, sessions } from "@/db/schema/auth";
-import { usageLogs } from "@/db/schema/billing";
-import { surveys, surveyCreationConversations, surveyBriefs } from "@/db/schema/surveys";
-import { platformFeedback } from "@/db/schema/feedback";
-import { classroomStudents, classrooms, learningTopics, learningSessions } from "@/db/schema/learning";
+import { getDb } from "@/shared/db";
+import { users, sessions } from "@/shared/db/schema/auth";
+import { usageLogs } from "@/shared/db/schema/billing";
+import { surveys, surveyCreationConversations, surveyBriefs } from "@/shared/db/schema/surveys";
+import { platformFeedback } from "@/shared/db/schema/feedback";
+import { classroomStudents, classrooms, learningTopics, learningSessions } from "@/shared/db/schema/learning";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
 
-import { requireRole } from "@/lib/auth/dal";
-import { withErrorHandling, ActionResult, UnauthorizedError, ActionError } from "@/lib/action-wrapper";
+import { requireRole } from "@/features/auth/public-server";
+import { withErrorHandling, ActionResult, UnauthorizedError, ActionError } from "@/shared/http/action-result";
+import { requireValue } from "@/shared/utils/collections";
 
 export type AdminStats = {
   totalUsers: number;
@@ -80,20 +81,32 @@ export type SurveyReviewDetails = (typeof surveys)["$inferSelect"] & {
   brief: (typeof surveyBriefs)["$inferSelect"] | null;
 };
 
+function getDateLabel(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return "";
+}
+
 // Runtime mappers for raw SQL execute() results.
 // getDb().execute() always returns Record<string, unknown>[] for rows regardless
-// of the sql<T> generic — the generic is only used by the Drizzle query builder,
+// of the sql<T> generic â€” the generic is only used by the Drizzle query builder,
 // not by execute(). These mappers safely extract and coerce each field.
 function toUserGrowthData(rows: Record<string, unknown>[]): UserGrowthData[] {
   return rows.map((row) => ({
-    date: typeof row.date === "string" ? row.date : String(row.date ?? ""),
+    date: getDateLabel(row.date),
     count: typeof row.count === "number" ? row.count : Number(row.count ?? 0),
   }));
 }
 
 function toUsageCostData(rows: Record<string, unknown>[]): UsageCostData[] {
   return rows.map((row) => ({
-    date: typeof row.date === "string" ? row.date : String(row.date ?? ""),
+    date: getDateLabel(row.date),
     cost: typeof row.cost === "number" ? row.cost : Number(row.cost ?? 0),
   }));
 }
@@ -140,18 +153,32 @@ export async function getAdminStats(authHeaders?: Headers | string | null): Prom
         .from(users)
         .where(gte(users.createdAt, thirtyDaysAgo)),
     ]);
+    const totalUsersRow = requireValue(totalUsers[0], "Missing total users aggregate.");
+    const totalSurveysRow = requireValue(totalSurveys[0], "Missing total surveys aggregate.");
+    const totalTopicsRow = requireValue(totalTopics[0], "Missing total topics aggregate.");
+    const totalClassroomsRow = requireValue(totalClassrooms[0], "Missing total classrooms aggregate.");
+    const totalLearningSessionsRow = requireValue(
+      totalLearningSessions[0],
+      "Missing total learning sessions aggregate.",
+    );
+    const totalUsageCostRow = requireValue(totalUsageCost[0], "Missing usage cost aggregate.");
+    const activeSessionsRow = requireValue(activeSessions[0], "Missing active sessions aggregate.");
+    const newUsersLast30DaysRow = requireValue(
+      newUsersLast30Days[0],
+      "Missing new users aggregate.",
+    );
 
     return {
       success: true,
       data: {
-        totalUsers: totalUsers[0].count,
-        totalSurveys: totalSurveys[0].count,
-        totalTopics: totalTopics[0].count,
-        totalClassrooms: totalClassrooms[0].count,
-        totalLearningSessions: totalLearningSessions[0].count,
-        totalUsageCost: totalUsageCost[0].total || "0",
-        activeSessions: activeSessions[0].count,
-        newUsersLast30Days: newUsersLast30Days[0].count,
+        totalUsers: totalUsersRow.count,
+        totalSurveys: totalSurveysRow.count,
+        totalTopics: totalTopicsRow.count,
+        totalClassrooms: totalClassroomsRow.count,
+        totalLearningSessions: totalLearningSessionsRow.count,
+        totalUsageCost: totalUsageCostRow.total || "0",
+        activeSessions: activeSessionsRow.count,
+        newUsersLast30Days: newUsersLast30DaysRow.count,
       }
     };
   }, "getAdminStats");
@@ -317,14 +344,15 @@ const VALID_FEEDBACK_STATUSES = [
   "dismissed",
 ] as const;
 type FeedbackStatus = (typeof VALID_FEEDBACK_STATUSES)[number];
+const VALID_FEEDBACK_STATUS_SET = new Set<string>(VALID_FEEDBACK_STATUSES);
 
 function isValidFeedbackStatus(value: string): value is FeedbackStatus {
-  return VALID_FEEDBACK_STATUSES.includes(value as FeedbackStatus);
+  return VALID_FEEDBACK_STATUS_SET.has(value);
 }
 
 export async function updatePlatformFeedbackStatus(
   feedbackId: string,
-  status: FeedbackStatus,
+  status: string,
   authHeaders?: Headers | string | null,
 ): Promise<ActionResult<{ id: string; status: string } | null>> {
   return withErrorHandling(async () => {

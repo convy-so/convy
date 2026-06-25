@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
-import { FeedbackForm } from "@/components/feedback/feedback-form";
-import { getCurrentSession } from "@/lib/auth/dal";
-import { resolveFeedbackFormContext } from "@/lib/feedback/service";
+import { FeedbackForm } from "@/features/feedback/ui/feedback-form";
+import { getCurrentSession } from "@/features/auth/public-server";
+import { resolveFeedbackFormContext } from "@/features/feedback/server/feedback-service";
 
 export default async function DashboardFeedbackPage() {
   const session = await getCurrentSession();

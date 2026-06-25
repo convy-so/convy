@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { getTutorCapability } from "@/lib/learning/tutor-capabilities";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
+import { getTutorCapability } from "@/features/tutoring/server/tutor-capabilities";
 import {
   activateFramework,
   getFrameworkById,
-} from "@/lib/learning/storage";
+} from "@/features/tutoring/public-server";
 import {
   expertFrameworkSchema,
   getIncompleteExpertFrameworkCapabilityIds,
-  type ExpertFramework,
-} from "@/lib/learning/types";
-import { apiError } from "@/lib/api/error-contract";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+  isLegacyExpertFrameworkCapabilityGuidance,
+} from "@/features/tutoring/public-server";
+import { apiError } from "@/shared/http/api-error";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 export async function POST(
   _request: Request,
@@ -28,9 +28,28 @@ export async function POST(
       return apiError("NOT_FOUND", "Framework not found");
     }
 
-    const artifact = expertFrameworkSchema.parse(
+    const parsedArtifact = expertFrameworkSchema.safeParse(
       framework.draftFramework,
-    ) as ExpertFramework;
+    );
+    if (!parsedArtifact.success) {
+      const rawCapabilityGuidance =
+        typeof framework.draftFramework === "object" && framework.draftFramework !== null
+          ? (framework.draftFramework as Record<string, unknown>).capabilityGuidance
+          : undefined;
+      if (isLegacyExpertFrameworkCapabilityGuidance(rawCapabilityGuidance)) {
+        return apiError(
+          "VALIDATION_ERROR",
+          "This framework still uses the retired capability format. Re-author capability settings in the framework editor before activation.",
+        );
+      }
+
+      return apiError(
+        "VALIDATION_ERROR",
+        parsedArtifact.error.errors[0]?.message ?? "Framework validation failed.",
+      );
+    }
+
+    const artifact = parsedArtifact.data;
 
     if (!artifact.markdownContent?.trim()) {
       return apiError(
@@ -47,7 +66,7 @@ export async function POST(
         .join(", ");
       return apiError(
         "VALIDATION_ERROR",
-        `Add capability guidance before activation: ${missingLabels}.`,
+        `Add required capability policy before activation: ${missingLabels}.`,
       );
     }
 

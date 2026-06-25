@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { archiveFramework } from "@/lib/learning/storage";
-import { apiError } from "@/lib/api/error-contract";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
+import { archiveFramework } from "@/features/tutoring/public-server";
+import { apiError } from "@/shared/http/api-error";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 export async function POST(
   _request: Request,

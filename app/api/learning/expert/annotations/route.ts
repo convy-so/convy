@@ -3,18 +3,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { learningSessions } from "@/db/schema/learning";
+import { getDb } from "@/shared/db";
+import { learningSessions } from "@/shared/db/schema/learning";
 
-import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { resolveExpertReviewAnchor } from "@/lib/learning/expert-access";
+import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
+import { resolveExpertReviewAnchor } from "@/features/tutoring/server/expert-access";
 import {
   createExpertReviewCase,
   listExpertReviewCases,
   maybeCreateDraftCrystallizationFromReviewCases,
-} from "@/lib/learning/storage";
-import { apiError } from "@/lib/api/error-contract";
-import { handleLearningRouteError } from "@/lib/learning/route-errors";
+} from "@/features/tutoring/public-server";
+import { apiError } from "@/shared/http/api-error";
+import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
 
 const createReviewCaseSchema = z.object({
   topicId: z.string().nullable().optional(),
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
             relevanceScope: body.relevanceScope,
             frameworkId,
           })
-        : { created: false as const };
+        : { created: false };
 
     return NextResponse.json({
       success: true,

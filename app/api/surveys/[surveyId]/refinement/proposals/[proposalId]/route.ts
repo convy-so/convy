@@ -1,17 +1,18 @@
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { readJsonRequestValue } from "@/shared/http/json";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   applyResearchBriefPatch,
   buildConductingProfileFromProposal,
   normalizeResearchBriefPatch,
-} from "@/lib/education/refinement";
-import { validateBrief } from "@/lib/education/creation-workflow";
-import { sampleRequestedChangeSchema } from "@/lib/education/sample-feedback";
+} from "@/features/surveys/server/education/refinement";
+import { validateBrief } from "@/features/surveys/server/education/creation-workflow";
+import { sampleRequestedChangeSchema } from "@/features/surveys/server/education/sample-feedback";
 import {
   createResearchBriefPatchRecord,
   getActiveConductingProfile,
@@ -22,17 +23,29 @@ import {
   replaceCoveragePlan,
   updateRefinementProposalStatus,
   upsertResearchBrief,
-} from "@/lib/education/storage";
+} from "@/features/surveys/server/education/storage";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
 import { z } from "zod";
 
 const conductingProfilePayloadSchema = z.object({
   changes: z.array(sampleRequestedChangeSchema).optional(),
   summary: z.string().optional(),
 });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getProposalAction(value: unknown): "approve" | "reject" {
+  return isRecord(value) && value.action === "reject" ? "reject" : "approve";
+}
+
+function shouldApplyProposalToLive(value: unknown): boolean {
+  return isRecord(value) && value.applyToLive === true;
+}
 
 export async function POST(
   req: NextRequest,
@@ -41,8 +54,8 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId, proposalId } = await params;
-    const body = await req.json();
-    const action = body.action === "reject" ? "reject" : "approve";
+    const body = await readJsonRequestValue(req);
+    const action = getProposalAction(body);
 
     const [survey, proposal] = await Promise.all([
       getDb().select().from(surveys).where(eq(surveys.id, surveyId)).then((rows) => rows[0]),
@@ -77,7 +90,7 @@ export async function POST(
           profile,
         });
 
-        if (body.applyToLive) {
+        if (shouldApplyProposalToLive(body)) {
           const currentLive = await getActiveConductingProfile(surveyId, "live");
           await replaceConductingProfile({
             surveyId,

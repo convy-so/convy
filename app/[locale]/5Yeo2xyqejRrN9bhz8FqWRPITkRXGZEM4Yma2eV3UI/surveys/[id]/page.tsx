@@ -15,8 +15,8 @@ import { notFound } from "next/navigation";
 
 import { getSurveyReviewDetails } from "@/app/actions/admin";
 import { Link } from "@/i18n/routing";
-import { getAdminAppPath } from "@/lib/auth/admin-path";
-import { type ChatMessage } from "@/lib/chat-types";
+import { getAdminAppPath } from "@/features/auth/public-server";
+import { type ChatMessage } from "@/shared/chat/chat-types";
 
 async function ReviewContent({
   params,

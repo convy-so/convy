@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 import { Link } from "@/i18n/routing";
 
-import { getCurrentSession } from "@/lib/auth/dal";
-import { getSignInHref, getSignUpHref, getVerifyEmailHref } from "@/lib/auth/hrefs";
-import { resolveInvitationAccess } from "@/lib/auth/invitation-access";
+import { getCurrentSession } from "@/features/auth/public-server";
+import { getSignInHref, getSignUpHref, getVerifyEmailHref } from "@/features/auth/public-server";
+import { resolveInvitationAccess } from "@/features/auth/public-server";
 
 import { InviteReviewActions } from "./invite-review-actions";
 

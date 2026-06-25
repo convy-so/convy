@@ -1,12 +1,12 @@
 import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
-import { AnalyticsDashboard } from "@/components/analytics/AnalyticsDashboard";
+import { AnalyticsDashboard } from "@/features/surveys/ui/analytics/analytics-dashboard";
 import { Link, redirect } from "@/i18n/routing";
 import {
   getSurveyAnalyticsInitialData,
   getSurveyDetailsData,
-} from "@/lib/server/app-queries";
+} from "@/shared/http/page-data";
 
 export default async function SurveyAnalyticsPage({
   params,

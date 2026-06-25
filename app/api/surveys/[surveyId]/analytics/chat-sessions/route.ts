@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
+import { mapSessionAuthError } from "@/shared/http/route-auth-error";
 import { and, desc, eq } from "drizzle-orm";
 
-import { getDb } from "@/db";
-import { surveys, analyticsChatSessions } from "@/db/schema";
-import type { ChatSessionMessage } from "@/db/schema/surveys";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { surveys, analyticsChatSessions } from "@/shared/db/schema";
+import type { ChatSessionMessage } from "@/shared/db/schema/surveys";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
+} from "@/features/surveys/public-server";
+import { requireValue } from "@/shared/utils/collections";
 import { z } from "zod";
 
 const analyticsChatSessionRequestSchema = z.object({
@@ -120,7 +121,10 @@ export async function POST(
           title: analyticsChatSessions.title,
         });
 
-      resultSession = updated;
+      resultSession = requireValue(
+        updated,
+        `Failed to update analytics chat session ${sessionId}`,
+      );
     } else {
       // Create new session
       const newId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -138,7 +142,10 @@ export async function POST(
           title: analyticsChatSessions.title,
         });
 
-      resultSession = created;
+      resultSession = requireValue(
+        created,
+        `Failed to create analytics chat session for survey ${surveyId}`,
+      );
     }
 
     return NextResponse.json({ session: resultSession });

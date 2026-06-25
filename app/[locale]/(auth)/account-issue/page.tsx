@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 
-import { StatusCard } from "@/components/auth/status-card";
-import { getSignInHref } from "@/lib/auth/hrefs";
+import { StatusCard } from "@/features/auth/ui/status-card";
+import { getSignInHref } from "@/features/auth/public-server";
 
 export default async function AccountIssuePage({
   searchParams,

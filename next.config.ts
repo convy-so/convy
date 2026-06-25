@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
 
-  rewrites: async () => {
+  rewrites: () => {
     // Proxy /voice/* and /analytics WebSocket upgrade requests
     // from the Next.js server to the standalone WebSocket container.
     // ALB routes HTTP(S) here; the WS server upgrades the connection.

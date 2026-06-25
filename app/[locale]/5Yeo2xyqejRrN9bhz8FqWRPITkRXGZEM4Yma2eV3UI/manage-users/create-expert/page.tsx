@@ -2,10 +2,31 @@
 
 import { useState } from "react";
 import { ArrowLeft, Loader2, Mail, UserPlus } from "lucide-react";
+import toast from "react-hot-toast";
 
 import { Link, useRouter } from "@/i18n/routing";
-import { getAdminAppPath } from "@/lib/auth/admin-path";
-import toast from "react-hot-toast";
+import { getAdminAppPath } from "@/features/auth/public-server";
+import { readJsonResponseValue } from "@/shared/http/json";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getResponseErrorMessage(payload: unknown): string | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  if (typeof payload.error === "string") {
+    return payload.error;
+  }
+
+  if (isRecord(payload.error) && typeof payload.error.message === "string") {
+    return payload.error.message;
+  }
+
+  return null;
+}
 
 export default function CreateExpertPage() {
   const router = useRouter();
@@ -23,11 +44,11 @@ export default function CreateExpertPage() {
         body: JSON.stringify({ email }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponseValue(res);
 
       if (!res.ok) {
         throw new Error(
-          data?.error?.message ?? data?.error ?? "Failed to send expert invitation",
+          getResponseErrorMessage(data) ?? "Failed to send expert invitation",
         );
       }
 
@@ -63,7 +84,12 @@ export default function CreateExpertPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form
+          onSubmit={(event) => {
+            void handleSubmit(event);
+          }}
+          className="space-y-6"
+        >
           <div className="space-y-4">
             <div>
               <label

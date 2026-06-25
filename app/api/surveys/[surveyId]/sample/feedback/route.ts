@@ -1,20 +1,20 @@
 import { and, eq } from "drizzle-orm";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getDb } from "@/db";
-import { sampleConversations, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getDb } from "@/shared/db";
+import { sampleConversations, surveys } from "@/shared/db/schema";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/survey-access";
-import { sampleFeedbackEntryInputSchema } from "@/lib/education/sample-feedback";
+} from "@/features/surveys/public-server";
+import { sampleFeedbackEntryInputSchema } from "@/features/surveys/server/education/sample-feedback";
 import {
   applyFeedbackBriefPatch,
   buildConductingProfileFromPatch,
   compileSampleFeedback,
-} from "@/lib/education/sample-feedback-workflow";
+} from "@/features/surveys/server/education/sample-feedback-workflow";
 import {
   createSampleFeedbackEntry,
   createSampleFeedbackPatch,
@@ -24,8 +24,8 @@ import {
   replaceConductingProfile,
   replaceCoveragePlan,
   upsertResearchBrief,
-} from "@/lib/education/storage";
-import { validateBrief } from "@/lib/education/creation-workflow";
+} from "@/features/surveys/server/education/storage";
+import { validateBrief } from "@/features/surveys/server/education/creation-workflow";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
 

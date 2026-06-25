@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { Loader2 } from "lucide-react";
-import { AuthProvider } from "@/components/providers/auth-provider";
+import { AuthProvider } from "@/features/auth/public-ui";
 
 export const metadata: Metadata = {
   title: "Authentication — Convyy",

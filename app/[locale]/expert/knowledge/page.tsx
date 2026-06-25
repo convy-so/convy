@@ -1,4 +1,4 @@
-import { ExpertCrystallizationInbox } from "@/components/expert/expert-crystallization-inbox";
+import { ExpertCrystallizationInbox } from "@/features/tutoring/expert/ui/expert-crystallization-inbox";
 import { listDraftCrystallizations } from "@/app/actions/expert-knowledge";
 
 export default async function ExpertKnowledgePage() {
