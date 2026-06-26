@@ -8,8 +8,8 @@ import {
 } from "@/features/tutoring/server/tutor-capabilities";
 import {
   EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 
 const legacyExpertFrameworkExampleSchema = z.object({
   id: z.string().optional(),
@@ -208,7 +208,7 @@ export const expertHeuristicSchema = z.object({
   tags: z.array(z.string()).default([]),
   relevanceScope: z
     .enum(EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES)
-    .default(LEARNING_STATUS.relevanceGeneral),
+    .default(TUTORING_STATUS.relevanceGeneral),
 });
 export type ExpertHeuristic = z.infer<typeof expertHeuristicSchema>;
 
@@ -227,3 +227,4 @@ export const activeExpertFrameworkSchema = z.object({
   seedSource: z.enum(["deep_default", "expert_authored"]).default("deep_default"),
 });
 export type ActiveExpertFramework = z.infer<typeof activeExpertFrameworkSchema>;
+

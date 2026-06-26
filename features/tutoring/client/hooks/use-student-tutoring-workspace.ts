@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -131,7 +131,7 @@ export function useStudentTutoringWorkspace({
     selectedMembership?.lessons.find((lesson) => lesson.id === lessonId) ?? null;
 
   const patternsQuery = useQuery<Awaited<ReturnType<typeof fetchMyPatterns>>>({
-    queryKey: queryKeys.learning.myPatterns,
+    queryKey: queryKeys.tutoring.myPatterns,
     queryFn: fetchMyPatterns,
     initialData:
       initialPatterns as Awaited<ReturnType<typeof fetchMyPatterns>> | undefined,
@@ -141,7 +141,7 @@ export function useStudentTutoringWorkspace({
   const tutoringSessionQuery = useQuery<
     Awaited<ReturnType<typeof fetchTutoringSession>>
   >({
-    queryKey: queryKeys.learning.tutoring(lessonId, selectedStudyLanguage),
+    queryKey: queryKeys.tutoring.tutoring(lessonId, selectedStudyLanguage),
     queryFn: () => fetchTutoringSession(lessonId, selectedStudyLanguage),
     enabled: Boolean(selectedMembership && selectedLesson && !selectedMembership.needsOnboarding),
     initialData:
@@ -399,4 +399,5 @@ export function useStudentTutoringWorkspace({
       tutoringInitializationState.status === "ready" && !sessionCompleted,
   };
 }
+
 

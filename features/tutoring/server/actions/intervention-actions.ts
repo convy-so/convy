@@ -1,4 +1,4 @@
-﻿
+
 "use server";
 
 import { and, eq } from "drizzle-orm";
@@ -15,34 +15,34 @@ import {
   withErrorHandling,
 } from "@/shared/http/action-result";
 import {
-  LEARNING_INTERVENTION_STATUS_VALUES,
-  LEARNING_INTERVENTION_TYPE_VALUES,
-  LEARNING_PRIORITY_VALUES,
-} from "@/shared/learning/constants";
+  TUTORING_INTERVENTION_STATUS_VALUES,
+  TUTORING_INTERVENTION_TYPE_VALUES,
+  TUTORING_PRIORITY_VALUES,
+} from "@/shared/tutoring/constants";
 
-import { ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./action-access";
+import { ensureClassroomOwnerAccess, requireTeachingSession, revalidateTutoringUi } from "./action-access";
 
-const learningInterventionSchema = z.object({
+const interventionSchema = z.object({
   classroomId: z.string().min(1),
   classroomStudentId: z.string().min(1),
   lessonId: z.string().min(1).optional(),
-  interventionType: z.enum(LEARNING_INTERVENTION_TYPE_VALUES),
-  priority: z.enum(LEARNING_PRIORITY_VALUES),
+  interventionType: z.enum(TUTORING_INTERVENTION_TYPE_VALUES),
+  priority: z.enum(TUTORING_PRIORITY_VALUES),
   title: z.string().trim().min(3),
   notes: z.string().optional(),
   dueAt: z.string().optional(),
 });
 
-const learningInterventionUpdateSchema = z.object({
+const interventionUpdateSchema = z.object({
   interventionId: z.string().min(1),
-  status: z.enum(LEARNING_INTERVENTION_STATUS_VALUES),
+  status: z.enum(TUTORING_INTERVENTION_STATUS_VALUES),
   notes: z.string().optional(),
   dueAt: z.string().optional(),
 });
 
-export async function createLearningInterventionAction(input: unknown): Promise<ActionResult<unknown>> {
+export async function createInterventionAction(input: unknown): Promise<ActionResult<unknown>> {
   return withErrorHandling(async () => {
-    const body = validateInput(input, learningInterventionSchema);
+    const body = validateInput(input, interventionSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
 
@@ -74,14 +74,14 @@ export async function createLearningInterventionAction(input: unknown): Promise<
     }
 
     const result = await InterventionService.createIntervention({ ...body, createdByUserId: session.user.id });
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: result };
-  }, "createLearningInterventionAction");
+  }, "createInterventionAction");
 }
 
-export async function updateLearningInterventionAction(input: unknown): Promise<ActionResult<unknown>> {
+export async function updateInterventionAction(input: unknown): Promise<ActionResult<unknown>> {
   return withErrorHandling(async () => {
-    const body = validateInput(input, learningInterventionUpdateSchema);
+    const body = validateInput(input, interventionUpdateSchema);
     const { session } = await requireTeachingSession();
     const intervention = await InterventionService.getInterventionById(body.interventionId);
 
@@ -100,8 +100,9 @@ export async function updateLearningInterventionAction(input: unknown): Promise<
       throw new NotFoundError("Intervention");
     }
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: result };
-  }, "updateLearningInterventionAction");
+  }, "updateInterventionAction");
 }
+
 

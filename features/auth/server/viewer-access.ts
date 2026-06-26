@@ -6,7 +6,7 @@ import { getDb } from "@/shared/db";
 import { classroomInvitations, classroomStudents } from "@/shared/db/schema";
 import type { AuthSessionWithUser } from "@/features/auth/server/server-auth";
 import { requirePlatformRole } from "@/features/auth/server/dal";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import {
   VIEWER_AREA_VALUES,
 } from "@/shared/auth/constants";
@@ -73,7 +73,7 @@ export async function resolveViewerAccess(
     allowedAreas,
     defaultArea,
     pendingInvitationCount: invitations.filter(
-      (invitation) => invitation.status === LEARNING_STATUS.invitePending,
+      (invitation) => invitation.status === TUTORING_STATUS.invitePending,
     ).length,
     studentMembershipSummary: memberships.map((membership) => ({
       classroomId: membership.classroom.id,
@@ -81,3 +81,4 @@ export async function resolveViewerAccess(
     })),
   };
 }
+

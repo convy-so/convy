@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   Award,
   ChevronLeft,
@@ -17,7 +17,7 @@ import { getDb } from "@/shared/db";
 import {
   classroomStudents,
   studentLessonReports,
-} from "@/shared/db/schema/learning";
+} from "@/shared/db/schema/tutoring";
 import { cn } from "@/shared/ui/tailwind-class-utils";
 
 function masteryLabelForStudent(level: string) {
@@ -278,7 +278,7 @@ export async function StudentProgressPageContent({
                         <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
                           <Target className="h-3.5 w-3.5 shrink-0" aria-hidden />
                           <span>Assessment</span>
-                          <span className="text-gray-300">Â·</span>
+                          <span className="text-gray-300">·</span>
                           <span>
                             {new Date(report.createdAt).toLocaleDateString()}
                           </span>
@@ -361,4 +361,5 @@ export async function StudentProgressPageContent({
     </div>
   );
 }
+
 

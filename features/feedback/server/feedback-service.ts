@@ -12,7 +12,7 @@ import {
   FEEDBACK_ROLE_VALUES,
   FEEDBACK_SOURCE_AREA_VALUES,
 } from "@/shared/feedback/constants";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
 
 export const feedbackRoles = FEEDBACK_ROLE_VALUES;
@@ -42,7 +42,7 @@ export async function resolveFeedbackFormContext(user: AuthUser) {
     getDb().query.classroomStudents.findFirst({
       where: and(
         eq(classroomStudents.userId, user.id),
-        eq(classroomStudents.inviteStatus, LEARNING_STATUS.inviteAccepted),
+        eq(classroomStudents.inviteStatus, TUTORING_STATUS.inviteAccepted),
       ),
       columns: { id: true },
       orderBy: [desc(classroomStudents.updatedAt)],
@@ -114,3 +114,4 @@ export async function submitPlatformFeedback(
 
   return requireValue(created, "Failed to create feedback entry.");
 }
+

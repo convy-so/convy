@@ -31,9 +31,9 @@ import {
   createTutoringTimer,
 } from "@/features/tutoring/public-server";
 import {
-  LEARNING_STATUS,
+  TUTORING_STATUS,
   STUDENT_TUTORING_ACCESS_REASON,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
@@ -79,7 +79,7 @@ export async function GET(
     const existingActiveSession = await getActiveStudentSession({
       classroomStudentId: access.classroomStudent.id,
       lessonId,
-      sessionType: LEARNING_STATUS.sessionTypeTutoring,
+      sessionType: TUTORING_STATUS.sessionTypeTutoring,
       sessionLocale: studyLanguage,
     });
     const latestCompletedSession =
@@ -87,7 +87,7 @@ export async function GET(
       (await getLatestCompletedStudentSession({
         classroomStudentId: access.classroomStudent.id,
         lessonId,
-        sessionType: LEARNING_STATUS.sessionTypeTutoring,
+        sessionType: TUTORING_STATUS.sessionTypeTutoring,
       }));
     const tutorSession =
       latestCompletedSession ??
@@ -360,4 +360,5 @@ export async function POST(
     );
   }
 }
+
 

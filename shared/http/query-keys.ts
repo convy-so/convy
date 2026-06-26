@@ -25,17 +25,17 @@ export const queryKeys = {
     all: (scopeId?: string | null) => ["notifications", scopeId] as const,
   },
 
-  // Learning
-  learning: {
+  // Tutoring
+  tutoring: {
     me: ["studentMe"] as const,
-    myPatterns: ["learningMyPatterns"] as const,
-    classrooms: ["learningClassrooms"] as const,
+    myPatterns: ["studentPatterns"] as const,
+    classrooms: ["classrooms"] as const,
     classroomRequests: (classroomId: string) =>
-      ["learningClassroomRequests", classroomId] as const,
+      ["classroomRequests", classroomId] as const,
     classroomCollaborators: (classroomId: string) =>
-      ["learningClassroomCollaborators", classroomId] as const,
+      ["classroomCollaborators", classroomId] as const,
     assignedSurveys: (classroomId: string) =>
-      ["learningAssignedSurveys", classroomId] as const,
+      ["assignedSurveys", classroomId] as const,
     interventions: (
       classroomId: string,
       classroomStudentId?: string | null,
@@ -47,24 +47,24 @@ export const queryKeys = {
         classroomStudentId ?? null,
         lessonId ?? null,
       ] as const,
-    students: (classroomId: string) => ["learningStudents", classroomId] as const,
+    students: (classroomId: string) => ["classroomStudents", classroomId] as const,
     lessons: (classroomId: string) => ["lessons", classroomId] as const,
-    materials: (lessonId: string) => ["learningMaterials", lessonId] as const,
+    materials: (lessonId: string) => ["lessonMaterials", lessonId] as const,
     materialUploadAttempts: (lessonId: string) =>
-      ["learningMaterialUploadAttempts", lessonId] as const,
+      ["lessonMaterialUploadAttempts", lessonId] as const,
     activationState: (lessonId: string) =>
-      ["learningActivationState", lessonId] as const,
-    reports: (lessonId: string) => ["learningReports", lessonId] as const,
-    questions: (lessonId: string) => ["learningQuestions", lessonId] as const,
+      ["lessonActivationState", lessonId] as const,
+    reports: (lessonId: string) => ["lessonReports", lessonId] as const,
+    questions: (lessonId: string) => ["lessonQuestions", lessonId] as const,
     classroomStudentPatterns: (classroomStudentId: string) =>
-      ["learningClassroomStudentPatterns", classroomStudentId] as const,
+      ["classroomStudentPatterns", classroomStudentId] as const,
     classroomStudentOverview: (classroomStudentId: string) =>
-      ["learningClassroomStudentOverview", classroomStudentId] as const,
+      ["classroomStudentOverview", classroomStudentId] as const,
     lessonOverview: (lessonId: string) =>
       ["lessonOverview", lessonId] as const,
-    onboarding: ["learningOnboarding"] as const,
+    onboarding: ["studentOnboarding"] as const,
     tutoring: (lessonId: string, language?: string | null) =>
-      ["learningTutoring", lessonId, language ?? null] as const,
+      ["studentTutoring", lessonId, language ?? null] as const,
   },
 } as const;
 

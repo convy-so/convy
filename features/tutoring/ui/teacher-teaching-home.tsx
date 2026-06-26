@@ -133,8 +133,8 @@ export function TeacherTeachingHome(
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
                             <span>{classroom.gradeLabel}</span>
-                            <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢</span>
-                            <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢</span>
+                            <span>/</span>
+                            <span>Teacher workspace</span>
                             <span>{appLocaleLabels[classroom.defaultContentLocale]}</span>
                           </div>
                         </div>
@@ -150,7 +150,7 @@ export function TeacherTeachingHome(
                         Page {effectiveClassroomPage} of {classroomPageCount}
                       </span>
                       {classrooms.length > CLASSROOMS_PAGE_SIZE ? (
-                        <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {classrooms.length} total classrooms</span>
+                        <span>/ {classrooms.length} total classrooms</span>
                       ) : null}
                     </div>
 
@@ -238,8 +238,8 @@ export function TeacherTeachingHome(
                   </h1>
                   <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                     <span>{selectedDirectoryClassroom.gradeLabel}</span>
-                    <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢</span>
-                    <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢</span>
+                    <span>/</span>
+                    <span>Teacher workspace</span>
                     <span>{appLocaleLabels[selectedDirectoryClassroom.defaultContentLocale]}</span>
                   </div>
                   <p className="max-w-2xl text-sm leading-6 text-slate-500">
@@ -311,7 +311,7 @@ export function TeacherTeachingHome(
                   </div>
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <span>{lessons.length} total</span>
-                    <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢</span>
+                    <span>/</span>
                     <span>{activeSessionCount} active</span>
                   </div>
                 </div>

@@ -16,18 +16,24 @@
   - `features/tutoring`
 - Current top-level shared roots:
   - `shared/ai`
+  - `shared/auth`
   - `shared/billing`
   - `shared/chat`
   - `shared/config`
   - `shared/db`
   - `shared/email`
+  - `shared/feedback`
   - `shared/http`
   - `shared/i18n`
   - `shared/infra`
+  - `shared/privacy`
   - `shared/realtime`
   - `shared/retrieval`
   - `shared/security`
+  - `shared/surveys`
+  - `shared/tutoring`
   - `shared/ui`
+  - `shared/utils`
 
 ## Naming rules
 - Use lowercase kebab-case for ordinary filenames.

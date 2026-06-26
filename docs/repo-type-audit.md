@@ -143,7 +143,7 @@ Important distinction:
 
 Primary hotspots:
 
-- [shared/db/schema/learning.ts](/C:/Users/pc/convy/shared/db/schema/learning.ts:1)
+- [shared/db/schema/tutoring.ts](/C:/Users/pc/convy/shared/db/schema/tutoring.ts:1)
 - [app/[locale]/student/classes/[classroomId]/lessons/live-session-client.tsx](/C:/Users/pc/convy/app/[locale]/student/classes/[classroomId]/lessons/live-session-client.tsx:1)
 - [features/tutoring/ui/student-profile-page.tsx](/C:/Users/pc/convy/features/tutoring/ui/student-profile-page.tsx:1)
 - [shared/ui/chart.tsx](/C:/Users/pc/convy/shared/ui/chart.tsx:1)
@@ -168,7 +168,7 @@ Where it is justified:
 
 Where it looks under-modeled:
 
-- persistent learning metadata
+- persistent tutoring metadata
 - message part payloads
 - survey/tutoring runtime message structures
 
@@ -238,7 +238,7 @@ If this repo is going to get a type cleanup pass, these are the best starting po
 2. [features/surveys/realtime/survey-response-voice.ts](/C:/Users/pc/convy/features/surveys/realtime/survey-response-voice.ts:1)
 3. [app/[locale]/student/classes/[classroomId]/lessons/live-session-client.tsx](/C:/Users/pc/convy/app/[locale]/student/classes/[classroomId]/lessons/live-session-client.tsx:1)
 4. [shared/http/page-data/workspace-shell-page-data.ts](/C:/Users/pc/convy/shared/http/page-data/workspace-shell-page-data.ts:1)
-5. [shared/db/schema/learning.ts](/C:/Users/pc/convy/shared/db/schema/learning.ts:1)
+5. [shared/db/schema/tutoring.ts](/C:/Users/pc/convy/shared/db/schema/tutoring.ts:1)
 6. [shared/config/app-config.ts](/C:/Users/pc/convy/shared/config/app-config.ts:1)
 
 ## Recommended Direction

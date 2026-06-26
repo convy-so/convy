@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/shared/db";
-import { surveyCreationConversations, surveys } from "@/shared/db/schema";
+import { surveyCreationConversations } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { type ChatMessage } from "@/shared/chat/chat-types";
 import {
@@ -38,6 +38,7 @@ import {
   normalizeExtractedData,
 } from "@/features/surveys/server/education/survey-create-orchestrator";
 import { SURVEY_STATUS } from "@/shared/surveys/constants";
+import { getSurveyCreationStateViewModel } from "@/features/surveys/server/use-cases/get-survey-creation-state";
 
 
 export const maxDuration = 300;
@@ -63,42 +64,26 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const permission = await getSurveyPermissionForSession(session, surveyId);
-
-    if (!hasSurveyPermission(permission, "canView")) {
-      return apiError("UNAUTHORIZED", "Unauthorized");
-    }
-
-    const [survey, creationConversation, revision, lease] = await Promise.all([
-      getDb()
-        .select()
-        .from(surveys)
-        .where(eq(surveys.id, surveyId))
-        .then((rows) => rows[0]),
-      getDb()
-        .select()
-        .from(surveyCreationConversations)
-        .where(eq(surveyCreationConversations.surveyId, surveyId))
-        .then((rows) => rows[0]),
+    const [creationState, revision, lease] = await Promise.all([
+      getSurveyCreationStateViewModel(surveyId, session),
       getCurrentSurveyRevision(surveyId),
       getActiveSurveyLease(surveyId, "creation"),
     ]);
 
-    if (!survey) {
-      return apiError("NOT_FOUND", "Survey not found");
-    }
-
     return NextResponse.json({
-      surveyId,
-      status: survey.status,
+      ...creationState,
       revision,
-      permission,
       lease,
-      messages: creationConversation?.messages || [],
-      collectedInfo: creationConversation?.collectedInfo || {},
-      extractedData: creationConversation?.extractedData || {},
     });
   } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "Survey not found") {
+        return apiError("NOT_FOUND", error.message);
+      }
+      if (error.message === "Unauthorized") {
+        return apiError("UNAUTHORIZED", error.message);
+      }
+    }
     const authError = mapSessionAuthError(error);
     if (authError) return authError;
     return apiUnhandledError(error, "Internal server error", "survey-create:get");

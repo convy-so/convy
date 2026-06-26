@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -107,10 +107,10 @@ export function TeacherLessonWorkspace({
   const invalidateLessonData = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.lessons(selectedDirectoryClassroom.id),
+        queryKey: queryKeys.tutoring.lessons(selectedDirectoryClassroom.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.activationState(selectedLesson.id),
+        queryKey: queryKeys.tutoring.activationState(selectedLesson.id),
       }),
     ]);
   };
@@ -118,13 +118,13 @@ export function TeacherLessonWorkspace({
   const refreshMaterialState = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.materials(selectedLesson.id),
+        queryKey: queryKeys.tutoring.materials(selectedLesson.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.materialUploadAttempts(selectedLesson.id),
+        queryKey: queryKeys.tutoring.materialUploadAttempts(selectedLesson.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.activationState(selectedLesson.id),
+        queryKey: queryKeys.tutoring.activationState(selectedLesson.id),
       }),
     ]);
   };
@@ -375,4 +375,5 @@ export function TeacherLessonWorkspace({
     </>
   );
 }
+
 

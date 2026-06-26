@@ -1,10 +1,10 @@
-﻿import { BookOpen, Calendar, CheckCircle, ChevronLeft, Clock, PlayCircle } from "lucide-react";
+import { BookOpen, Calendar, CheckCircle, ChevronLeft, Clock, PlayCircle } from "lucide-react";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { Link } from "@/i18n/routing";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { getDb } from "@/shared/db";
-import { classroomStudents, studentSessions } from "@/shared/db/schema/learning";
+import { classroomStudents, studentSessions } from "@/shared/db/schema/tutoring";
 
 export async function StudentSessionsPageContent({
   classroomId,
@@ -162,4 +162,5 @@ export async function StudentSessionsPageContent({
     </div>
   );
 }
+
 

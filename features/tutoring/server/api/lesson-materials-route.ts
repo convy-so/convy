@@ -9,7 +9,7 @@ import { lessonMaterials } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { handleTutoringRouteError } from "@/features/tutoring/server/route-errors";
 import { uploadLessonMaterial } from "@/shared/infra/supabase-storage";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import {
   buildUploadAttemptFailure,
   createLearningMaterialUploadAttempt,
@@ -19,7 +19,7 @@ import {
   normalizeDetectedLearningMaterialMime,
   updateLearningMaterialUploadAttempt,
 } from "@/features/tutoring/server/materials-route-service";
-import { assertLearningMaterialFile } from "@/shared/security/uploads";
+import { assertLessonMaterialFile } from "@/shared/security/uploads";
 import { enqueueLessonMaterialProcessing } from "@/shared/infra/queue";
 import { publishClassroomRealtimeEvent } from "@/shared/infra/realtime";
 import { serializeUploadAttempt } from "@/features/tutoring/server/api/lesson-material-upload-response";
@@ -70,8 +70,8 @@ export async function GET(
     const materials = await getDb().query.lessonMaterials.findMany({
       where: and(
         eq(lessonMaterials.lessonId, lessonId),
-        ne(lessonMaterials.extractionStatus, LEARNING_STATUS.materialFailed),
-        ne(lessonMaterials.indexingStatus, LEARNING_STATUS.materialFailed),
+        ne(lessonMaterials.extractionStatus, TUTORING_STATUS.materialFailed),
+        ne(lessonMaterials.indexingStatus, TUTORING_STATUS.materialFailed),
       ),
       orderBy: (table, { desc }) => [desc(table.createdAt)],
     });
@@ -129,7 +129,7 @@ export async function POST(
       let mimeType: string | null = file.type || null;
       let failurePoint: LearningMaterialUploadFailurePoint = "attempt_create";
       let failureStage: LearningMaterialUploadAttemptStage =
-        LEARNING_STATUS.uploadStageUpload;
+        TUTORING_STATUS.uploadStageUpload;
       console.info("[lesson-material-upload] attempt create start", {
         lessonId,
         batchId,
@@ -148,8 +148,8 @@ export async function POST(
         description,
         mimeType,
         sizeBytes: file.size,
-        status: LEARNING_STATUS.uploadProcessing,
-        stage: LEARNING_STATUS.uploadStageUpload,
+        status: TUTORING_STATUS.uploadProcessing,
+        stage: TUTORING_STATUS.uploadStageUpload,
         processingStartedAt: new Date(),
       });
       console.info("[lesson-material-upload] attempt create complete", {
@@ -171,7 +171,7 @@ export async function POST(
         });
 
         failurePoint = "input_validation";
-        assertLearningMaterialFile(file);
+        assertLessonMaterialFile(file);
 
         failurePoint = "buffer_read";
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -183,7 +183,7 @@ export async function POST(
           fileType: file.type,
           detectedMime: detected?.mime,
         });
-        assertLearningMaterialFile({ name: file.name, size: file.size, type: mimeType });
+        assertLessonMaterialFile({ name: file.name, size: file.size, type: mimeType });
         console.info("[lesson-material-upload] file validated", {
           lessonId,
           batchId,
@@ -233,7 +233,7 @@ export async function POST(
             failureMessage: null,
           })) ?? attempt;
 
-        failureStage = LEARNING_STATUS.uploadStageExtraction;
+        failureStage = TUTORING_STATUS.uploadStageExtraction;
         failurePoint = "queue_enqueue";
         const processingJob = await enqueueLessonMaterialProcessing({
           attemptId,
@@ -262,8 +262,8 @@ export async function POST(
             classroomId: lesson.classroomId,
             lessonId,
             batchId,
-            status: LEARNING_STATUS.uploadQueued,
-            stage: LEARNING_STATUS.uploadStageExtraction,
+            status: TUTORING_STATUS.uploadQueued,
+            stage: TUTORING_STATUS.uploadStageExtraction,
             mimeType,
             sizeBytes: file.size,
             storageBucket: uploaded.bucket,
@@ -302,7 +302,7 @@ export async function POST(
             classroomId: lesson.classroomId,
             lessonId,
             batchId,
-            status: LEARNING_STATUS.uploadFailed,
+            status: TUTORING_STATUS.uploadFailed,
             stage: failureStage,
             mimeType,
             sizeBytes: file.size,
@@ -351,4 +351,5 @@ export async function POST(
     return handleTutoringRouteError(error, "Failed to upload material", "/api/lessons/[lessonId]/materials");
   }
 }
+
 

@@ -24,7 +24,7 @@ export default async function AdminSurveysPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Survey Expert Review</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Survey Review</h1>
         <p className="text-gray-500">
           Review created surveys and inspect their canonical research setup.
         </p>

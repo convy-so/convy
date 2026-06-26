@@ -6,7 +6,7 @@ import { apiError } from "@/shared/http/api-error";
 import { getDb } from "@/shared/db";
 import { lessonMaterialUploadAttempts } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import {
   buildUploadAttemptFailure,
   createLearningMaterialUploadAttempt,
@@ -48,7 +48,7 @@ export async function POST(
       return apiError("NOT_FOUND", "Upload attempt not found");
     }
 
-    if (sourceAttempt.status !== LEARNING_STATUS.uploadFailed) {
+    if (sourceAttempt.status !== TUTORING_STATUS.uploadFailed) {
       return apiError(
         "VALIDATION_ERROR",
         "Only failed upload attempts can be retried",
@@ -76,8 +76,8 @@ export async function POST(
       sizeBytes: sourceAttempt.sizeBytes ?? null,
       storageBucket: sourceAttempt.storageBucket ?? null,
       storagePath: sourceAttempt.storagePath,
-      status: LEARNING_STATUS.uploadProcessing,
-      stage: LEARNING_STATUS.uploadStageExtraction,
+      status: TUTORING_STATUS.uploadProcessing,
+      stage: TUTORING_STATUS.uploadStageExtraction,
       processingStartedAt: new Date(),
     });
 
@@ -117,8 +117,8 @@ export async function POST(
             classroomId: lesson.classroomId,
             lessonId,
             batchId: sourceAttempt.batchId,
-            status: LEARNING_STATUS.uploadQueued,
-            stage: LEARNING_STATUS.uploadStageExtraction,
+            status: TUTORING_STATUS.uploadQueued,
+            stage: TUTORING_STATUS.uploadStageExtraction,
             queuedAt: new Date(),
           userMessage: null,
           internalError: null,
@@ -131,7 +131,7 @@ export async function POST(
     } catch (error) {
       const annotatedError = annotateRetryError(failurePoint, error);
       const failure = buildUploadAttemptFailure(
-        LEARNING_STATUS.uploadStageExtraction,
+        TUTORING_STATUS.uploadStageExtraction,
         annotatedError,
       );
       console.error("[lesson-material-upload-retry] failed", {
@@ -148,8 +148,8 @@ export async function POST(
           classroomId: lesson.classroomId,
           lessonId,
           batchId: sourceAttempt.batchId,
-          status: LEARNING_STATUS.uploadFailed,
-          stage: LEARNING_STATUS.uploadStageExtraction,
+          status: TUTORING_STATUS.uploadFailed,
+          stage: TUTORING_STATUS.uploadStageExtraction,
           userMessage: failure.userMessage,
           internalError: failure.internalError,
           errorCode: failure.errorCode,
@@ -174,4 +174,5 @@ export async function POST(
     );
   }
 }
+
 

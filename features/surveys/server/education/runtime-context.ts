@@ -21,7 +21,6 @@ export async function getConductingRuntimeLayers(params: {
       ],
       selectors: {
         classroomId: params.classroomId ?? null,
-        topicId: params.surveyId,
         programId: params.programId ?? null,
         language: params.language ?? null,
       },

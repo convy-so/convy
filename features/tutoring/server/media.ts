@@ -1,4 +1,4 @@
-﻿import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
@@ -7,7 +7,7 @@ import {
   teachingMediaBindings,
   teachingMediaUsageEvents,
 } from "@/shared/db/schema";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 
 export type TutorMediaRecommendation = {
   assetId?: string | null;
@@ -91,7 +91,7 @@ export async function selectTutorMedia(params: {
     .innerJoin(teachingMediaAssets, eq(teachingMediaBindings.assetId, teachingMediaAssets.id))
     .where(
       and(
-        eq(teachingMediaAssets.status, LEARNING_STATUS.teachingMediaApproved),
+        eq(teachingMediaAssets.status, TUTORING_STATUS.teachingMediaApproved),
         eq(teachingMediaAssets.assetType, preferredType),
         or(
           eq(teachingMediaBindings.lessonId, params.lessonId),
@@ -166,4 +166,5 @@ export async function logTutorMediaUsage(params: {
     updatedAt: new Date(),
   });
 }
+
 

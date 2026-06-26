@@ -1,4 +1,4 @@
-﻿import { and, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 
 import { getDb } from "@/shared/db";
@@ -9,9 +9,9 @@ import {
 } from "@/shared/db/schema";
 import { normalizeAppLocale } from "@/shared/i18n/config";
 import {
-  LEARNING_STATUS,
+  TUTORING_STATUS,
   STUDENT_TUTORING_ACCESS_REASON,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export type ClassroomTeacherAccessLevel = "owner" | "none";
 
@@ -107,7 +107,7 @@ export async function getStudentLessonAccess(userId: string, lessonId: string) {
   const lesson = await getDb().query.lessons.findFirst({
     where: and(
       eq(lessons.id, lessonId),
-      eq(lessons.status, LEARNING_STATUS.lessonActive),
+      eq(lessons.status, TUTORING_STATUS.lessonActive),
     ),
     with: {
       classroom: true,
@@ -208,4 +208,5 @@ export async function getUniversalStudentInterestProfile(userId: string) {
   const memberships = await listStudentMemberships(userId);
   return pickUniversalStudentInterestProfile(memberships);
 }
+
 

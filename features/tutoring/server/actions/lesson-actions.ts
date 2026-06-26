@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { Output, generateText } from "ai";
 import { z } from "zod";
@@ -6,10 +6,10 @@ import { z } from "zod";
 import { analysisModel } from "@/shared/ai";
 import { resolveUiLocaleForContentCreation } from "@/shared/i18n/resolve-locale";
 import {
-  LEARNING_LIMITS,
-  LEARNING_STATUS,
+  TUTORING_LIMITS,
+  TUTORING_STATUS,
   LESSON_STATUS_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 import * as LessonService from "@/features/tutoring/server/lesson-service";
 import {
   getSubjectDisplayLabel,
@@ -34,7 +34,7 @@ import {
 } from "@/features/tutoring/server/materials-route-service";
 import { ActionError, ActionResult, validateInput, withErrorHandling } from "@/shared/http/action-result";
 
-import { appLocaleSchema, ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./action-access";
+import { appLocaleSchema, ensureClassroomOwnerAccess, requireTeachingSession, revalidateTutoringUi } from "./action-access";
 
 const createLessonSchema = z.object({
   classroomId: z.string().min(1),
@@ -136,7 +136,7 @@ export async function createLessonAction(input: unknown): Promise<
       sourceBoundary: normalizedSourceBoundary,
     });
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: { id: result.id, classroomId: result.classroomId, title: result.title, learningOutcomeCount: result.learningOutcomes.length, contentLocale: result.contentLocale } };
   }, "createLessonAction");
 }
@@ -177,7 +177,7 @@ export async function updateLessonDetailsAction(input: unknown): Promise<ActionR
       sourceBoundary: normalizedSourceBoundary,
     });
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return {
       success: true,
       data: {
@@ -214,7 +214,7 @@ export async function normalizeLearningOutcomesAction(input: unknown): Promise<
         output: Output.object({
           schema: normalizedLearningOutcomesResultSchema,
         }),
-        maxOutputTokens: LEARNING_LIMITS.normalizedOutcomeMaxOutputTokens,
+        maxOutputTokens: TUTORING_LIMITS.normalizedOutcomeMaxOutputTokens,
         prompt: `You are helping a teacher turn rough session notes into high-quality learning outcomes.
 
 Session title: ${body.title}
@@ -290,7 +290,7 @@ export async function updateLessonStatusAction(input: unknown): Promise<ActionRe
     const materialCount = Number(materialCountResult[0]?.value ?? 0);
     const hasLearningOutcomes = (lesson.learningOutcomes?.length ?? 0) > 0;
 
-    if (body.status === LEARNING_STATUS.lessonActive) {
+    if (body.status === TUTORING_STATUS.lessonActive) {
       if (!hasLearningOutcomes || materialCount === 0) {
         throw new Error(
           "Add at least one learning outcome and one supporting material before activating this session.",
@@ -298,8 +298,8 @@ export async function updateLessonStatusAction(input: unknown): Promise<ActionRe
       }
 
       if (
-        lesson.status !== LEARNING_STATUS.lessonDraft &&
-        lesson.status !== LEARNING_STATUS.lessonPaused
+        lesson.status !== TUTORING_STATUS.lessonDraft &&
+        lesson.status !== TUTORING_STATUS.lessonPaused
       ) {
         throw new Error("Only draft or paused sessions can be activated.");
       }
@@ -315,8 +315,8 @@ export async function updateLessonStatusAction(input: unknown): Promise<ActionRe
 
       const completedMaterials = lessonWithMaterials.materials.filter(
         (material) =>
-          material.extractionStatus === LEARNING_STATUS.materialCompleted &&
-          material.indexingStatus === LEARNING_STATUS.materialCompleted &&
+          material.extractionStatus === TUTORING_STATUS.materialCompleted &&
+          material.indexingStatus === TUTORING_STATUS.materialCompleted &&
           !isMaterialAnalysisFailed(material.analysis),
       );
       if (completedMaterials.length === 0) {
@@ -351,22 +351,22 @@ export async function updateLessonStatusAction(input: unknown): Promise<ActionRe
     }
 
     if (
-      body.status === LEARNING_STATUS.lessonPaused &&
-      lesson.status !== LEARNING_STATUS.lessonActive
+      body.status === TUTORING_STATUS.lessonPaused &&
+      lesson.status !== TUTORING_STATUS.lessonActive
     ) {
       throw new Error("Only active sessions can be paused.");
     }
 
     if (
-      body.status === LEARNING_STATUS.lessonArchived &&
-      lesson.status !== LEARNING_STATUS.lessonActive
+      body.status === TUTORING_STATUS.lessonArchived &&
+      lesson.status !== TUTORING_STATUS.lessonActive
     ) {
       throw new Error("Only active sessions can be archived.");
     }
 
     if (
-      body.status === LEARNING_STATUS.lessonDraft &&
-      lesson.status !== LEARNING_STATUS.lessonDraft
+      body.status === TUTORING_STATUS.lessonDraft &&
+      lesson.status !== TUTORING_STATUS.lessonDraft
     ) {
       throw new Error("Sessions cannot be moved back to draft.");
     }
@@ -379,8 +379,9 @@ export async function updateLessonStatusAction(input: unknown): Promise<ActionRe
       })
       .where(eq(lessons.id, body.lessonId));
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: { id: body.lessonId, status: body.status } };
   }, "updateLessonStatusAction");
 }
+
 

@@ -20,7 +20,7 @@ export async function evaluateTutoringScope(params: {
       feature: "tutoring_chat",
       objective: `Help the student learn ${params.lessonTitle} using uploaded course materials`,
       currentPhase: "active tutoring session",
-      activeLesson: params.lessonTitle,
+      activeTopic: params.lessonTitle,
       latestUserMessage: params.latestUserText,
       strictMode: true,
       driftCount: 0,

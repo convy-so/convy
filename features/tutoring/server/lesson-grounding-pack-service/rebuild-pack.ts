@@ -1,13 +1,13 @@
-﻿import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
 import { lessons } from "@/shared/db/schema";
 import {
-  LEARNING_LIMITS,
-  LEARNING_NUMERIC_DEFAULTS,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_LIMITS,
+  TUTORING_NUMERIC_DEFAULTS,
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 import { generateStructuredOutput } from "@/shared/ai/model-generation";
 import { createLogger, serializeError } from "@/shared/infra/logger";
 import {
@@ -34,7 +34,7 @@ export function createEmptyLessonGroundingPack(params: {
   teacherSummary?: string;
 }): LessonGroundingPack {
   return lessonGroundingPackSchema.parse({
-    version: LEARNING_NUMERIC_DEFAULTS.initialVersion,
+    version: TUTORING_NUMERIC_DEFAULTS.initialVersion,
     builtAt: new Date().toISOString(),
     materialIds: params.materialIds ?? [],
     lessonTitle: params.lessonTitle,
@@ -68,7 +68,7 @@ export async function rebuildLessonGroundingPack(lessonId: string): Promise<Less
   const allowedMaterialIds = new Set(boundary.allowedMaterialIds);
   const indexedMaterials = lesson.materials.filter((material) => {
     if (
-      material.indexingStatus !== LEARNING_STATUS.materialCompleted ||
+      material.indexingStatus !== TUTORING_STATUS.materialCompleted ||
       !material.groundingMap
     ) {
       return false;
@@ -82,7 +82,7 @@ export async function rebuildLessonGroundingPack(lessonId: string): Promise<Less
   });
   const materialIds = indexedMaterials.map((material) => material.id);
   const nextVersion =
-    (lesson.lessonGroundingPack?.version ?? LEARNING_NUMERIC_DEFAULTS.zero) + 1;
+    (lesson.lessonGroundingPack?.version ?? TUTORING_NUMERIC_DEFAULTS.zero) + 1;
 
   if (indexedMaterials.length === 0) {
     const emptyPack = createEmptyLessonGroundingPack({
@@ -122,7 +122,7 @@ export async function rebuildLessonGroundingPack(lessonId: string): Promise<Less
         existingNotationNotes: boundary.notationNotes,
         existingRigorNotes: boundary.rigorNotes,
       }),
-      maxOutputTokens: LEARNING_LIMITS.lessonGroundingPackMaxOutputTokens,
+      maxOutputTokens: TUTORING_LIMITS.lessonGroundingPackMaxOutputTokens,
       temperature: 0,
     });
 
@@ -227,4 +227,5 @@ export async function rebuildLessonGroundingPack(lessonId: string): Promise<Less
     return fallbackPack;
   }
 }
+
 

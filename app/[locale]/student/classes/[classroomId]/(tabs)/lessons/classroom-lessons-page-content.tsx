@@ -1,4 +1,4 @@
-﻿import {
+import {
   ArrowRight,
   BookOpen,
   CheckCircle2,
@@ -15,9 +15,9 @@ import { getVerifiedSession } from "@/features/auth/public-server";
 import { getDb } from "@/shared/db";
 import {
   classroomStudents,
-  studentSessions,
-  lessons,
-} from "@/shared/db/schema/learning";
+  studentSessions as studentSessionsTable,
+  lessons as lessonsTable,
+} from "@/shared/db/schema/tutoring";
 
 export async function ClassroomLessonsPageContent({
   classroomId,
@@ -44,20 +44,20 @@ export async function ClassroomLessonsPageContent({
     notFound();
   }
 
-  const lessons = await getDb().query.lessons.findMany({
+  const lessonRows = await getDb().query.lessons.findMany({
     where: and(
-      eq(lessons.classroomId, classroomId),
-      eq(lessons.status, "active"),
+      eq(lessonsTable.classroomId, classroomId),
+      eq(lessonsTable.status, "active"),
     ),
-    orderBy: [desc(lessons.createdAt)],
+    orderBy: [desc(lessonsTable.createdAt)],
   });
 
   const tutoringSessions = await getDb().query.studentSessions.findMany({
     where: and(
-      eq(studentSessions.classroomStudentId, membership.id),
-      eq(studentSessions.sessionType, "tutoring"),
+      eq(studentSessionsTable.classroomStudentId, membership.id),
+      eq(studentSessionsTable.sessionType, "tutoring"),
     ),
-    orderBy: [desc(studentSessions.updatedAt)],
+    orderBy: [desc(studentSessionsTable.updatedAt)],
     with: {
       lesson: true,
     },
@@ -69,7 +69,7 @@ export async function ClassroomLessonsPageContent({
   const completedSessions = tutoringSessions.filter(
     (sessionRow) => sessionRow.sessionStatus === "completed",
   );
-  const notStartedLessons = lessons.filter(
+  const notStartedLessons = lessonRows.filter(
     (lesson) =>
       !tutoringSessions.some((sessionRow) => sessionRow.lessonId === lesson.id),
   );
@@ -220,4 +220,5 @@ export async function ClassroomLessonsPageContent({
     </div>
   );
 }
+
 

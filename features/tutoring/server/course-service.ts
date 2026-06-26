@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
 import { courses } from "@/shared/db/schema";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 
 export async function listCourses() {
   return await getDb().query.courses.findMany({
@@ -28,7 +28,7 @@ export async function createCourse(params: {
       id: nanoid(),
       title: params.title,
       description: params.description || null,
-      status: LEARNING_STATUS.courseActive,
+      status: TUTORING_STATUS.courseActive,
       createdByUserId: params.createdByUserId,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -37,3 +37,4 @@ export async function createCourse(params: {
 
   return created;
 }
+

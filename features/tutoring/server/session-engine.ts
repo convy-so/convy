@@ -12,10 +12,10 @@ import {
   type LessonSourceBoundary,
 } from "@/features/tutoring/public-server";
 import {
-  LEARNING_DEFAULT_LOCALE,
-  LEARNING_LIMITS,
+  TUTORING_DEFAULT_LOCALE,
+  TUTORING_LIMITS,
   QUESTION_INTENT,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export type TutoringRuntimeContext = {
   studyLanguage?: string;
@@ -65,7 +65,7 @@ export async function runTutoringSessionTurn(params: {
     lessonTitle: params.access.lesson.title,
     sourceBoundary: params.access.lesson.sourceBoundary,
     studentUserId: params.access.classroomStudent.userId,
-    studyLanguage: params.runtimeContext?.studyLanguage ?? LEARNING_DEFAULT_LOCALE,
+    studyLanguage: params.runtimeContext?.studyLanguage ?? TUTORING_DEFAULT_LOCALE,
     state: params.state,
     interestProfile: null,
     recentMessages: [{ role: "user", content: params.userMessage }],
@@ -98,8 +98,8 @@ export async function previewAssessmentQuestionForLesson(params: {
             .filter(Boolean)
             .join(" "),
           recentSummary: params.lessonTitle,
-          budgetTokens: LEARNING_LIMITS.assessmentPreviewGroundingBudgetTokens,
-          maxUnits: LEARNING_LIMITS.assessmentPreviewGroundingMaxUnits,
+          budgetTokens: TUTORING_LIMITS.assessmentPreviewGroundingBudgetTokens,
+          maxUnits: TUTORING_LIMITS.assessmentPreviewGroundingMaxUnits,
         }),
       )
     : params.retrievedContext.map((item) => `- ${item}`).join("\n");
@@ -115,4 +115,5 @@ export async function previewAssessmentQuestionForLesson(params: {
     }),
   });
 }
+
 

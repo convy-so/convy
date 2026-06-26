@@ -1,8 +1,8 @@
-﻿import type { LessonSourceBoundary } from "@/features/tutoring/public-server";
+import type { LessonSourceBoundary } from "@/features/tutoring/public-server";
 import { contentScopeSnapshotSchema, type ContentScopeSnapshot } from "@/features/tutoring/public-server";
 import { buildContentScopeFromPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
 import { getCachedLessonWithMaterials } from "@/features/tutoring/public-server";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 
 export class ContentScopeService {
   /**
@@ -19,7 +19,7 @@ export class ContentScopeService {
     }
 
     const materialIds = lesson.materials
-      .filter((material) => material.indexingStatus === LEARNING_STATUS.materialCompleted)
+      .filter((material) => material.indexingStatus === TUTORING_STATUS.materialCompleted)
       .map((material) => material.id);
 
     const snapshot = buildContentScopeFromPack({
@@ -37,4 +37,5 @@ export class ContentScopeService {
 }
 
 export const contentScopeService = new ContentScopeService();
+
 

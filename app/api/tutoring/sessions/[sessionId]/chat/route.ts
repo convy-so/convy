@@ -2,7 +2,7 @@ import { apiError } from "@/shared/http/api-error";
 import { readJsonRequestValue } from "@/shared/http/json";
 import { getStudentSessionById } from "@/features/tutoring/public-server";
 import { logTutoringDebug, logTutoringError } from "@/features/tutoring/public-server";
-import { POST as postLessonChat } from "../../../lessons/[lessonId]/chat/route";
+import { POST as postLessonTutoringSession } from "@/features/tutoring/server/api/lesson-tutoring-session-route";
 
 export async function POST(
   request: Request,
@@ -47,7 +47,7 @@ export async function POST(
     lessonId,
   });
 
-  return postLessonChat(forwardedRequest, {
+  return postLessonTutoringSession(forwardedRequest, {
     params: Promise.resolve({ lessonId }),
   });
 }

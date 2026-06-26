@@ -1,6 +1,6 @@
 import { defaultAppLocale } from "@/shared/i18n/config";
 
-export const LEARNING_DEFAULT_LOCALE = defaultAppLocale;
+export const TUTORING_DEFAULT_LOCALE = defaultAppLocale;
 
 export const GRADE_BAND_VALUES = [
   "nursery",
@@ -18,7 +18,7 @@ export const MOTIVATIONAL_STYLE_VALUES = [
   "personal_mastery",
 ] as const;
 
-export const LEARNING_RELATIONSHIP_VALUES = [
+export const TUTORING_RELATIONSHIP_VALUES = [
   "positive",
   "neutral",
   "damaged",
@@ -31,7 +31,7 @@ export const SESSION_OPENING_STRATEGY_VALUES = [
   "question",
 ] as const;
 
-export const LEARNING_INTERACTION_TYPE_VALUES = [
+export const TUTORING_INTERACTION_TYPE_VALUES = [
   "onboarding_turn",
   "student_message",
   "tutor_message",
@@ -169,19 +169,19 @@ export const ONBOARDING_TURN_STATUS = {
   COMPLETE: ONBOARDING_TURN_STATUS_VALUES[1],
 } as const;
 
-export const LEARNING_RESPONSE_STATUS_VALUES = [
+export const TUTORING_RESPONSE_STATUS_VALUES = [
   "completed",
   "in_progress",
   "not_started",
 ] as const;
 
-export const LEARNING_RESPONSE_STATUS = {
-  COMPLETED: LEARNING_RESPONSE_STATUS_VALUES[0],
-  IN_PROGRESS: LEARNING_RESPONSE_STATUS_VALUES[1],
-  NOT_STARTED: LEARNING_RESPONSE_STATUS_VALUES[2],
+export const TUTORING_RESPONSE_STATUS = {
+  COMPLETED: TUTORING_RESPONSE_STATUS_VALUES[0],
+  IN_PROGRESS: TUTORING_RESPONSE_STATUS_VALUES[1],
+  NOT_STARTED: TUTORING_RESPONSE_STATUS_VALUES[2],
 } as const;
 
-export const LEARNING_PATTERN_SCOPE_VALUES = ["global", "subject"] as const;
+export const TUTORING_PATTERN_SCOPE_VALUES = ["global", "subject"] as const;
 
 export const PATTERN_CONFIDENCE_LABEL_VALUES = [
   "early",
@@ -296,12 +296,12 @@ export const CONFIDENCE_GAP_TREND_VALUES = [
   "widening",
 ] as const;
 
-export const LEARNING_MEMORY_CLASS_VALUES = [
+export const TUTORING_MEMORY_CLASS_VALUES = [
   "observation",
   "playbook",
 ] as const;
 
-export const LEARNING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES = [
+export const TUTORING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES = [
   "supplementary",
   "favored",
   "primary",
@@ -348,16 +348,16 @@ export const MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES = [
 export const STUDENT_INTEREST_VISIBILITY_VALUES = [
   "private_to_student_and_agent",
 ] as const;
-export const LEARNING_SESSION_STATUS_VALUES = [
+export const TUTORING_SESSION_STATUS_VALUES = [
   "active",
   "completed",
   "abandoned",
 ] as const;
-export const LEARNING_SESSION_TYPE_VALUES = [
+export const TUTORING_SESSION_TYPE_VALUES = [
   "interest_onboarding",
   "tutoring",
 ] as const;
-export const LEARNING_EVIDENCE_SOURCE_TYPE_VALUES = [
+export const TUTORING_EVIDENCE_SOURCE_TYPE_VALUES = [
   "material",
   "report",
   "interaction",
@@ -386,19 +386,19 @@ export const EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES = [
   "general",
   "framework_specific",
 ] as const;
-export const LEARNING_INTERVENTION_TYPE_VALUES = [
+export const TUTORING_INTERVENTION_TYPE_VALUES = [
   "reteach",
   "check_in",
   "practice",
   "family_follow_up",
 ] as const;
-export const LEARNING_INTERVENTION_STATUS_VALUES = [
+export const TUTORING_INTERVENTION_STATUS_VALUES = [
   "planned",
   "in_progress",
   "completed",
   "dismissed",
 ] as const;
-export const LEARNING_PRIORITY_VALUES = ["low", "medium", "high"] as const;
+export const TUTORING_PRIORITY_VALUES = ["low", "medium", "high"] as const;
 export const EXPERT_CRYSTALLIZATION_STATUS_VALUES = [
   "draft",
   "approved",
@@ -450,7 +450,7 @@ export const TUTORING_COMPLETION_REASON = {
   TUTOR_FINISHED: TUTORING_COMPLETION_REASON_VALUES[1],
 } as const;
 
-export const LEARNING_STATUS = {
+export const TUTORING_STATUS = {
   classroomActive: CLASSROOM_STATUS_VALUES[0],
   invitePending: CLASSROOM_INVITE_STATUS_VALUES[0],
   inviteAccepted: CLASSROOM_INVITE_STATUS_VALUES[1],
@@ -478,11 +478,11 @@ export const LEARNING_STATUS = {
   uploadStageIndexing: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[3],
   uploadStagePackBuild: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[4],
   studentInterestPrivateToStudentAndAgent: STUDENT_INTEREST_VISIBILITY_VALUES[0],
-  sessionActive: LEARNING_SESSION_STATUS_VALUES[0],
-  sessionCompleted: LEARNING_SESSION_STATUS_VALUES[1],
-  sessionAbandoned: LEARNING_SESSION_STATUS_VALUES[2],
-  sessionTypeInterestOnboarding: LEARNING_SESSION_TYPE_VALUES[0],
-  sessionTypeTutoring: LEARNING_SESSION_TYPE_VALUES[1],
+  sessionActive: TUTORING_SESSION_STATUS_VALUES[0],
+  sessionCompleted: TUTORING_SESSION_STATUS_VALUES[1],
+  sessionAbandoned: TUTORING_SESSION_STATUS_VALUES[2],
+  sessionTypeInterestOnboarding: TUTORING_SESSION_TYPE_VALUES[0],
+  sessionTypeTutoring: TUTORING_SESSION_TYPE_VALUES[1],
   reportTeacherOnly: REPORT_VISIBILITY_VALUES[0],
   frameworkDraft: EXPERT_FRAMEWORK_STATUS_VALUES[0],
   frameworkActive: EXPERT_FRAMEWORK_STATUS_VALUES[1],
@@ -494,17 +494,17 @@ export const LEARNING_STATUS = {
   reviewCaseDismissed: EXPERT_REVIEW_CASE_STATUS_VALUES[2],
   relevanceGeneral: EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES[0],
   relevanceFrameworkSpecific: EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES[1],
-  interventionReteach: LEARNING_INTERVENTION_TYPE_VALUES[0],
-  interventionCheckIn: LEARNING_INTERVENTION_TYPE_VALUES[1],
-  interventionPractice: LEARNING_INTERVENTION_TYPE_VALUES[2],
-  interventionFamilyFollowUp: LEARNING_INTERVENTION_TYPE_VALUES[3],
-  interventionPlanned: LEARNING_INTERVENTION_STATUS_VALUES[0],
-  interventionInProgress: LEARNING_INTERVENTION_STATUS_VALUES[1],
-  interventionCompleted: LEARNING_INTERVENTION_STATUS_VALUES[2],
-  interventionDismissed: LEARNING_INTERVENTION_STATUS_VALUES[3],
-  priorityLow: LEARNING_PRIORITY_VALUES[0],
-  priorityMedium: LEARNING_PRIORITY_VALUES[1],
-  priorityHigh: LEARNING_PRIORITY_VALUES[2],
+  interventionReteach: TUTORING_INTERVENTION_TYPE_VALUES[0],
+  interventionCheckIn: TUTORING_INTERVENTION_TYPE_VALUES[1],
+  interventionPractice: TUTORING_INTERVENTION_TYPE_VALUES[2],
+  interventionFamilyFollowUp: TUTORING_INTERVENTION_TYPE_VALUES[3],
+  interventionPlanned: TUTORING_INTERVENTION_STATUS_VALUES[0],
+  interventionInProgress: TUTORING_INTERVENTION_STATUS_VALUES[1],
+  interventionCompleted: TUTORING_INTERVENTION_STATUS_VALUES[2],
+  interventionDismissed: TUTORING_INTERVENTION_STATUS_VALUES[3],
+  priorityLow: TUTORING_PRIORITY_VALUES[0],
+  priorityMedium: TUTORING_PRIORITY_VALUES[1],
+  priorityHigh: TUTORING_PRIORITY_VALUES[2],
   crystallizationDraft: EXPERT_CRYSTALLIZATION_STATUS_VALUES[0],
   crystallizationApproved: EXPERT_CRYSTALLIZATION_STATUS_VALUES[1],
   crystallizationArchived: EXPERT_CRYSTALLIZATION_STATUS_VALUES[2],
@@ -516,7 +516,7 @@ export const LEARNING_STATUS = {
   teachingMediaApproved: TEACHING_MEDIA_STATUS_VALUES[1],
 } as const;
 
-export const LEARNING_NUMERIC_DEFAULTS = {
+export const TUTORING_NUMERIC_DEFAULTS = {
   zero: 0,
   initialVersion: 1,
   defaultMediaBindingPriority: 50,
@@ -539,17 +539,17 @@ export const TEN_POINT_SCORE_RANGE = {
   max: 10,
 } as const;
 
-export const LEARNING_DEFAULTS = {
+export const TUTORING_DEFAULTS = {
   chatTitle: "New Chat",
-  sessionLocale: LEARNING_DEFAULT_LOCALE,
+  sessionLocale: TUTORING_DEFAULT_LOCALE,
 } as const;
 
-export const LEARNING_SUBJECT_DEFAULTS = {
+export const TUTORING_SUBJECT_DEFAULTS = {
   key: "general",
   label: "General",
 } as const;
 
-export const LEARNING_LIMITS = {
+export const TUTORING_LIMITS = {
   assessmentPreviewGroundingBudgetTokens: 1_000,
   assessmentPreviewGroundingMaxUnits: 6,
   attentionGapThreshold: 2,

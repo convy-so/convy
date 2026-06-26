@@ -1,4 +1,4 @@
-﻿import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
@@ -8,8 +8,8 @@ import {
 } from "@/shared/db/schema";
 import {
   EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 import { generateBatchEmbeddings } from "@/shared/retrieval/embeddings";
 import { requireValue } from "@/shared/utils/collections";
 
@@ -94,12 +94,12 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
   const reusableCases = await getDb().query.expertReviewCases.findMany({
     where: and(
       eq(expertReviewCases.lessonId, params.lessonId),
-      eq(expertReviewCases.status, LEARNING_STATUS.reviewCaseOpen),
+      eq(expertReviewCases.status, TUTORING_STATUS.reviewCaseOpen),
       eq(expertReviewCases.reusableSignal, true),
       eq(expertReviewCases.reviewType, params.reviewType),
       eq(expertReviewCases.relevanceScope, params.relevanceScope),
       gte(expertReviewCases.createdAt, cutoffDate),
-      params.relevanceScope === LEARNING_STATUS.relevanceFrameworkSpecific
+      params.relevanceScope === TUTORING_STATUS.relevanceFrameworkSpecific
         ? eq(expertReviewCases.frameworkId, params.frameworkId ?? "")
         : undefined,
     ),
@@ -194,7 +194,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
     const openCases = await tx.query.expertReviewCases.findMany({
       where: and(
         inArray(expertReviewCases.id, sourceReviewCaseIds),
-        eq(expertReviewCases.status, LEARNING_STATUS.reviewCaseOpen),
+        eq(expertReviewCases.status, TUTORING_STATUS.reviewCaseOpen),
       ),
     });
 
@@ -205,9 +205,9 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
     const duplicateDraft = await tx.query.expertCrystallizations.findFirst({
       where: and(
         eq(expertCrystallizations.lessonId, params.lessonId),
-        eq(expertCrystallizations.status, LEARNING_STATUS.crystallizationDraft),
+        eq(expertCrystallizations.status, TUTORING_STATUS.crystallizationDraft),
         eq(expertCrystallizations.relevanceScope, params.relevanceScope),
-        params.relevanceScope === LEARNING_STATUS.relevanceFrameworkSpecific
+        params.relevanceScope === TUTORING_STATUS.relevanceFrameworkSpecific
           ? eq(expertCrystallizations.frameworkId, params.frameworkId ?? "")
           : undefined,
         sql`${expertCrystallizations.sourceReviewCaseIds} @> ${JSON.stringify(sourceReviewCaseIds)}::jsonb`,
@@ -228,10 +228,10 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
         id: nanoid(),
         lessonId: params.lessonId,
         frameworkId:
-          params.relevanceScope === LEARNING_STATUS.relevanceFrameworkSpecific
+          params.relevanceScope === TUTORING_STATUS.relevanceFrameworkSpecific
             ? (params.frameworkId ?? null)
             : null,
-        status: LEARNING_STATUS.crystallizationDraft,
+        status: TUTORING_STATUS.crystallizationDraft,
         relevanceScope: params.relevanceScope,
         title: `${params.reviewType}: reuse pattern from expert review cases`,
         heuristic: {
@@ -263,7 +263,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
     await tx
       .update(expertReviewCases)
       .set({
-        status: LEARNING_STATUS.reviewCaseCrystallized,
+        status: TUTORING_STATUS.reviewCaseCrystallized,
         updatedAt: new Date(),
       })
       .where(inArray(expertReviewCases.id, sourceReviewCaseIds));
@@ -278,7 +278,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
 export async function listExpertReviewQueue() {
   const reviewCases = await getDb().query.expertReviewCases.findMany({
     where: and(
-      eq(expertReviewCases.status, LEARNING_STATUS.reviewCaseOpen),
+      eq(expertReviewCases.status, TUTORING_STATUS.reviewCaseOpen),
     ),
     with: {
       classroomStudent: {
@@ -319,4 +319,5 @@ export async function listExpertReviewQueue() {
     createdAt: reviewCase.createdAt.toISOString(),
     }));
 }
+
 

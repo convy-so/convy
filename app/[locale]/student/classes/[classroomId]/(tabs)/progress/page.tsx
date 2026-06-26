@@ -1,6 +1,6 @@
-﻿import { getVerifiedSession } from "@/features/auth/public-server";
+import { getVerifiedSession } from "@/features/auth/public-server";
 import { getDb } from "@/shared/db";
-import { classroomStudents, studentLessonReports } from "@/shared/db/schema/learning";
+import { classroomStudents, studentLessonReports } from "@/shared/db/schema/tutoring";
 import { and, eq, desc } from "drizzle-orm";
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -70,4 +70,5 @@ export default async function ClassroomProgressPage({ params }: ClassroomProgres
         />
     );
 }
+
 

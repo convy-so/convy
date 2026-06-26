@@ -46,26 +46,29 @@ const allowedFeatureRoots = new Set([
 ]);
 const allowedSharedRoots = new Set([
   "ai",
+  "auth",
   "billing",
   "chat",
   "config",
   "db",
   "email",
+  "feedback",
   "http",
   "i18n",
   "infra",
+  "privacy",
   "realtime",
   "retrieval",
   "security",
+  "surveys",
+  "tutoring",
   "ui",
+  "utils",
 ]);
 const forbiddenDirectories = [
-  "features/learning",
   "features/dashboard",
   "features/expert",
-  "shared/auth",
   "shared/hooks",
-  "shared/query",
   "shared/realtime-server",
   "shared/server",
   "shared/workers",
@@ -86,7 +89,12 @@ function listFiles(dirPath) {
   }
 
   for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
-    if (entry.name === ".git" || entry.name === ".next" || entry.name === "node_modules") {
+    if (
+      entry.name === ".git" ||
+      entry.name === ".next" ||
+      entry.name === "node_modules" ||
+      entry.name === "dist"
+    ) {
       continue;
     }
 
@@ -122,6 +130,7 @@ function getTopLevelDirectories(parentDir) {
   return fs
     .readdirSync(parentDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.name !== "dist")
     .map((entry) => entry.name)
     .sort();
 }

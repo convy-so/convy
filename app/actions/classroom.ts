@@ -16,8 +16,8 @@ export {
 } from "./classroom/lesson-actions";
 
 export {
-  createLearningInterventionAction,
-  updateLearningInterventionAction,
+  createInterventionAction,
+  updateInterventionAction,
 } from "./classroom/intervention-actions";
 
 export {

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -26,7 +26,7 @@ import { MarkdownMessage } from "@/shared/ui/markdown-message";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/shared/ui/tailwind-class-utils";
 import type { StudentMeData } from "@/features/tutoring/public-client";
-import { STUDENT_MASTERY_LEVEL } from "@/shared/learning/constants";
+import { STUDENT_MASTERY_LEVEL } from "@/shared/tutoring/constants";
 import type {
   getStudentWorkspaceInitialData,
 } from "@/shared/http/page-data";
@@ -497,7 +497,7 @@ export function LiveSessionClient({
                 setSessionInput("");
               }}
             >
-              {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ VOICE RECORDING STATE ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+              {/* Ã¢â€â‚¬Ã¢â€â‚¬ VOICE RECORDING STATE Ã¢â€â‚¬Ã¢â€â‚¬ */}
               {isRecording ? (
                 <div className="flex flex-col items-center gap-4 rounded-2xl border border-rose-200 bg-white px-6 py-5">
                   {/* mic + animated waveform */}
@@ -519,7 +519,7 @@ export function LiveSessionClient({
                         />
                       ))}
                     </div>
-                    <span className="text-sm font-medium text-rose-600 tracking-wide">ListeningÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</span>
+                    <span className="text-sm font-medium text-rose-600 tracking-wide">ListeningÃ¢â‚¬Â¦</span>
                   </div>
 
                   {/* live transcript preview */}
@@ -530,7 +530,7 @@ export function LiveSessionClient({
                         <span className="ml-1 inline-block h-4 w-[2px] animate-pulse bg-rose-400 align-middle" />
                       </p>
                     ) : (
-                      <p className="text-sm text-slate-400">Start speaking ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â your words will appear hereÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</p>
+                      <p className="text-sm text-slate-400">Start speaking Ã¢â‚¬â€ your words will appear hereÃ¢â‚¬Â¦</p>
                     )}
                   </div>
 
@@ -546,14 +546,14 @@ export function LiveSessionClient({
                 </div>
 
               ) : isTranscribing ? (
-                /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ PROCESSING STATE ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+                /* Ã¢â€â‚¬Ã¢â€â‚¬ PROCESSING STATE Ã¢â€â‚¬Ã¢â€â‚¬ */
                 <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-5">
                   <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                  <span className="text-sm text-slate-500">Processing your speechÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</span>
+                  <span className="text-sm text-slate-500">Processing your speechÃ¢â‚¬Â¦</span>
                 </div>
 
               ) : (
-                /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ NORMAL COMPOSER ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+                /* Ã¢â€â‚¬Ã¢â€â‚¬ NORMAL COMPOSER Ã¢â€â‚¬Ã¢â€â‚¬ */
                 <div className="flex items-end gap-3">
                   <div className="relative flex-1">
                     <textarea
@@ -619,10 +619,10 @@ export function LiveSessionClient({
                 <p className="text-xs text-slate-500">
                   {canUseTutoringChat
                     ? isRecording
-                      ? "Tap 'Stop recording' when you're done speaking ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â then review and send."
+                      ? "Tap 'Stop recording' when you're done speaking Ã¢â‚¬â€ then review and send."
                       : isTranscribing
-                        ? "Converting your speech to textÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
-                        : "Press Enter to send Ãƒâ€šÃ‚Â· Shift + Enter for a new line."
+                        ? "Converting your speech to textÃ¢â‚¬Â¦"
+                        : "Press Enter to send Ã‚Â· Shift + Enter for a new line."
                     : tutoringInitializationState.message}
                 </p>
               </div>
@@ -633,4 +633,5 @@ export function LiveSessionClient({
     </div>
   );
 }
+
 

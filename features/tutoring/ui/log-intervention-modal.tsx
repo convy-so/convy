@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Sparkles, AlignLeft, Calendar, Check, ChevronDown } from "lucide-react";
-import { createLearningInterventionAction } from "@/app/actions/classroom";
+import { createInterventionAction } from "@/app/actions/classroom";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/http/query-keys";
 import toast from "react-hot-toast";
@@ -74,7 +74,7 @@ export function LogInterventionModal({
         setIsSubmitting(true);
 
         try {
-            const result = await createLearningInterventionAction({
+            const result = await createInterventionAction({
                 classroomId,
                 classroomStudentId,
                 lessonId: lessonId ?? undefined,
@@ -90,7 +90,7 @@ export function LogInterventionModal({
 
             toast.success(`Intervention logged for ${studentName}`);
             void queryClient.invalidateQueries({
-                queryKey: queryKeys.learning.interventions(
+                queryKey: queryKeys.tutoring.interventions(
                     classroomId, 
                     classroomStudentId, 
                     lessonId ?? undefined
@@ -275,4 +275,5 @@ export function LogInterventionModal({
         document.body
     );
 }
+
 

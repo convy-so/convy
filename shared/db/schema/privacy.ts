@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { surveys, surveyConversations } from "./surveys";
-import { classroomStudents } from "./learning";
+import { classroomStudents } from "./tutoring";
 import { users } from "./auth";
 import { timestamps } from "./common";
 import {
@@ -153,3 +153,4 @@ export const respondentAccessTokens = pgTable(
     unique("respondent_access_tokens_hash_unique").on(table.tokenHash),
   ],
 );
+

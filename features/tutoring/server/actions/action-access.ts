@@ -43,6 +43,6 @@ export async function ensureClassroomOwnerAccess(
   return classroomAccess.classroom;
 }
 
-export function revalidateLearningUi() {
+export function revalidateTutoringUi() {
   revalidatePath("/", "layout");
 }

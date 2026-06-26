@@ -1,10 +1,10 @@
-﻿import {
+import {
   learningTeachingPlaybookSchema,
   patternConfidenceLabelSchema,
   type LearningTeachingPlaybook,
   type StudentPatternProfile,
 } from "@/features/tutoring/server/pattern-types";
-import { LEARNING_SUBJECT_DEFAULTS } from "@/shared/learning/constants";
+import { TUTORING_SUBJECT_DEFAULTS } from "@/shared/tutoring/constants";
 
 import { getPatternConfidenceLabel } from "./pattern-profile-utils";
 
@@ -94,7 +94,7 @@ export function buildTeachingPlaybook(params: {
   const sourceScopesUsed = uniqueStrings([
     params.globalProfile ? "global" : null,
     params.subjectProfile
-      ? `subject:${params.subjectProfile.subjectKey ?? LEARNING_SUBJECT_DEFAULTS.key}`
+      ? `subject:${params.subjectProfile.subjectKey ?? TUTORING_SUBJECT_DEFAULTS.key}`
       : null,
     params.lessonLocalGaps.length > 0 || params.lessonLocalUsedExamples.length > 0
       ? "lesson-local"
@@ -221,4 +221,5 @@ export function buildTeachingPlaybook(params: {
     updatedAt: updatedAtCandidates[0] ?? isoNow(),
   });
 }
+
 

@@ -2,11 +2,11 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getTeacherLessonAccess } from "@/features/tutoring/server/access";
+import { buildLessonMaterialAccessPath } from "@/features/tutoring/public-server";
 import {
   buildMaterialGroundingMap,
   extractLearningMaterialSourceDocument,
 } from "@/features/tutoring/server/materials";
-import { buildLessonMaterialAccessPath } from "@/features/surveys/public-server";
 import { getDb } from "@/shared/db";
 import {
   lessonMaterialUploadAttempts,
@@ -17,7 +17,7 @@ import {
   type LessonMaterialProcessingJobData,
 } from "@/shared/infra/queue";
 import { downloadLessonMaterial } from "@/shared/infra/supabase-storage";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
 
 import { indexMaterialAndSyncBoundary } from "./material-indexing";
@@ -41,13 +41,13 @@ export async function processLearningMaterialUploadAttempt(
     where: eq(lessonMaterialUploadAttempts.id, data.attemptId),
   });
 
-  if (!attempt || attempt.status === LEARNING_STATUS.uploadSucceeded) {
+  if (!attempt || attempt.status === TUTORING_STATUS.uploadSucceeded) {
     return { success: true, skipped: "missing_or_completed" as const };
   }
 
   let materialId: string | null = null;
   let currentStage: LearningMaterialUploadAttemptStage =
-    LEARNING_STATUS.uploadStageExtraction;
+    TUTORING_STATUS.uploadStageExtraction;
 
   try {
     console.info("[lesson-material-worker] processing start", {
@@ -88,8 +88,8 @@ export async function processLearningMaterialUploadAttempt(
       classroomId: data.classroomId,
       lessonId: data.lessonId,
       batchId: attempt.batchId,
-      status: LEARNING_STATUS.uploadProcessing,
-      stage: LEARNING_STATUS.uploadStageExtraction,
+      status: TUTORING_STATUS.uploadProcessing,
+      stage: TUTORING_STATUS.uploadStageExtraction,
       userMessage: null,
       internalError: null,
       errorCode: null,
@@ -141,7 +141,7 @@ export async function processLearningMaterialUploadAttempt(
       segmentCount: sourceDocument.segments.length,
     });
 
-    currentStage = LEARNING_STATUS.uploadStageAnalysis;
+    currentStage = TUTORING_STATUS.uploadStageAnalysis;
     console.info("[lesson-material-worker] marking analysis started", {
       attemptId: data.attemptId,
       lessonId: data.lessonId,
@@ -152,8 +152,8 @@ export async function processLearningMaterialUploadAttempt(
       classroomId: data.classroomId,
       lessonId: data.lessonId,
       batchId: attempt.batchId,
-      status: LEARNING_STATUS.uploadProcessing,
-      stage: LEARNING_STATUS.uploadStageAnalysis,
+      status: TUTORING_STATUS.uploadProcessing,
+      stage: TUTORING_STATUS.uploadStageAnalysis,
     });
 
     console.info("[lesson-material-worker] grounding map start", {
@@ -189,7 +189,7 @@ export async function processLearningMaterialUploadAttempt(
       throw new Error("AI material analysis failed for this file.");
     }
 
-    currentStage = LEARNING_STATUS.uploadStageIndexing;
+    currentStage = TUTORING_STATUS.uploadStageIndexing;
     console.info("[lesson-material-worker] marking indexing started", {
       attemptId: data.attemptId,
       lessonId: data.lessonId,
@@ -200,8 +200,8 @@ export async function processLearningMaterialUploadAttempt(
       classroomId: data.classroomId,
       lessonId: data.lessonId,
       batchId: attempt.batchId,
-      status: LEARNING_STATUS.uploadProcessing,
-      stage: LEARNING_STATUS.uploadStageIndexing,
+      status: TUTORING_STATUS.uploadProcessing,
+      stage: TUTORING_STATUS.uploadStageIndexing,
     });
 
     console.info("[lesson-material-worker] material insert start", {
@@ -223,9 +223,9 @@ export async function processLearningMaterialUploadAttempt(
         publicUrl: buildLessonMaterialAccessPath(materialId),
         mimeType: data.mimeType,
         sizeBytes: data.sizeBytes,
-        extractionStatus: LEARNING_STATUS.materialCompleted,
+        extractionStatus: TUTORING_STATUS.materialCompleted,
         extractionError: null,
-        indexingStatus: LEARNING_STATUS.materialProcessing,
+        indexingStatus: TUTORING_STATUS.materialProcessing,
         indexingError: null,
         extractedText,
         sourceDocument,
@@ -246,7 +246,7 @@ export async function processLearningMaterialUploadAttempt(
       materialId,
     });
 
-    currentStage = LEARNING_STATUS.uploadStagePackBuild;
+    currentStage = TUTORING_STATUS.uploadStagePackBuild;
     console.info("[lesson-material-worker] marking pack build started", {
       attemptId: data.attemptId,
       lessonId: data.lessonId,
@@ -257,8 +257,8 @@ export async function processLearningMaterialUploadAttempt(
       classroomId: data.classroomId,
       lessonId: data.lessonId,
       batchId: attempt.batchId,
-      status: LEARNING_STATUS.uploadProcessing,
-      stage: LEARNING_STATUS.uploadStagePackBuild,
+      status: TUTORING_STATUS.uploadProcessing,
+      stage: TUTORING_STATUS.uploadStagePackBuild,
       materialId,
     });
 
@@ -289,8 +289,8 @@ export async function processLearningMaterialUploadAttempt(
       classroomId: data.classroomId,
       lessonId: data.lessonId,
       batchId: attempt.batchId,
-      status: LEARNING_STATUS.uploadProcessing,
-      stage: LEARNING_STATUS.uploadStagePackBuild,
+      status: TUTORING_STATUS.uploadProcessing,
+      stage: TUTORING_STATUS.uploadStagePackBuild,
       userMessage: null,
       internalError: null,
       errorCode: null,
@@ -351,7 +351,7 @@ export async function processLearningMaterialUploadAttempt(
       classroomId: data.classroomId,
       lessonId: data.lessonId,
       batchId: attempt.batchId,
-      status: LEARNING_STATUS.uploadFailed,
+      status: TUTORING_STATUS.uploadFailed,
       stage: currentStage,
       userMessage: failure.userMessage,
       internalError: failure.internalError,
@@ -371,4 +371,5 @@ export async function processLearningMaterialUploadAttempt(
     };
   }
 }
+
 

@@ -7,7 +7,7 @@ import {
 
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { classroomStudents } from "./learning";
+import { classroomStudents } from "./tutoring";
 import { FEEDBACK_DEFAULTS } from "@/shared/feedback/constants";
 
 export const platformFeedback = pgTable(
@@ -41,3 +41,4 @@ export const platformFeedback = pgTable(
     index("platform_feedback_student_idx").on(table.classroomStudentId),
   ],
 );
+

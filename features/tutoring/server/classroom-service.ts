@@ -6,10 +6,10 @@ import { classrooms, classroomStudents, surveys, surveyConversations } from "@/s
 import { normalizeGradeBand } from "@/features/tutoring/server/grade-band-normalization";
 import { getPersonalClassroomDirectory, getTeacherClassroomAccess } from "@/features/tutoring/server/access";
 import {
-  LEARNING_RESPONSE_STATUS,
-  LEARNING_STATUS,
-  LEARNING_SUBJECT_DEFAULTS,
-} from "@/shared/learning/constants";
+  TUTORING_RESPONSE_STATUS,
+  TUTORING_STATUS,
+  TUTORING_SUBJECT_DEFAULTS,
+} from "@/shared/tutoring/constants";
 import {
   SURVEY_DELIVERY_MODE,
   SURVEY_STATUS,
@@ -28,7 +28,7 @@ export async function createClassroom(params: {
 }) {
   const classroomId = nanoid();
   const now = new Date();
-  const gradeLabel = params.gradeLabel || LEARNING_SUBJECT_DEFAULTS.label;
+  const gradeLabel = params.gradeLabel || TUTORING_SUBJECT_DEFAULTS.label;
   const gradeBand = normalizeGradeBand(gradeLabel);
 
   const [classroom] = await getDb().insert(classrooms).values({
@@ -40,7 +40,7 @@ export async function createClassroom(params: {
     defaultContentLocale: params.defaultContentLocale,
     gradeBand,
     gradeLabel,
-    status: LEARNING_STATUS.classroomActive,
+    status: TUTORING_STATUS.classroomActive,
     createdAt: now,
     updatedAt: now,
   }).returning();
@@ -105,7 +105,7 @@ export async function getClassroomSurveyProgress(params: {
         email: student.email,
         inviteStatus: student.inviteStatus,
         onboardingStatus: student.onboardingStatus,
-        responseStatus: LEARNING_RESPONSE_STATUS.NOT_STARTED,
+        responseStatus: TUTORING_RESPONSE_STATUS.NOT_STARTED,
         completedAt: null,
       })),
     }));
@@ -139,14 +139,14 @@ export async function getClassroomSurveyProgress(params: {
     const studentStates = roster.map((student) => {
       const conversation = latestConversationByKey.get(`${survey.id}:${student.id}`);
       const responseStatus:
-        | typeof LEARNING_RESPONSE_STATUS.COMPLETED
-        | typeof LEARNING_RESPONSE_STATUS.IN_PROGRESS
-        | typeof LEARNING_RESPONSE_STATUS.NOT_STARTED =
+        | typeof TUTORING_RESPONSE_STATUS.COMPLETED
+        | typeof TUTORING_RESPONSE_STATUS.IN_PROGRESS
+        | typeof TUTORING_RESPONSE_STATUS.NOT_STARTED =
         conversation?.completed
-          ? LEARNING_RESPONSE_STATUS.COMPLETED
+          ? TUTORING_RESPONSE_STATUS.COMPLETED
           : conversation
-            ? LEARNING_RESPONSE_STATUS.IN_PROGRESS
-            : LEARNING_RESPONSE_STATUS.NOT_STARTED;
+            ? TUTORING_RESPONSE_STATUS.IN_PROGRESS
+            : TUTORING_RESPONSE_STATUS.NOT_STARTED;
 
       return {
         classroomStudentId: student.id,
@@ -156,17 +156,17 @@ export async function getClassroomSurveyProgress(params: {
         onboardingStatus: student.onboardingStatus,
         responseStatus,
         completedAt:
-          responseStatus === LEARNING_RESPONSE_STATUS.COMPLETED
+          responseStatus === TUTORING_RESPONSE_STATUS.COMPLETED
             ? conversation?.updatedAt?.toISOString() ?? null
             : null,
       };
     });
 
     const completedCount = studentStates.filter(
-      (student) => student.responseStatus === LEARNING_RESPONSE_STATUS.COMPLETED,
+      (student) => student.responseStatus === TUTORING_RESPONSE_STATUS.COMPLETED,
     ).length;
     const inProgressCount = studentStates.filter(
-      (student) => student.responseStatus === LEARNING_RESPONSE_STATUS.IN_PROGRESS,
+      (student) => student.responseStatus === TUTORING_RESPONSE_STATUS.IN_PROGRESS,
     ).length;
     const assignedCount = studentStates.length;
     const notStartedCount = assignedCount - completedCount - inProgressCount;
@@ -189,3 +189,4 @@ export async function getClassroomSurveyProgress(params: {
     };
   });
 }
+

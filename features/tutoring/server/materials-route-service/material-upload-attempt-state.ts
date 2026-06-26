@@ -1,8 +1,8 @@
-﻿import {
-  LEARNING_STATUS,
+import {
+  TUTORING_STATUS,
   MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES,
   MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export type LearningMaterialUploadAttemptStatus =
   (typeof MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES)[number];
@@ -175,10 +175,11 @@ export function isMaterialAnalysisFailed(
   analysis: Record<string, unknown> | null | undefined,
 ) {
   return (
-    analysis?.analysisStatus === LEARNING_STATUS.materialFailed ||
-    analysis?.status === LEARNING_STATUS.materialFailed ||
+    analysis?.analysisStatus === TUTORING_STATUS.materialFailed ||
+    analysis?.status === TUTORING_STATUS.materialFailed ||
     typeof analysis?.analysisError === "string"
   );
 }
+
 
 

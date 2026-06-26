@@ -11,7 +11,7 @@ import {
   isReadinessQuotaError,
 } from "@/features/tutoring/server/readiness";
 import { isMaterialAnalysisFailed } from "@/features/tutoring/server/materials-route-service";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 
 export async function GET(
   _request: Request,
@@ -36,8 +36,8 @@ export async function GET(
         ...lesson,
         materials: lesson.materials.filter(
           (material) =>
-            material.extractionStatus === LEARNING_STATUS.materialCompleted &&
-            material.indexingStatus === LEARNING_STATUS.materialCompleted &&
+            material.extractionStatus === TUTORING_STATUS.materialCompleted &&
+            material.indexingStatus === TUTORING_STATUS.materialCompleted &&
             !isMaterialAnalysisFailed(material.analysis),
         ),
       });
@@ -64,4 +64,5 @@ export async function GET(
     return handleTutoringRouteError(error, "Failed to evaluate lesson readiness", "/api/lessons/[lessonId]/readiness");
   }
 }
+
 
