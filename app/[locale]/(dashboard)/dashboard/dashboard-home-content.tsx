@@ -1,4 +1,4 @@
-﻿import {
+import {
   ArrowUpRight,
   BarChart3,
   BookOpen,
@@ -20,7 +20,7 @@ import {
   classroomStudents,
   classrooms,
   lessons,
-} from "@/shared/db/schema/learning";
+} from "@/shared/db/schema/tutoring";
 import { surveyConversations, surveys } from "@/shared/db/schema/surveys";
 import { cache, cacheKeys } from "@/shared/infra/cache";
 import { resolvePreferredUiLocale } from "@/shared/i18n/resolve-locale";
@@ -408,4 +408,5 @@ export async function DashboardHomeContent({
     </div>
   );
 }
+
 

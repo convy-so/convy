@@ -7,7 +7,7 @@ import { classroomInvitations, classroomStudents, users } from "@/shared/db/sche
 import type { AuthSessionWithUser } from "@/features/auth/server/server-auth";
 import { logAuthAuditEvent } from "@/features/auth/server/audit";
 import { getPlatformRole } from "@/features/auth/server/dal";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { USER_ROLE } from "@/shared/surveys/constants";
 
 type InvitationBase = {
@@ -62,13 +62,13 @@ export async function resolveInvitationAccess(params: {
   };
 
   if (
-    invitation.status === LEARNING_STATUS.inviteCancelled ||
-    invitation.status === LEARNING_STATUS.inviteRejected
+    invitation.status === TUTORING_STATUS.inviteCancelled ||
+    invitation.status === TUTORING_STATUS.inviteRejected
   ) {
     return { kind: "terminal", reason: invitation.status, ...base };
   }
 
-  if (invitation.status === LEARNING_STATUS.inviteAccepted) {
+  if (invitation.status === TUTORING_STATUS.inviteAccepted) {
     if (params.session?.user.id && invitation.acceptedByUserId === params.session.user.id) {
       return { kind: "joined", ...base };
     }
@@ -132,3 +132,4 @@ export async function findUserByNormalizedEmail(email: string) {
     where: eq(users.email, email.trim().toLowerCase()),
   });
 }
+

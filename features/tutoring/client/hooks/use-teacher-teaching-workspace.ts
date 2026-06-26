@@ -21,12 +21,40 @@ import {
   uploadLessonMaterial,
   ApiClientError,
 } from "@/features/tutoring/public-client";
-import type { ClassroomStudent, PendingInvitation, Lesson } from "@/features/tutoring/public-client";
 import { queryKeys } from "@/shared/http/query-keys";
 import { getFriendlyActionError } from "@/shared/http/friendly-action-error";
-import type { getTeacherTeachingWorkspaceInitialData } from "@/shared/http/page-data";
+type TeacherClassroomsResponse = Awaited<ReturnType<typeof fetchTeacherClassrooms>>;
+type TeacherClassroom = TeacherClassroomsResponse["data"][number];
 
-function retryTransientLearningApiFailure(failureCount: number, error: Error) {
+type ClassroomStudentsResponse = Awaited<ReturnType<typeof fetchClassroomStudents>>;
+type ClassroomStudentRecord = ClassroomStudentsResponse["data"]["students"][number];
+type PendingInvitationRecord =
+  ClassroomStudentsResponse["data"]["pendingInvitations"][number];
+
+type ClassroomLessonsResponse = Awaited<ReturnType<typeof fetchClassroomLessons>>;
+type ClassroomLesson = ClassroomLessonsResponse["data"][number];
+
+type LessonMaterialsResponse = Awaited<ReturnType<typeof fetchLessonMaterials>>;
+
+type LessonMaterialUploadAttemptsResponse = Awaited<
+  ReturnType<typeof fetchLessonMaterialUploadAttempts>
+>;
+type LessonMaterialUploadAttemptRecord =
+  LessonMaterialUploadAttemptsResponse["data"][number];
+
+type LessonActivationStateResponse = Awaited<
+  ReturnType<typeof fetchLessonActivationState>
+>;
+
+type LessonReportsResponse = Awaited<ReturnType<typeof fetchLessonReports>>;
+
+type TeacherTeachingWorkspaceInitialData = {
+  initialClassrooms: TeacherClassroomsResponse;
+  initialStudents?: ClassroomStudentsResponse;
+  initialLessons?: ClassroomLessonsResponse;
+};
+
+function retryTransientTutoringApiFailure(failureCount: number, error: Error) {
   return (
     error instanceof ApiClientError &&
     error.code === "SERVICE_UNAVAILABLE" &&
@@ -35,22 +63,25 @@ function retryTransientLearningApiFailure(failureCount: number, error: Error) {
 }
 
 export function useTeacherTeachingWorkspace(
-  initialData: Awaited<ReturnType<typeof getTeacherTeachingWorkspaceInitialData>>,
+  initialData: TeacherTeachingWorkspaceInitialData,
   options: { activeLessonView?: "overview" | "reports" | "students" } = {},
 ) {
   const queryClient = useQueryClient();
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
 
-  const classroomsQuery = useQuery({
-    queryKey: queryKeys.learning.classrooms,
+  const classroomsQuery = useQuery<TeacherClassroomsResponse>({
+    queryKey: queryKeys.tutoring.classrooms,
     queryFn: fetchTeacherClassrooms,
     initialData: initialData.initialClassrooms,
     staleTime: 30_000,
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
 
-  const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
+  const classrooms = useMemo<TeacherClassroom[]>(
+    () => classroomsQuery.data?.data ?? [],
+    [classroomsQuery.data],
+  );
   const selectedDirectoryClassroom =
     classrooms.find((classroom) => classroom.id === selectedClassroomId) ?? null;
   const selectedAccessibleClassroomId = selectedDirectoryClassroom?.id ?? null;
@@ -73,10 +104,10 @@ export function useTeacherTeachingWorkspace(
 
       void Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.students(selectedAccessibleClassroomId),
+          queryKey: queryKeys.tutoring.students(selectedAccessibleClassroomId),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.classrooms,
+          queryKey: queryKeys.tutoring.classrooms,
         }),
       ]);
     },
@@ -104,22 +135,22 @@ export function useTeacherTeachingWorkspace(
 
       void Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.materials(lessonId),
+          queryKey: queryKeys.tutoring.materials(lessonId),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.materialUploadAttempts(lessonId),
+          queryKey: queryKeys.tutoring.materialUploadAttempts(lessonId),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.activationState(lessonId),
+          queryKey: queryKeys.tutoring.activationState(lessonId),
         }),
       ]);
     },
   });
 
-  const studentsQuery = useQuery({
+  const studentsQuery = useQuery<ClassroomStudentsResponse>({
     queryKey: selectedAccessibleClassroomId
-      ? queryKeys.learning.students(selectedAccessibleClassroomId)
-      : ["learningStudents", "idle"],
+      ? queryKeys.tutoring.students(selectedAccessibleClassroomId)
+      : ["classroomStudents", "idle"],
     queryFn: async () => {
       if (!selectedAccessibleClassroomId) {
         throw new Error("Missing classroom id");
@@ -134,13 +165,11 @@ export function useTeacherTeachingWorkspace(
         ? initialData.initialStudents
         : undefined,
     staleTime: 30_000,
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
-  const lessonsQuery = useQuery<
-    Awaited<ReturnType<typeof fetchClassroomLessons>>
-  >({
+  const lessonsQuery = useQuery<ClassroomLessonsResponse>({
     queryKey: selectedAccessibleClassroomId
-      ? queryKeys.learning.lessons(selectedAccessibleClassroomId)
+      ? queryKeys.tutoring.lessons(selectedAccessibleClassroomId)
       : ["lessons", "idle"],
     queryFn: async () => {
       if (!selectedAccessibleClassroomId) {
@@ -158,26 +187,27 @@ export function useTeacherTeachingWorkspace(
           >)
         : undefined,
     staleTime: 30_000,
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
 
   const students = useMemo(
-    () => studentsQuery.data?.data.students ?? ([] as ClassroomStudent[]),
+    (): ClassroomStudentRecord[] => studentsQuery.data?.data.students ?? [],
     [studentsQuery.data],
   );
   const pendingInvitations = useMemo(
-    () => studentsQuery.data?.data.pendingInvitations ?? ([] as PendingInvitation[]),
+    (): PendingInvitationRecord[] =>
+      studentsQuery.data?.data.pendingInvitations ?? [],
     [studentsQuery.data],
   );
   const lessons = useMemo(
-    () => lessonsQuery.data?.data ?? ([] as Lesson[]),
+    (): ClassroomLesson[] => lessonsQuery.data?.data ?? [],
     [lessonsQuery.data],
   );
-  const selectedLesson =
+  const selectedLesson: ClassroomLesson | null =
     lessons.find((lesson) => lesson.id === selectedLessonId) ?? null;
 
-  const materialsQuery = useQuery({
-    queryKey: selectedLesson ? queryKeys.learning.materials(selectedLesson.id) : ["learningMaterials", "idle"],
+  const materialsQuery = useQuery<LessonMaterialsResponse>({
+    queryKey: selectedLesson ? queryKeys.tutoring.materials(selectedLesson.id) : ["lessonMaterials", "idle"],
     queryFn: async () => {
       if (!selectedLesson) {
         throw new Error("Missing lesson");
@@ -186,12 +216,12 @@ export function useTeacherTeachingWorkspace(
     },
     enabled: Boolean(selectedLesson),
     staleTime: 30_000,
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
-  const materialUploadAttemptsQuery = useQuery({
+  const materialUploadAttemptsQuery = useQuery<LessonMaterialUploadAttemptsResponse>({
     queryKey: selectedLesson
-      ? queryKeys.learning.materialUploadAttempts(selectedLesson.id)
-      : ["learningMaterialUploadAttempts", "idle"],
+      ? queryKeys.tutoring.materialUploadAttempts(selectedLesson.id)
+      : ["lessonMaterialUploadAttempts", "idle"],
     queryFn: async () => {
       if (!selectedLesson) {
         throw new Error("Missing lesson");
@@ -208,12 +238,12 @@ export function useTeacherTeachingWorkspace(
         ? 2_500
         : false;
     },
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
-  const activationStateQuery = useQuery({
+  const activationStateQuery = useQuery<LessonActivationStateResponse>({
     queryKey: selectedLesson
-      ? queryKeys.learning.activationState(selectedLesson.id)
-      : ["learningActivationState", "idle"],
+      ? queryKeys.tutoring.activationState(selectedLesson.id)
+      : ["lessonActivationState", "idle"],
     queryFn: async () => {
       if (!selectedLesson) {
         throw new Error("Missing lesson");
@@ -224,10 +254,10 @@ export function useTeacherTeachingWorkspace(
     staleTime: 5_000,
     refetchInterval: (query) =>
       query.state.data?.data?.ready ? false : 5_000,
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
-  const reportsQuery = useQuery({
-    queryKey: selectedLesson ? queryKeys.learning.reports(selectedLesson.id) : ["learningReports", "idle"],
+  const reportsQuery = useQuery<LessonReportsResponse>({
+    queryKey: selectedLesson ? queryKeys.tutoring.reports(selectedLesson.id) : ["lessonReports", "idle"],
     queryFn: async () => {
       if (!selectedLesson) {
         throw new Error("Missing lesson");
@@ -236,7 +266,7 @@ export function useTeacherTeachingWorkspace(
     },
     enabled: Boolean(selectedLesson) && options.activeLessonView === "reports",
     staleTime: 30_000,
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
 
   const uploadMaterialMutation = useMutation({
@@ -263,9 +293,9 @@ export function useTeacherTeachingWorkspace(
       }
       if (selectedLesson) {
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: queryKeys.learning.materials(selectedLesson.id) }),
-          queryClient.invalidateQueries({ queryKey: queryKeys.learning.materialUploadAttempts(selectedLesson.id) }),
-          queryClient.invalidateQueries({ queryKey: queryKeys.learning.activationState(selectedLesson.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.materials(selectedLesson.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.materialUploadAttempts(selectedLesson.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.activationState(selectedLesson.id) }),
         ]);
       }
     },
@@ -288,17 +318,17 @@ export function useTeacherTeachingWorkspace(
     onSuccess: async () => {
       toast.success("Lesson status updated");
       if (selectedAccessibleClassroomId) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.learning.lessons(selectedAccessibleClassroomId) });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.lessons(selectedAccessibleClassroomId) });
       }
       if (selectedLesson) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.learning.activationState(selectedLesson.id) });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.activationState(selectedLesson.id) });
       }
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to update lesson"),
   });
 
   const resendInvitationMutation = useMutation({
-    mutationFn: async (invitation: PendingInvitation) => {
+    mutationFn: async (invitation: PendingInvitationRecord) => {
       if (!selectedAccessibleClassroomId) throw new Error("No classroom selected");
       const result = await resendStudentInvitationAction({
         invitationId: invitation.id,
@@ -317,7 +347,7 @@ export function useTeacherTeachingWorkspace(
   });
 
   const cancelInvitationMutation = useMutation({
-    mutationFn: async (invitation: PendingInvitation) => {
+    mutationFn: async (invitation: PendingInvitationRecord) => {
       if (!selectedAccessibleClassroomId) throw new Error("No classroom selected");
       const result = await cancelStudentInvitationAction({
         invitationId: invitation.id,
@@ -332,7 +362,7 @@ export function useTeacherTeachingWorkspace(
       toast.success("Invitation cancelled");
       if (selectedAccessibleClassroomId) {
         await queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.students(selectedAccessibleClassroomId),
+          queryKey: queryKeys.tutoring.students(selectedAccessibleClassroomId),
         });
       }
     },
@@ -377,4 +407,5 @@ export function useTeacherTeachingWorkspace(
     setSelectedLessonId,
   };
 }
+
 

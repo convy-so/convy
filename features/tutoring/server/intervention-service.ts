@@ -1,23 +1,23 @@
-﻿import { and, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
 import { lessonInterventions } from "@/shared/db/schema";
 import {
-  LEARNING_INTERVENTION_STATUS_VALUES,
-  LEARNING_INTERVENTION_TYPE_VALUES,
-  LEARNING_PRIORITY_VALUES,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_INTERVENTION_STATUS_VALUES,
+  TUTORING_INTERVENTION_TYPE_VALUES,
+  TUTORING_PRIORITY_VALUES,
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 
 export type InterventionRecord = {
   id: string;
   classroomId: string;
   classroomStudentId: string;
   lessonId: string | null;
-  interventionType: (typeof LEARNING_INTERVENTION_TYPE_VALUES)[number];
-  priority: (typeof LEARNING_PRIORITY_VALUES)[number];
-  status: (typeof LEARNING_INTERVENTION_STATUS_VALUES)[number];
+  interventionType: (typeof TUTORING_INTERVENTION_TYPE_VALUES)[number];
+  priority: (typeof TUTORING_PRIORITY_VALUES)[number];
+  status: (typeof TUTORING_INTERVENTION_STATUS_VALUES)[number];
   title: string;
   notes: string | null;
   dueAt: string | null;
@@ -78,8 +78,8 @@ export async function createIntervention(params: {
   classroomStudentId: string;
   createdByUserId: string;
   lessonId?: string;
-  interventionType: (typeof LEARNING_INTERVENTION_TYPE_VALUES)[number];
-  priority: (typeof LEARNING_PRIORITY_VALUES)[number];
+  interventionType: (typeof TUTORING_INTERVENTION_TYPE_VALUES)[number];
+  priority: (typeof TUTORING_PRIORITY_VALUES)[number];
   title: string;
   notes?: string;
   dueAt?: string;
@@ -97,7 +97,7 @@ export async function createIntervention(params: {
       lessonId: params.lessonId || null,
       interventionType: params.interventionType,
       priority: params.priority,
-      status: LEARNING_STATUS.interventionPlanned,
+      status: TUTORING_STATUS.interventionPlanned,
       title: params.title,
       notes: params.notes || null,
       dueAt: params.dueAt ? new Date(params.dueAt) : null,
@@ -115,13 +115,13 @@ export async function createIntervention(params: {
 export async function updateIntervention(params: {
   interventionId: string;
   classroomId: string;
-  status: (typeof LEARNING_INTERVENTION_STATUS_VALUES)[number];
+  status: (typeof TUTORING_INTERVENTION_STATUS_VALUES)[number];
   notes?: string;
   dueAt?: string;
 }) {
   const now = new Date();
   const completedAt =
-    params.status === LEARNING_STATUS.interventionCompleted ? now : undefined;
+    params.status === TUTORING_STATUS.interventionCompleted ? now : undefined;
 
   const [record] = await getDb()
     .update(lessonInterventions)
@@ -187,4 +187,5 @@ function formatLessonIntervention(record: {
     },
   };
 }
+
 

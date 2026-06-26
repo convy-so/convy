@@ -10,3 +10,7 @@ export * from "@/features/tutoring/server/expert-review-storage";
 export * from "@/features/tutoring/server/framework-runtime-storage";
 export * from "@/features/tutoring/server/student-profile-storage";
 export * from "@/features/tutoring/server/tutoring-debug";
+
+export function buildLessonMaterialAccessPath(materialId: string) {
+  return `/api/media/lessons/${encodeURIComponent(materialId)}`;
+}

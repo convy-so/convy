@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -61,7 +61,7 @@ export function StudentOnboardingClient({
   const syncedMessageCountRef = useRef(0);
 
   const onboardingQuery = useQuery({
-    queryKey: queryKeys.learning.onboarding,
+    queryKey: queryKeys.tutoring.onboarding,
     queryFn: fetchOnboardingState,
     initialData: initialOnboardingState,
     staleTime: 30_000,
@@ -90,8 +90,8 @@ export function StudentOnboardingClient({
     transport: onboardingTransport,
     onFinish: () => {
       void Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.learning.onboarding }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.learning.me }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.onboarding }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.me }),
       ]);
     },
   });
@@ -135,15 +135,15 @@ export function StudentOnboardingClient({
   useEffect(() => {
     if (status === "ready" && chatMessages.length > syncedMessageCountRef.current) {
       syncedMessageCountRef.current = chatMessages.length;
-      void queryClient.invalidateQueries({ queryKey: queryKeys.learning.onboarding });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.onboarding });
     }
   }, [chatMessages.length, queryClient, status]);
 
   useEffect(() => {
     if (isCompleted) {
       void Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.learning.me }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.learning.onboarding }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.me }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tutoring.onboarding }),
       ]);
 
       const timer = setTimeout(() => {
@@ -296,4 +296,5 @@ export function StudentOnboardingClient({
     </div>
   );
 }
+
 

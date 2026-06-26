@@ -5,7 +5,7 @@ import { users, sessions } from "@/shared/db/schema/auth";
 import { usageLogs } from "@/shared/db/schema/billing";
 import { surveys, surveyCreationConversations, surveyBriefs } from "@/shared/db/schema/surveys";
 import { platformFeedback } from "@/shared/db/schema/feedback";
-import { classroomStudents, classrooms, lessons, studentSessions } from "@/shared/db/schema/learning";
+import { classroomStudents, classrooms, lessons, studentSessions } from "@/shared/db/schema/tutoring";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
 
 import { requireRole } from "@/features/auth/public-server";
@@ -380,3 +380,4 @@ export async function updatePlatformFeedbackStatus(
     return { success: true, data: updated ?? null };
   }, "updatePlatformFeedbackStatus");
 }
+

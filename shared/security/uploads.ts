@@ -3,7 +3,7 @@ import { UPLOAD_LIMITS } from "@/shared/config/app-config";
 const MB = 1024 * 1024;
 
 export const MAX_AUDIO_UPLOAD_BYTES = UPLOAD_LIMITS.MAX_AUDIO_UPLOAD_BYTES;
-export const MAX_LEARNING_MATERIAL_BYTES = UPLOAD_LIMITS.MAX_LEARNING_MATERIAL_BYTES;
+export const MAX_LESSON_MATERIAL_BYTES = UPLOAD_LIMITS.MAX_LESSON_MATERIAL_BYTES;
 export const MAX_TEXT_EXTRACTION_CHARS = UPLOAD_LIMITS.MAX_TEXT_EXTRACTION_CHARS;
 
 type FileLike = {
@@ -12,13 +12,13 @@ type FileLike = {
   type?: string | null;
 };
 
-export const LEARNING_MATERIAL_MIME_ALLOWLIST = new Set([
+export const LESSON_MATERIAL_MIME_ALLOWLIST = new Set([
   "application/pdf",
   "text/plain",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
-const LEARNING_MATERIAL_EXTENSION_ALLOWLIST = new Set([
+const LESSON_MATERIAL_EXTENSION_ALLOWLIST = new Set([
   "pdf",
   "txt",
   "docx",
@@ -39,17 +39,17 @@ export function assertFileSize(file: FileLike, maxBytes: number, label: string) 
   }
 }
 
-export function assertLearningMaterialFile(file: FileLike, detectedMimeType?: string | null) {
-  assertFileSize(file, MAX_LEARNING_MATERIAL_BYTES, "Lesson material");
+export function assertLessonMaterialFile(file: FileLike, detectedMimeType?: string | null) {
+  assertFileSize(file, MAX_LESSON_MATERIAL_BYTES, "Lesson material");
 
   const mimeType = (detectedMimeType || file.type || "").toLowerCase();
   const extension = getFileExtension(file.name);
 
-  if (!extension || !LEARNING_MATERIAL_EXTENSION_ALLOWLIST.has(extension)) {
+  if (!extension || !LESSON_MATERIAL_EXTENSION_ALLOWLIST.has(extension)) {
     throw new Error("Unsupported lesson material file extension");
   }
 
-  if (!LEARNING_MATERIAL_MIME_ALLOWLIST.has(mimeType)) {
+  if (!LESSON_MATERIAL_MIME_ALLOWLIST.has(mimeType)) {
     throw new Error("Unsupported lesson material format");
   }
 }

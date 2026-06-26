@@ -190,7 +190,7 @@ export function InviteStudentModal({
 
       toast.success("Invitation sent");
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.students(classroomId),
+        queryKey: queryKeys.tutoring.students(classroomId),
       });
       resetForm();
       onClose();
@@ -242,10 +242,10 @@ export function InviteStudentModal({
         // All good — close immediately
         await Promise.all([
           queryClient.invalidateQueries({
-            queryKey: queryKeys.learning.students(classroomId),
+            queryKey: queryKeys.tutoring.students(classroomId),
           }),
           queryClient.invalidateQueries({
-            queryKey: queryKeys.learning.assignedSurveys(classroomId),
+            queryKey: queryKeys.tutoring.assignedSurveys(classroomId),
           }),
         ]);
         resetForm();
@@ -258,7 +258,7 @@ export function InviteStudentModal({
         setIsSubmitting(false);
         await Promise.all([
           queryClient.invalidateQueries({
-            queryKey: queryKeys.learning.students(classroomId),
+            queryKey: queryKeys.tutoring.students(classroomId),
           }),
         ]);
         return;
@@ -590,3 +590,4 @@ export function InviteStudentModal({
     document.body,
   );
 }
+

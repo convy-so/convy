@@ -1,4 +1,4 @@
-﻿import { logBraintrustTrace } from "@/shared/ai/braintrust";
+import { logBraintrustTrace } from "@/shared/ai/braintrust";
 import { persistTutorTurnOutcome } from "@/features/tutoring/public-server";
 import { finalizeTutoringSession } from "@/features/tutoring/server/tutoring-session-lifecycle";
 import {
@@ -12,7 +12,7 @@ import {
   createTutoringTimer,
   measureTutoringStep,
 } from "@/features/tutoring/public-server";
-import { TUTORING_COMPLETION_REASON } from "@/shared/learning/constants";
+import { TUTORING_COMPLETION_REASON } from "@/shared/tutoring/constants";
 
 import type { FinalizeTutoringTurnParams } from "@/features/tutoring/server/tutoring-turn-types";
 
@@ -294,4 +294,5 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     durationMs: timer.elapsedMs(),
   });
 }
+
 

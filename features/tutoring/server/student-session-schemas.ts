@@ -10,8 +10,8 @@ import {
   studentMasteryLevelSchema,
 } from "@/features/tutoring/server/lesson-foundation-schemas";
 import {
-  LEARNING_DEFAULT_LOCALE,
-  LEARNING_NUMERIC_DEFAULTS,
+  TUTORING_DEFAULT_LOCALE,
+  TUTORING_NUMERIC_DEFAULTS,
   PRODUCTIVE_STRUGGLE_READINESS,
   PRODUCTIVE_STRUGGLE_READINESS_VALUES,
   PRODUCTIVE_STRUGGLE_TARGET_BAND,
@@ -24,7 +24,7 @@ import {
   REPORT_TRANSFER_READINESS_VALUES,
   SESSION_COMPARISON_TREND,
   TEN_POINT_SCORE_RANGE,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export const motivationalContextSchema = z.object({
   surfaceInterests: z.array(z.string()).default([]),
@@ -135,7 +135,7 @@ export type LessonGroundingPack = z.infer<typeof lessonGroundingPackSchema>;
 export const contentScopeSnapshotSchema = z.object({
   lessonId: z.string().nullable().default(null),
   lessonTitle: z.string().default(""),
-  contentLocale: z.string().default(LEARNING_DEFAULT_LOCALE),
+  contentLocale: z.string().default(TUTORING_DEFAULT_LOCALE),
   teacherSummary: z.string().default(""),
   materialIds: z.array(z.string()).default([]),
   scopeNotes: z.array(z.string()).default([]),
@@ -143,7 +143,7 @@ export const contentScopeSnapshotSchema = z.object({
   rigorNotes: z.array(z.string()).default([]),
   retrievedContext: z.array(z.string()).default([]),
   learningOutcomes: z.array(learningOutcomeDefinitionSchema).optional().default([]),
-  groundingPackVersion: z.number().int().nonnegative().default(LEARNING_NUMERIC_DEFAULTS.zero),
+  groundingPackVersion: z.number().int().nonnegative().default(TUTORING_NUMERIC_DEFAULTS.zero),
   lessonGroundingPack: lessonGroundingPackSchema.nullable().default(null),
 });
 export type ContentScopeSnapshot = z.infer<typeof contentScopeSnapshotSchema>;
@@ -153,12 +153,12 @@ export const studentSessionStateSchema = z.object({
   lessonTitle: z.string().default(""),
   frameworkId: z.string().nullable().default(null),
   activeFrameworkSnapshot: activeExpertFrameworkSchema.nullable().default(null),
-  groundingPackVersion: z.number().int().nonnegative().default(LEARNING_NUMERIC_DEFAULTS.zero),
+  groundingPackVersion: z.number().int().nonnegative().default(TUTORING_NUMERIC_DEFAULTS.zero),
   contentScopeSnapshot: contentScopeSnapshotSchema.nullable().default(null),
   recentMessageSummary: z.string().default(""),
   recentEvidence: z.array(z.string()).default([]),
   tutorNotes: z.array(z.string()).default([]),
-  turnCount: z.number().int().nonnegative().default(LEARNING_NUMERIC_DEFAULTS.zero),
+  turnCount: z.number().int().nonnegative().default(TUTORING_NUMERIC_DEFAULTS.zero),
   reportReady: z.boolean().default(false),
   completed: z.boolean().default(false),
   completionRequestedAt: z.string().nullable().default(null),
@@ -224,4 +224,5 @@ export const teacherOnboardingSummarySchema = z.object({
   summary: z.string(),
 });
 export type TeacherOnboardingSummary = z.infer<typeof teacherOnboardingSummarySchema>;
+
 

@@ -1,4 +1,4 @@
-﻿import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { unstable_cache } from "next/cache";
 
@@ -23,7 +23,7 @@ import {
   type ActiveExpertFramework,
   type ExpertFramework,
 } from "@/features/tutoring/public-server";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
 
 export async function getCourseFrameworks(courseId: string, includeArchived = false) {
@@ -36,7 +36,7 @@ export async function getFrameworkById(frameworkId: string) {
 
 export async function getActiveFrameworkForCourse(courseId: string) {
   const active = (await getCourseFrameworks(courseId, true)).find(
-    (candidate) => candidate.status === LEARNING_STATUS.frameworkActive,
+    (candidate) => candidate.status === TUTORING_STATUS.frameworkActive,
   );
 
   return active ?? null;
@@ -64,8 +64,8 @@ export async function createExpertFrameworkForCourse(params: {
       courseId: course.id,
       name: params.name,
       description: params.description ?? null,
-      status: LEARNING_STATUS.frameworkDraft,
-      seedSource: LEARNING_STATUS.frameworkSeedExpertAuthored,
+      status: TUTORING_STATUS.frameworkDraft,
+      seedSource: TUTORING_STATUS.frameworkSeedExpertAuthored,
       draftFramework: artifact,
       liveFramework: null,
       archivedAt: null,
@@ -85,7 +85,7 @@ export async function updateFrameworkDraft(params: {
   if (!framework) {
     throw new Error("Framework not found");
   }
-  if (framework.status === LEARNING_STATUS.frameworkArchived) {
+  if (framework.status === TUTORING_STATUS.frameworkArchived) {
     throw new Error("ARCHIVED_FRAMEWORK_READ_ONLY");
   }
 
@@ -112,7 +112,7 @@ export async function activateFramework(params: {
   if (!framework) {
     throw new Error("Framework not found");
   }
-  if (framework.status === LEARNING_STATUS.frameworkArchived) {
+  if (framework.status === TUTORING_STATUS.frameworkArchived) {
     throw new Error("ARCHIVED_FRAMEWORK_READ_ONLY");
   }
 
@@ -122,13 +122,13 @@ export async function activateFramework(params: {
     await tx
       .update(expertFrameworks)
       .set({
-        status: LEARNING_STATUS.frameworkInactive,
+        status: TUTORING_STATUS.frameworkInactive,
         updatedAt: new Date(),
       })
       .where(
         and(
           eq(expertFrameworks.courseId, framework.courseId),
-          eq(expertFrameworks.status, LEARNING_STATUS.frameworkActive),
+          eq(expertFrameworks.status, TUTORING_STATUS.frameworkActive),
         ),
       );
 
@@ -137,7 +137,7 @@ export async function activateFramework(params: {
       .set({
         name: artifact.name,
         description: artifact.description || null,
-        status: LEARNING_STATUS.frameworkActive,
+        status: TUTORING_STATUS.frameworkActive,
         liveFramework: artifact,
         activatedAt: new Date(),
         activatedByUserId: params.activatedByUserId,
@@ -155,14 +155,14 @@ export async function archiveFramework(frameworkId: string) {
   if (!framework) {
     throw new Error("Framework not found");
   }
-  if (framework.status === LEARNING_STATUS.frameworkActive) {
+  if (framework.status === TUTORING_STATUS.frameworkActive) {
     throw new Error("ACTIVE_FRAMEWORK_CANNOT_BE_ARCHIVED");
   }
 
   const [updated] = await getDb()
     .update(expertFrameworks)
     .set({
-      status: LEARNING_STATUS.frameworkArchived,
+      status: TUTORING_STATUS.frameworkArchived,
       archivedAt: new Date(),
       updatedAt: new Date(),
     })
@@ -178,7 +178,7 @@ export async function deleteDraftFramework(frameworkId: string) {
     throw new Error("Framework not found");
   }
   if (
-    framework.status !== LEARNING_STATUS.frameworkDraft ||
+    framework.status !== TUTORING_STATUS.frameworkDraft ||
     framework.activatedAt
   ) {
     throw new Error("ONLY_NEVER_ACTIVATED_DRAFTS_CAN_BE_DELETED");
@@ -194,13 +194,13 @@ export async function listApprovedCrystallizations(params: {
   return await getDb().query.expertCrystallizations.findMany({
     where: and(
       eq(expertCrystallizations.courseId, params.courseId),
-      eq(expertCrystallizations.status, LEARNING_STATUS.crystallizationApproved),
+      eq(expertCrystallizations.status, TUTORING_STATUS.crystallizationApproved),
       or(
-        eq(expertCrystallizations.relevanceScope, LEARNING_STATUS.relevanceGeneral),
+        eq(expertCrystallizations.relevanceScope, TUTORING_STATUS.relevanceGeneral),
         and(
           eq(
             expertCrystallizations.relevanceScope,
-            LEARNING_STATUS.relevanceFrameworkSpecific,
+            TUTORING_STATUS.relevanceFrameworkSpecific,
           ),
           eq(expertCrystallizations.frameworkId, params.frameworkId ?? ""),
         ),
@@ -214,7 +214,7 @@ export async function listOpenConflicts(params: { lessonId: string }) {
   return await getDb().query.expertConflicts.findMany({
     where: and(
       eq(expertConflicts.lessonId, params.lessonId),
-      eq(expertConflicts.status, LEARNING_STATUS.conflictOpen),
+      eq(expertConflicts.status, TUTORING_STATUS.conflictOpen),
     ),
     orderBy: (table, operators) => [operators.desc(table.createdAt)],
   });
@@ -302,6 +302,7 @@ export async function getCachedActiveFrameworkBundleForLesson(lessonId: string) 
 }
 
 export function isFrameworkEditable(framework: Pick<FrameworkRecord, "status">) {
-  return framework.status !== LEARNING_STATUS.frameworkArchived;
+  return framework.status !== TUTORING_STATUS.frameworkArchived;
 }
+
 

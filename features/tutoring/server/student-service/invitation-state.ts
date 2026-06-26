@@ -11,7 +11,7 @@ import {
 import { EmailService } from "@/shared/email/email-service";
 import { publishClassroomRealtimeEvent } from "@/shared/infra/realtime";
 import { ValidationError } from "@/shared/http/action-result";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { USER_ROLE } from "@/shared/surveys/constants";
 
 import { PENDING_INVITE_STATUS } from "./invitation-model";
@@ -189,8 +189,8 @@ export async function respondToInvitation(params: {
         invitedByUserId: invitation.invitedByUserId,
         fullName: user.name ?? user.email,
         email: invitation.invitedEmail,
-        inviteStatus: LEARNING_STATUS.inviteAccepted,
-        onboardingStatus: LEARNING_STATUS.onboardingInterestProfilePending,
+        inviteStatus: TUTORING_STATUS.inviteAccepted,
+        onboardingStatus: TUTORING_STATUS.onboardingInterestProfilePending,
         createdAt: now,
         updatedAt: now,
       });
@@ -212,7 +212,7 @@ export async function respondToInvitation(params: {
         userId: params.userId,
         fullName: user.name ?? user.email,
         email: invitation.invitedEmail,
-        inviteStatus: LEARNING_STATUS.inviteAccepted,
+        inviteStatus: TUTORING_STATUS.inviteAccepted,
         updatedAt: now,
       })
       .where(eq(classroomStudents.id, existingMembership.id));
@@ -378,3 +378,4 @@ export async function listPendingClassroomInvitations(params: { classroomId: str
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 }
+

@@ -72,7 +72,7 @@ async function DashboardLayoutContent({
       <AuthProvider initialSession={session}>
       <div className="min-h-screen bg-[#FAFAFA]">
         <DashboardSidebar
-          initialLearningMe={{ role: "non-student", student: null, invitations: [] }}
+          initialStudentMe={{ role: "non-student", student: null, invitations: [] }}
           viewerAccess={viewerAccess}
         />
         <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">

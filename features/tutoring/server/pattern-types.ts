@@ -7,9 +7,9 @@ import {
   CONFIDENCE_GAP_TREND_VALUES,
   ENGAGEMENT_TREND_DIRECTION_VALUES,
   EXPLANATION_APPROACH_TYPE_VALUES,
-  LEARNING_MEMORY_CLASS_VALUES,
-  LEARNING_PATTERN_SCOPE_VALUES,
-  LEARNING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES,
+  TUTORING_MEMORY_CLASS_VALUES,
+  TUTORING_PATTERN_SCOPE_VALUES,
+  TUTORING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES,
   MISCONCEPTION_STATUS_VALUES,
   NORMALIZED_SCORE_RANGE,
   PATTERN_CONFIDENCE_LABEL_VALUES,
@@ -22,9 +22,9 @@ import {
   TEN_POINT_SCORE_RANGE,
   CHALLENGE_RESPONSE_PATTERN_VALUES,
   MEMORY_APPROACH_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
-export const learningPatternScopeSchema = z.enum(LEARNING_PATTERN_SCOPE_VALUES);
+export const learningPatternScopeSchema = z.enum(TUTORING_PATTERN_SCOPE_VALUES);
 
 export type LearningPatternScope = z.infer<typeof learningPatternScopeSchema>;
 
@@ -286,8 +286,8 @@ export const learningPatternObservationSchema = z.object({
   scopeType: learningPatternScopeSchema,
   subjectKey: z.string().nullable().default(null),
   memoryClass: z
-    .enum(LEARNING_MEMORY_CLASS_VALUES)
-    .default(LEARNING_MEMORY_CLASS_VALUES[0]),
+    .enum(TUTORING_MEMORY_CLASS_VALUES)
+    .default(TUTORING_MEMORY_CLASS_VALUES[0]),
   dimension: z.string().min(1),
   text: z.string().min(1),
   patternConfidence: z
@@ -331,8 +331,8 @@ export const learningTeachingPlaybookSchema = z.object({
     PATTERN_CONFIDENCE_LABEL_VALUES[0],
   ),
   behaviorWeight: z
-    .enum(LEARNING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES)
-    .default(LEARNING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES[0]),
+    .enum(TUTORING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES)
+    .default(TUTORING_PLAYBOOK_BEHAVIOR_WEIGHT_VALUES[0]),
   topExplanationApproaches: z.array(explanationApproachTypeSchema).default([]),
   preferredInterestDomains: z.array(z.string()).default([]),
   cognitiveGuidance: z.array(z.string()).default([]),
@@ -347,3 +347,4 @@ export const learningTeachingPlaybookSchema = z.object({
 export type LearningTeachingPlaybook = z.infer<
   typeof learningTeachingPlaybookSchema
 >;
+

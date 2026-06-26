@@ -39,17 +39,17 @@ import {
   EXPERT_FRAMEWORK_STATUS_VALUES,
   EXPERT_REVIEW_CASE_STATUS_VALUES,
   EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES,
-  LEARNING_DEFAULTS,
-  LEARNING_DEFAULT_LOCALE,
-  LEARNING_EVIDENCE_SOURCE_TYPE_VALUES,
-  LEARNING_NUMERIC_DEFAULTS,
-  LEARNING_SESSION_STATUS_VALUES,
-  LEARNING_STATUS,
+  TUTORING_DEFAULTS,
+  TUTORING_DEFAULT_LOCALE,
+  TUTORING_EVIDENCE_SOURCE_TYPE_VALUES,
+  TUTORING_NUMERIC_DEFAULTS,
+  TUTORING_SESSION_STATUS_VALUES,
+  TUTORING_STATUS,
   MATERIAL_PIPELINE_STATUS_VALUES,
   MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES,
   MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES,
   REPORT_VISIBILITY_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 function sqlTextList(values: readonly string[]) {
   return sql.join(
@@ -78,7 +78,7 @@ export const classrooms = pgTable(
     description: text("description"),
     subject: text("subject"),
     defaultContentLocale: text("default_content_locale")
-      .default(LEARNING_DEFAULT_LOCALE)
+      .default(TUTORING_DEFAULT_LOCALE)
       .notNull(),
     gradeBand: text("grade_band").notNull(),
     gradeLabel: text("grade_label").notNull(),
@@ -105,10 +105,10 @@ export const classroomStudents = pgTable(
     fullName: text("full_name").notNull(),
     email: text("email").notNull(),
     inviteStatus: text("invite_status")
-      .default(LEARNING_STATUS.invitePending)
+      .default(TUTORING_STATUS.invitePending)
       .notNull(),
     onboardingStatus: text("onboarding_status")
-      .default(LEARNING_STATUS.onboardingInterestProfilePending)
+      .default(TUTORING_STATUS.onboardingInterestProfilePending)
       .notNull(),
   },
   (table) => [
@@ -137,7 +137,7 @@ export const classroomInvitations = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     invitedEmail: text("invited_email").notNull(),
-    status: text("status").default(LEARNING_STATUS.invitePending).notNull(),
+    status: text("status").default(TUTORING_STATUS.invitePending).notNull(),
     expiresAt: timestamp("expires_at", {
       withTimezone: true,
       mode: "date",
@@ -156,7 +156,7 @@ export const classroomInvitations = pgTable(
     index("classroom_invitations_status_idx").on(table.status),
     uniqueIndex("classroom_invitations_pending_unique")
       .on(table.classroomId, table.invitedEmail)
-      .where(sql`${table.status} = ${LEARNING_STATUS.invitePending}`),
+      .where(sql`${table.status} = ${TUTORING_STATUS.invitePending}`),
     check(
       "classroom_invitations_email_lowercase_check",
       sql`lower(${table.invitedEmail}) = ${table.invitedEmail}`,
@@ -171,7 +171,7 @@ export const courses = pgTable(
     ...timestamps,
     title: text("title").notNull(),
     description: text("description"),
-    status: text("status").default(LEARNING_STATUS.courseActive).notNull(),
+    status: text("status").default(TUTORING_STATUS.courseActive).notNull(),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -201,11 +201,11 @@ export const lessons = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     contentLocale: text("content_locale")
-      .default(LEARNING_DEFAULT_LOCALE)
+      .default(TUTORING_DEFAULT_LOCALE)
       .notNull(),
-    status: text("status").default(LEARNING_STATUS.lessonDraft).notNull(),
+    status: text("status").default(TUTORING_STATUS.lessonDraft).notNull(),
     openingPreference: text("opening_preference")
-      .default(LEARNING_STATUS.lessonOpeningAuto)
+      .default(TUTORING_STATUS.lessonOpeningAuto)
       .notNull(),
     sourceBoundary: jsonb("source_boundary")
       .$type<LessonSourceBoundary>()
@@ -260,11 +260,11 @@ export const lessonMaterials = pgTable(
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes"),
     extractionStatus: text("extraction_status")
-      .default(LEARNING_STATUS.materialPending)
+      .default(TUTORING_STATUS.materialPending)
       .notNull(),
     extractionError: text("extraction_error"),
     indexingStatus: text("indexing_status")
-      .default(LEARNING_STATUS.materialPending)
+      .default(TUTORING_STATUS.materialPending)
       .notNull(),
     indexingError: text("indexing_error"),
     extractedText: text("extracted_text"),
@@ -318,8 +318,8 @@ export const lessonMaterialUploadAttempts = pgTable(
     sizeBytes: integer("size_bytes"),
     storageBucket: text("storage_bucket"),
     storagePath: text("storage_path"),
-    status: text("status").default(LEARNING_STATUS.uploadQueued).notNull(),
-    stage: text("stage").default(LEARNING_STATUS.uploadStageUpload).notNull(),
+    status: text("status").default(TUTORING_STATUS.uploadQueued).notNull(),
+    stage: text("stage").default(TUTORING_STATUS.uploadStageUpload).notNull(),
     userMessage: text("user_message"),
     internalError: text("internal_error"),
     errorCode: text("error_code"),
@@ -373,7 +373,7 @@ export const studentInterestProfiles = pgTable(
       .unique(),
     profile: jsonb("profile").$type<StudentInterestProfile>().notNull(),
     visibility: text("visibility")
-      .default(LEARNING_STATUS.studentInterestPrivateToStudentAndAgent)
+      .default(TUTORING_STATUS.studentInterestPrivateToStudentAndAgent)
       .notNull(),
     lastRefreshedAt: timestamp("last_refreshed_at", {
       withTimezone: true,
@@ -395,12 +395,12 @@ export const studentSessions = pgTable(
       .notNull()
       .references(() => classroomStudents.id, { onDelete: "cascade" }),
     sessionType: text("session_type").notNull(),
-    sessionLocale: text("session_locale").default(LEARNING_DEFAULT_LOCALE).notNull(),
+    sessionLocale: text("session_locale").default(TUTORING_DEFAULT_LOCALE).notNull(),
     sessionStatus: text("session_status")
-      .default(LEARNING_STATUS.sessionActive)
+      .default(TUTORING_STATUS.sessionActive)
       .notNull(),
     stateVersion: integer("state_version")
-      .default(LEARNING_NUMERIC_DEFAULTS.initialVersion)
+      .default(TUTORING_NUMERIC_DEFAULTS.initialVersion)
       .notNull(),
     state: jsonb("state")
       .$type<StudentSessionState>()
@@ -418,7 +418,7 @@ export const studentSessions = pgTable(
     index("student_sessions_type_idx").on(table.sessionType),
     check(
       "student_sessions_status_check",
-      sql`${table.sessionStatus} in (${sqlTextList(LEARNING_SESSION_STATUS_VALUES)})`,
+      sql`${table.sessionStatus} in (${sqlTextList(TUTORING_SESSION_STATUS_VALUES)})`,
     ),
     uniqueIndex("student_sessions_active_lesson_unique")
       .on(
@@ -428,12 +428,12 @@ export const studentSessions = pgTable(
         table.sessionLocale,
       )
       .where(
-        sql`${table.lessonId} is not null and ${table.sessionStatus} = ${LEARNING_STATUS.sessionActive}`,
+        sql`${table.lessonId} is not null and ${table.sessionStatus} = ${TUTORING_STATUS.sessionActive}`,
       ),
     uniqueIndex("student_sessions_active_non_lesson_unique")
       .on(table.classroomStudentId, table.sessionType, table.sessionLocale)
       .where(
-        sql`${table.lessonId} is null and ${table.sessionStatus} = ${LEARNING_STATUS.sessionActive}`,
+        sql`${table.lessonId} is null and ${table.sessionStatus} = ${TUTORING_STATUS.sessionActive}`,
       ),
   ],
 );
@@ -487,11 +487,11 @@ export const lessonEvidenceEmbeddings = pgTable(
       onDelete: "cascade",
     }),
     sourceType: text("source_type", {
-      enum: LEARNING_EVIDENCE_SOURCE_TYPE_VALUES,
+      enum: TUTORING_EVIDENCE_SOURCE_TYPE_VALUES,
     }).notNull(),
     sourceId: text("source_id").notNull(),
     chunkIndex: integer("chunk_index").notNull(),
-    language: text("language").default(LEARNING_DEFAULT_LOCALE).notNull(),
+    language: text("language").default(TUTORING_DEFAULT_LOCALE).notNull(),
     subjectKey: text("subject_key"),
     gradeBand: text("grade_band"),
     curriculumFrameworkKey: text("curriculum_framework_key"),
@@ -562,8 +562,8 @@ export const teacherStudentChatSessions = pgTable(
     teacherUserId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    language: text("language").default(LEARNING_DEFAULT_LOCALE).notNull(),
-    title: text("title").notNull().default(LEARNING_DEFAULTS.chatTitle),
+    language: text("language").default(TUTORING_DEFAULT_LOCALE).notNull(),
+    title: text("title").notNull().default(TUTORING_DEFAULTS.chatTitle),
     messages: jsonb("messages")
       .$type<TeacherStudentChatMessageRecord[]>()
       .notNull()
@@ -638,12 +638,12 @@ export const studentLessonReports = pgTable(
       () => studentSessions.id,
       { onDelete: "set null" },
     ),
-    sourceLocale: text("source_locale").default(LEARNING_DEFAULT_LOCALE).notNull(),
+    sourceLocale: text("source_locale").default(TUTORING_DEFAULT_LOCALE).notNull(),
     masteryPercent: integer("mastery_percent")
-      .default(LEARNING_NUMERIC_DEFAULTS.zero)
+      .default(TUTORING_NUMERIC_DEFAULTS.zero)
       .notNull(),
     report: jsonb("report").$type<TeacherProgressReport>().notNull(),
-    visibility: text("visibility").default(LEARNING_STATUS.reportTeacherOnly).notNull(),
+    visibility: text("visibility").default(TUTORING_STATUS.reportTeacherOnly).notNull(),
   },
   (table) => [
     index("student_lesson_reports_lesson_id_idx").on(table.lessonId),
@@ -667,9 +667,9 @@ export const expertFrameworks = pgTable(
       .references(() => courses.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
-    status: text("status").default(LEARNING_STATUS.frameworkDraft).notNull(),
+    status: text("status").default(TUTORING_STATUS.frameworkDraft).notNull(),
     seedSource: text("seed_source")
-      .default(LEARNING_STATUS.frameworkSeedExpertAuthored)
+      .default(TUTORING_STATUS.frameworkSeedExpertAuthored)
       .notNull(),
     draftFramework: jsonb("draft_framework").$type<ExpertFramework>().notNull(),
     liveFramework: jsonb("live_framework").$type<ExpertFramework | null>().default(null),
@@ -690,7 +690,7 @@ export const expertFrameworks = pgTable(
     index("expert_frameworks_status_idx").on(table.status),
     uniqueIndex("expert_frameworks_one_active_per_course")
       .on(table.courseId)
-      .where(sql`${table.status} = ${LEARNING_STATUS.frameworkActive}`),
+      .where(sql`${table.status} = ${TUTORING_STATUS.frameworkActive}`),
     check(
       "expert_frameworks_status_check",
       sql`${table.status} in (${sqlTextList(EXPERT_FRAMEWORK_STATUS_VALUES)})`,
@@ -719,13 +719,13 @@ export const expertReviewCases = pgTable(
     interactionId: text("interaction_id").references(() => studentInteractions.id, {
       onDelete: "set null",
     }),
-    status: text("status").default(LEARNING_STATUS.reviewCaseOpen).notNull(),
-    priority: text("priority").default(LEARNING_STATUS.priorityMedium).notNull(),
+    status: text("status").default(TUTORING_STATUS.reviewCaseOpen).notNull(),
+    priority: text("priority").default(TUTORING_STATUS.priorityMedium).notNull(),
     reviewType: text("review_type").notNull(),
     tutorFailureSummary: text("tutor_failure_summary").notNull(),
     expertCorrection: text("expert_correction").notNull(),
     relevanceScope: text("relevance_scope")
-      .default(LEARNING_STATUS.relevanceGeneral)
+      .default(TUTORING_STATUS.relevanceGeneral)
       .notNull(),
     frameworkId: text("framework_id").references(
       () => expertFrameworks.id,
@@ -771,10 +771,10 @@ export const lessonInterventions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     interventionType: text("intervention_type")
-      .default(LEARNING_STATUS.interventionReteach)
+      .default(TUTORING_STATUS.interventionReteach)
       .notNull(),
-    status: text("status").default(LEARNING_STATUS.interventionPlanned).notNull(),
-    priority: text("priority").default(LEARNING_STATUS.priorityMedium).notNull(),
+    status: text("status").default(TUTORING_STATUS.interventionPlanned).notNull(),
+    priority: text("priority").default(TUTORING_STATUS.priorityMedium).notNull(),
     title: text("title").notNull(),
     notes: text("notes"),
     dueAt: timestamp("due_at", {
@@ -809,9 +809,9 @@ export const expertCrystallizations = pgTable(
       () => expertFrameworks.id,
       { onDelete: "set null" },
     ),
-    status: text("status").default(LEARNING_STATUS.crystallizationDraft).notNull(),
+    status: text("status").default(TUTORING_STATUS.crystallizationDraft).notNull(),
     relevanceScope: text("relevance_scope")
-      .default(LEARNING_STATUS.relevanceGeneral)
+      .default(TUTORING_STATUS.relevanceGeneral)
       .notNull(),
     title: text("title").notNull(),
     heuristic: jsonb("heuristic").$type<ExpertHeuristic>().notNull(),
@@ -863,7 +863,7 @@ export const expertConflicts = pgTable(
       () => expertCrystallizations.id,
       { onDelete: "set null" },
     ),
-    status: text("status").default(LEARNING_STATUS.conflictOpen).notNull(),
+    status: text("status").default(TUTORING_STATUS.conflictOpen).notNull(),
     summary: text("summary").notNull(),
     details: text("details"),
     resolutionNotes: text("resolution_notes"),
@@ -901,7 +901,7 @@ export const teachingMediaAssets = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     sourceType: text("source_type")
-      .default(LEARNING_STATUS.teachingMediaTeacherCurated)
+      .default(TUTORING_STATUS.teachingMediaTeacherCurated)
       .notNull(),
     assetType: text("asset_type").notNull(),
     title: text("title").notNull(),
@@ -911,8 +911,8 @@ export const teachingMediaAssets = pgTable(
     transcript: text("transcript"),
     durationSeconds: integer("duration_seconds"),
     gradeBand: text("grade_band"),
-    language: text("language").default(LEARNING_DEFAULT_LOCALE).notNull(),
-    status: text("status").default(LEARNING_STATUS.teachingMediaDraft).notNull(),
+    language: text("language").default(TUTORING_DEFAULT_LOCALE).notNull(),
+    status: text("status").default(TUTORING_STATUS.teachingMediaDraft).notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
   (table) => [
@@ -942,7 +942,7 @@ export const teachingMediaBindings = pgTable(
     phaseType: text("phase_type"),
     gradeBand: text("grade_band"),
     priority: integer("priority")
-      .default(LEARNING_NUMERIC_DEFAULTS.defaultMediaBindingPriority)
+      .default(TUTORING_NUMERIC_DEFAULTS.defaultMediaBindingPriority)
       .notNull(),
     isRequired: boolean("is_required").default(false).notNull(),
     notes: text("notes"),
@@ -1416,4 +1416,5 @@ export const teachingMediaUsageEventsRelations = relations(
 export {
   // Exported directly above.
 };
+
 

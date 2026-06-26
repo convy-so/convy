@@ -14,14 +14,14 @@ import {
 } from "@/features/tutoring/server/prompts/reporting";
 import { buildPromptFrame, renderPreviousReport, renderReportState, renderTaggedSection, renderTranscript } from "@/features/tutoring/server/prompt-serializers";
 import {
-  LEARNING_LIMITS,
+  TUTORING_LIMITS,
   REPORT_ORIGINALITY_LEVEL,
   REPORT_ORIGINALITY_LEVEL_VALUES,
   REPORT_TRANSFER_READINESS,
   REPORT_TRANSFER_READINESS_VALUES,
   STUDENT_MASTERY_LEVEL_VALUES,
   TEN_POINT_SCORE_RANGE,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 const reportingEvidenceSchema = z.object({
   studentSummary: z.string(),
@@ -129,7 +129,7 @@ export async function generateTeacherProgressReport(params: {
       transcript: params.transcript,
       previousReport: params.previousReport ?? null,
     }),
-    maxOutputTokens: LEARNING_LIMITS.reportingEvidenceMaxOutputTokens,
+    maxOutputTokens: TUTORING_LIMITS.reportingEvidenceMaxOutputTokens,
   });
 
   return await generateStructuredOutput({
@@ -158,7 +158,7 @@ export async function generateTeacherProgressReport(params: {
       ],
       previousReport: params.previousReport ?? null,
     }),
-    maxOutputTokens: LEARNING_LIMITS.reportingMaxOutputTokens,
+    maxOutputTokens: TUTORING_LIMITS.reportingMaxOutputTokens,
   });
 }
 
@@ -200,7 +200,7 @@ export function buildClassroomLessonReportSummary(
 
   const collectTopItems = (
     items: string[],
-    limit = LEARNING_LIMITS.reportingTopItemsLimit,
+    limit = TUTORING_LIMITS.reportingTopItemsLimit,
   ) =>
     Array.from(
       items.reduce((counts, item) => {
@@ -215,21 +215,21 @@ export function buildClassroomLessonReportSummary(
   const studentsWithLowConfidence = latestByStudent.filter(
     (report) =>
       typeof report.report.studentConfidenceScore === "number" &&
-      report.report.studentConfidenceScore <= LEARNING_LIMITS.lowConfidenceScoreThreshold,
+      report.report.studentConfidenceScore <= TUTORING_LIMITS.lowConfidenceScoreThreshold,
   ).length;
   const studentsNeedingAttention = latestByStudent.filter((report) => {
     const confidence = report.report.studentConfidenceScore;
     return (
-      report.masteryPercent < LEARNING_LIMITS.tutoringAttentionMasteryPercent ||
+      report.masteryPercent < TUTORING_LIMITS.tutoringAttentionMasteryPercent ||
       (report.report.riskFlags?.length ?? 0) > 0 ||
-      (report.report.identifiedGaps?.length ?? 0) >= LEARNING_LIMITS.attentionGapThreshold ||
+      (report.report.identifiedGaps?.length ?? 0) >= TUTORING_LIMITS.attentionGapThreshold ||
       (typeof confidence === "number" &&
-        confidence <= LEARNING_LIMITS.lowConfidenceScoreThreshold)
+        confidence <= TUTORING_LIMITS.lowConfidenceScoreThreshold)
     );
   }).length;
   const studentsStrongMastery = latestByStudent.filter(
     (report) =>
-      report.masteryPercent >= LEARNING_LIMITS.strongMasteryPercent &&
+      report.masteryPercent >= TUTORING_LIMITS.strongMasteryPercent &&
       (report.report.riskFlags?.length ?? 0) === 0,
   ).length;
 
@@ -274,4 +274,5 @@ export function buildClassroomLessonReportSummary(
     ),
   };
 }
+
 

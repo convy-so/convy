@@ -10,7 +10,7 @@ import {
   withErrorHandling,
 } from "@/shared/http/action-result";
 
-import { appLocaleSchema, requireTeachingSession, revalidateLearningUi } from "./action-access";
+import { appLocaleSchema, requireTeachingSession, revalidateTutoringUi } from "./action-access";
 
 const createClassroomSchema = z.object({
   title: z.string().trim().min(2),
@@ -34,7 +34,7 @@ export async function createClassroomAction(input: unknown): Promise<ActionResul
       gradeLabel: body.gradeLabel,
       defaultContentLocale,
     });
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: result };
   }, "createClassroomAction");
 }

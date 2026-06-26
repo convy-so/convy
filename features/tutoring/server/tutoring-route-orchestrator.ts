@@ -19,11 +19,11 @@ import {
   measureTutoringStep,
 } from "@/features/tutoring/public-server";
 import {
-  LEARNING_DEFAULT_LOCALE,
-  LEARNING_STATUS,
+  TUTORING_DEFAULT_LOCALE,
+  TUTORING_STATUS,
   STUDENT_TUTORING_ACCESS_REASON,
   STUDENT_TUTORING_ACCESS_REASON_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export type StudentLessonAccess = NonNullable<
   Awaited<ReturnType<typeof getStudentTutoringAccess>>
@@ -81,7 +81,7 @@ export function resolveStudyLanguage(input: {
   preferredLanguage?: string | null;
 }) {
   return normalizeAppLocale(
-    input.language ?? input.preferredLanguage ?? LEARNING_DEFAULT_LOCALE,
+    input.language ?? input.preferredLanguage ?? TUTORING_DEFAULT_LOCALE,
   );
 }
 
@@ -113,8 +113,8 @@ export async function ensureTutoringSession(input: {
 
     if (
       requestedSession &&
-      requestedSession.sessionStatus === LEARNING_STATUS.sessionActive &&
-      requestedSession.sessionType === LEARNING_STATUS.sessionTypeTutoring &&
+      requestedSession.sessionStatus === TUTORING_STATUS.sessionActive &&
+      requestedSession.sessionType === TUTORING_STATUS.sessionTypeTutoring &&
       requestedSession.lessonId === input.lessonId &&
       requestedSession.classroomStudentId === input.access.classroomStudent.id &&
       requestedSession.sessionLocale === input.studyLanguage
@@ -150,7 +150,7 @@ export async function ensureTutoringSession(input: {
       await getActiveStudentSession({
         classroomStudentId: input.access.classroomStudent.id,
         lessonId: input.lessonId,
-        sessionType: LEARNING_STATUS.sessionTypeTutoring,
+        sessionType: TUTORING_STATUS.sessionTypeTutoring,
         sessionLocale: input.studyLanguage,
       }),
   );
@@ -199,7 +199,7 @@ export async function ensureTutoringSession(input: {
       await createStudentSession({
         lessonId: input.lessonId,
         classroomStudentId: input.access.classroomStudent.id,
-        sessionType: LEARNING_STATUS.sessionTypeTutoring,
+        sessionType: TUTORING_STATUS.sessionTypeTutoring,
         sessionLocale: input.studyLanguage,
         state,
       }),
@@ -293,7 +293,7 @@ export async function resolveStudentTutoringSessionById(input: {
   );
 
   if (!tutoringSession) return null;
-  if (tutoringSession.sessionType !== LEARNING_STATUS.sessionTypeTutoring) {
+  if (tutoringSession.sessionType !== TUTORING_STATUS.sessionTypeTutoring) {
     return null;
   }
   if (tutoringSession.lessonId !== input.lessonId) return null;
@@ -309,4 +309,5 @@ export async function resolveStudentTutoringSessionById(input: {
 
   return tutoringSession;
 }
+
 

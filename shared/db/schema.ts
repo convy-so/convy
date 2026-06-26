@@ -10,7 +10,7 @@ export * from "./schema/surveys";
 export * from "./schema/relations";
 export * from "./schema/billing";
 export * from "./schema/ai";
-export * from "./schema/learning";
+export * from "./schema/tutoring";
 export * from "./schema/feedback";
 export * from "./schema/privacy";
 

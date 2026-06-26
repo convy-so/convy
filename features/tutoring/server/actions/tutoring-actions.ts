@@ -36,16 +36,16 @@ import type { GradeBand } from "@/features/tutoring/public-server";
 import { studentSessionStateSchema } from "@/features/tutoring/public-server";
 import { normalizeAppLocale } from "@/shared/i18n/config";
 import {
-  LEARNING_DEFAULTS,
-  LEARNING_LIMITS,
-  LEARNING_NUMERIC_DEFAULTS,
-  LEARNING_STATUS,
+  TUTORING_DEFAULTS,
+  TUTORING_LIMITS,
+  TUTORING_NUMERIC_DEFAULTS,
+  TUTORING_STATUS,
   OUT_OF_SESSION_CLASSIFICATION_VALUES,
   TUTORING_COMPLETION_REASON,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
 
-import { revalidateLearningUi } from "./action-access";
+import { revalidateTutoringUi } from "./action-access";
 
 const completeTutoringSessionSchema = z.object({
   lessonId: z.string().min(1),
@@ -86,12 +86,12 @@ function deriveTeacherChatTitle(
   messages: Array<z.infer<typeof teacherChatMessageSchema>>,
 ) {
   const firstUser = messages.find((message) => message.role === "user");
-  if (!firstUser) return LEARNING_DEFAULTS.chatTitle;
+  if (!firstUser) return TUTORING_DEFAULTS.chatTitle;
 
   if (typeof firstUser.content === "string" && firstUser.content.trim()) {
     return firstUser.content
       .trim()
-      .slice(0, LEARNING_LIMITS.teacherChatTitlePreviewLength);
+      .slice(0, TUTORING_LIMITS.teacherChatTitlePreviewLength);
   }
 
   const partText = firstUser.parts
@@ -102,8 +102,8 @@ function deriveTeacherChatTitle(
     .trim();
 
   return (
-    partText?.slice(0, LEARNING_LIMITS.teacherChatTitlePreviewLength) ||
-    LEARNING_DEFAULTS.chatTitle
+    partText?.slice(0, TUTORING_LIMITS.teacherChatTitlePreviewLength) ||
+    TUTORING_DEFAULTS.chatTitle
   );
 }
 
@@ -144,7 +144,7 @@ export async function completeTutoringSessionAction(
       throw new ActionError("Tutoring session not found", "NOT_FOUND");
     }
 
-    if (tutoringSession.sessionStatus !== LEARNING_STATUS.sessionActive) {
+    if (tutoringSession.sessionStatus !== TUTORING_STATUS.sessionActive) {
       return {
         success: true,
         data: {
@@ -172,18 +172,18 @@ export async function completeTutoringSessionAction(
       sourceLocale: access.lesson.contentLocale ?? studyLanguage,
       summary: tutoringSession.summary ?? null,
       expectedStateVersion:
-        tutoringSession.stateVersion ?? LEARNING_NUMERIC_DEFAULTS.initialVersion,
+        tutoringSession.stateVersion ?? TUTORING_NUMERIC_DEFAULTS.initialVersion,
       state,
       reason: TUTORING_COMPLETION_REASON.STUDENT_FINISHED,
     });
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
 
     return {
       success: true,
       data: {
         sessionId: tutoringSession.id,
-        status: LEARNING_STATUS.sessionCompleted,
+        status: TUTORING_STATUS.sessionCompleted,
         alreadyCompleted: false,
         reportQueued: true,
       },
@@ -239,8 +239,8 @@ export async function askOutOfSessionQuestionAction(
           contentScope,
           query: body.message,
           recentSummary: access.lesson.title,
-          budgetTokens: LEARNING_LIMITS.outOfSessionGroundingBudgetTokens,
-          maxUnits: LEARNING_LIMITS.outOfSessionGroundingMaxUnits,
+          budgetTokens: TUTORING_LIMITS.outOfSessionGroundingBudgetTokens,
+          maxUnits: TUTORING_LIMITS.outOfSessionGroundingMaxUnits,
         }),
       ),
       language: normalizeAppLocale(body.language ?? access.lesson.contentLocale),
@@ -270,7 +270,7 @@ export async function askOutOfSessionQuestionAction(
       },
     });
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
 
     return {
       success: true,
@@ -332,7 +332,7 @@ export async function answerTeacherStudentQuestionAction(
       ),
     });
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: answer };
   }, "answerTeacherStudentQuestionAction");
 }
@@ -387,7 +387,7 @@ export async function saveTeacherStudentChatSessionAction(
         throw new ActionError("Session not found", "NOT_FOUND");
       }
 
-      revalidateLearningUi();
+      revalidateTutoringUi();
       return { success: true, data: updated };
     }
 
@@ -410,8 +410,9 @@ export async function saveTeacherStudentChatSessionAction(
       `Failed to create teacher chat session for student ${body.classroomStudentId}`,
     );
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: createdSession };
   }, "saveTeacherStudentChatSessionAction");
 }
+
 

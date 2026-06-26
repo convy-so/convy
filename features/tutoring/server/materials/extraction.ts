@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { generateText } from "ai";
 import { nanoid } from "nanoid";
 
-import { LEARNING_MATERIAL_MIME_ALLOWLIST, clampExtractedTextLength } from "@/shared/security/uploads";
+import { LESSON_MATERIAL_MIME_ALLOWLIST, clampExtractedTextLength } from "@/shared/security/uploads";
 import { type MaterialSourceDocument } from "@/features/tutoring/public-server";
 
 import { extractDocxTextLocally } from "./docx-text";
@@ -129,7 +129,7 @@ export async function extractLearningMaterialSourceDocument(params: {
 }) {
   const mime = params.mimeType.toLowerCase();
 
-  if (!LEARNING_MATERIAL_MIME_ALLOWLIST.has(mime)) {
+  if (!LESSON_MATERIAL_MIME_ALLOWLIST.has(mime)) {
     throw new Error("Unsupported lesson material format");
   }
 

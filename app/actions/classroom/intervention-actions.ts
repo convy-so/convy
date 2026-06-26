@@ -1,4 +1,4 @@
 export {
-  createLearningInterventionAction,
-  updateLearningInterventionAction,
+  createInterventionAction,
+  updateInterventionAction,
 } from "@/features/tutoring/server/actions/intervention-actions";

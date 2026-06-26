@@ -1,4 +1,4 @@
-﻿import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
@@ -12,9 +12,9 @@ import type {
   TeacherProgressReport,
 } from "@/features/tutoring/public-server";
 import {
-  LEARNING_DEFAULT_LOCALE,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_DEFAULT_LOCALE,
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 
 export async function createStudentProgressReport(params: {
   lessonId: string;
@@ -32,9 +32,9 @@ export async function createStudentProgressReport(params: {
       classroomStudentId: params.classroomStudentId,
       generatedFromSessionId: params.generatedFromSessionId ?? null,
       masteryPercent: params.masteryPercent,
-      sourceLocale: params.sourceLocale ?? LEARNING_DEFAULT_LOCALE,
+      sourceLocale: params.sourceLocale ?? TUTORING_DEFAULT_LOCALE,
       report: params.report,
-      visibility: LEARNING_STATUS.reportTeacherOnly,
+      visibility: TUTORING_STATUS.reportTeacherOnly,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -84,7 +84,7 @@ export async function upsertInterestProfile(params: {
       id: nanoid(),
       classroomStudentId: params.classroomStudentId,
       profile: params.profile,
-      visibility: LEARNING_STATUS.studentInterestPrivateToStudentAndAgent,
+      visibility: TUTORING_STATUS.studentInterestPrivateToStudentAndAgent,
       lastRefreshedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -101,7 +101,7 @@ export async function upsertInterestProfileForUserMemberships(params: {
   const memberships = await getDb().query.classroomStudents.findMany({
     where: and(
       eq(classroomStudents.userId, params.userId),
-      eq(classroomStudents.inviteStatus, LEARNING_STATUS.inviteAccepted),
+      eq(classroomStudents.inviteStatus, TUTORING_STATUS.inviteAccepted),
     ),
     columns: {
       id: true,
@@ -122,7 +122,7 @@ export async function markStudentOnboardingComplete(classroomStudentId: string) 
   const [updated] = await getDb()
     .update(classroomStudents)
     .set({
-      onboardingStatus: LEARNING_STATUS.onboardingCompleted,
+      onboardingStatus: TUTORING_STATUS.onboardingCompleted,
       updatedAt: new Date(),
     })
     .where(eq(classroomStudents.id, classroomStudentId))
@@ -135,7 +135,7 @@ export async function markStudentOnboardingCompleteForUser(userId: string) {
   const memberships = await getDb().query.classroomStudents.findMany({
     where: and(
       eq(classroomStudents.userId, userId),
-      eq(classroomStudents.inviteStatus, LEARNING_STATUS.inviteAccepted),
+      eq(classroomStudents.inviteStatus, TUTORING_STATUS.inviteAccepted),
     ),
     columns: {
       id: true,
@@ -146,4 +146,5 @@ export async function markStudentOnboardingCompleteForUser(userId: string) {
     memberships.map((membership) => markStudentOnboardingComplete(membership.id)),
   );
 }
+
 

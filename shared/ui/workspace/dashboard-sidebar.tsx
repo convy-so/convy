@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
@@ -59,7 +59,7 @@ export function DashboardSidebar({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const studentMeQuery = useQuery({
-    queryKey: queryKeys.learning.me,
+    queryKey: queryKeys.tutoring.me,
     queryFn: fetchStudentMe,
     initialData: initialStudentMe,
     enabled: viewerAccess.authRole === "student",
@@ -287,4 +287,5 @@ export function DashboardSidebar({
     </>
   );
 }
+
 

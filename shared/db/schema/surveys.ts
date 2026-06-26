@@ -12,7 +12,7 @@ import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
 import { folders } from "./folders";
-import { classrooms } from "./learning";
+import { classrooms } from "./tutoring";
 import type {
   AnalyticsFact,
   AnalyticsGenerationState,
@@ -964,4 +964,5 @@ export {
   surveyAnalyticsStatesRelations,
   surveyAnalyticsFactsRelations,
 };
+
 

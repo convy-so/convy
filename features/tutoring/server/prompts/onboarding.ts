@@ -1,11 +1,11 @@
-﻿import type { PromptSpec } from "@/shared/ai/core/prompt-context-types";
+import type { PromptSpec } from "@/shared/ai/core/prompt-context-types";
 import {
   buildPromptFrame,
   renderInterestProfile,
   renderTaggedSection,
 } from "@/features/tutoring/server/prompt-serializers";
 import type { StudentInterestProfile } from "@/features/tutoring/public-server";
-import { ONBOARDING_TURN_STATUS } from "@/shared/learning/constants";
+import { ONBOARDING_TURN_STATUS } from "@/shared/tutoring/constants";
 
 type OnboardingPromptInput = {
   studentName: string;
@@ -120,4 +120,5 @@ Student: I usually get it when someone shows me a real example first. If they st
 export function buildOnboardingGreeting(studentName: string): string {
   return `Hi ${studentName}. Before we jump into school lessons, I want to understand what matters to you. What kinds of things pull your attention in the real world?`;
 }
+
 

@@ -9,7 +9,7 @@ import {
   lessons,
   lessonMaterials,
 } from "@/shared/db/schema";
-import { studentInteractions } from "@/shared/db/schema/learning";
+import { studentInteractions } from "@/shared/db/schema/tutoring";
 import type { StudentInteractionType } from "@/features/tutoring/server/lesson-foundation-schemas";
 import {
   createDefaultStudentSessionState,
@@ -17,10 +17,10 @@ import {
 } from "@/features/tutoring/server/student-session-schemas";
 import { StudentSessionStateConflictError } from "@/features/tutoring/server/student-session-state-errors";
 import {
-  LEARNING_DEFAULTS,
-  LEARNING_NUMERIC_DEFAULTS,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_DEFAULTS,
+  TUTORING_NUMERIC_DEFAULTS,
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
 
 export async function getLessonWithMaterials(lessonId: string) {
@@ -60,9 +60,9 @@ export async function createStudentSession(params: {
       lessonId: params.lessonId ?? null,
       classroomStudentId: params.classroomStudentId,
       sessionType: params.sessionType,
-      sessionLocale: params.sessionLocale ?? LEARNING_DEFAULTS.sessionLocale,
-      sessionStatus: LEARNING_STATUS.sessionActive,
-      stateVersion: LEARNING_NUMERIC_DEFAULTS.initialVersion,
+      sessionLocale: params.sessionLocale ?? TUTORING_DEFAULTS.sessionLocale,
+      sessionStatus: TUTORING_STATUS.sessionActive,
+      stateVersion: TUTORING_NUMERIC_DEFAULTS.initialVersion,
       state: params.state ?? createDefaultStudentSessionState(),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -86,10 +86,10 @@ export async function updateStudentSessionState(params: {
   expectedStateVersion?: number;
 }) {
   const completedAt =
-    params.sessionStatus === LEARNING_STATUS.sessionCompleted
+    params.sessionStatus === TUTORING_STATUS.sessionCompleted
       ? new Date()
       : params.sessionStatus &&
-          params.sessionStatus !== LEARNING_STATUS.sessionCompleted
+          params.sessionStatus !== TUTORING_STATUS.sessionCompleted
         ? null
         : undefined;
 
@@ -143,7 +143,7 @@ export async function completeStudentSession(params: {
   return await updateStudentSessionState({
     sessionId: params.sessionId,
     state,
-    sessionStatus: LEARNING_STATUS.sessionCompleted,
+    sessionStatus: TUTORING_STATUS.sessionCompleted,
     summary: params.summary ?? session.summary ?? null,
     expectedStateVersion: params.expectedStateVersion,
   });
@@ -165,7 +165,7 @@ export async function getActiveStudentSession(params: {
             params.sessionLocale
               ? eq(studentSessions.sessionLocale, params.sessionLocale)
               : undefined,
-            eq(studentSessions.sessionStatus, LEARNING_STATUS.sessionActive),
+            eq(studentSessions.sessionStatus, TUTORING_STATUS.sessionActive),
           )
         : and(
             eq(studentSessions.classroomStudentId, params.classroomStudentId),
@@ -174,7 +174,7 @@ export async function getActiveStudentSession(params: {
             params.sessionLocale
               ? eq(studentSessions.sessionLocale, params.sessionLocale)
               : undefined,
-            eq(studentSessions.sessionStatus, LEARNING_STATUS.sessionActive),
+            eq(studentSessions.sessionStatus, TUTORING_STATUS.sessionActive),
           ),
     orderBy: [desc(studentSessions.createdAt)],
   });
@@ -199,13 +199,13 @@ export async function getLatestCompletedStudentSession(params: {
             eq(studentSessions.classroomStudentId, params.classroomStudentId),
             isNull(studentSessions.lessonId),
             eq(studentSessions.sessionType, params.sessionType),
-            eq(studentSessions.sessionStatus, LEARNING_STATUS.sessionCompleted),
+            eq(studentSessions.sessionStatus, TUTORING_STATUS.sessionCompleted),
           )
         : and(
             eq(studentSessions.classroomStudentId, params.classroomStudentId),
             eq(studentSessions.lessonId, params.lessonId),
             eq(studentSessions.sessionType, params.sessionType),
-            eq(studentSessions.sessionStatus, LEARNING_STATUS.sessionCompleted),
+            eq(studentSessions.sessionStatus, TUTORING_STATUS.sessionCompleted),
           ),
     orderBy: [desc(studentSessions.completedAt), desc(studentSessions.createdAt)],
   });
@@ -345,4 +345,5 @@ export async function persistTutorTurnOutcome(params: {
     expectedStateVersion: params.expectedStateVersion,
   });
 }
+
 

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 
 import { rebuildLessonGroundingPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { getDb } from "@/shared/db";
 import { lessonMaterialUploadAttempts } from "@/shared/db/schema";
 import { type LessonMaterialBatchFinalizeJobData } from "@/shared/infra/queue";
@@ -17,14 +17,14 @@ function isFileTerminalAttempt(attempt: {
   materialId?: string | null;
 }) {
   if (
-    attempt.status === LEARNING_STATUS.uploadFailed ||
-    attempt.status === LEARNING_STATUS.uploadSucceeded
+    attempt.status === TUTORING_STATUS.uploadFailed ||
+    attempt.status === TUTORING_STATUS.uploadSucceeded
   ) {
     return true;
   }
 
   return (
-    attempt.status === LEARNING_STATUS.uploadProcessing &&
+    attempt.status === TUTORING_STATUS.uploadProcessing &&
     Boolean(attempt.materialId)
   );
 }
@@ -34,11 +34,11 @@ function buildLatestBatchLeafState(
 ) {
   const activeAttempts = getActiveBatchAttempts(attempts);
   const failedAttempts = activeAttempts.filter(
-    (attempt) => attempt.status === LEARNING_STATUS.uploadFailed,
+    (attempt) => attempt.status === TUTORING_STATUS.uploadFailed,
   );
   const incompleteAttempts = activeAttempts.filter((attempt) => !isFileTerminalAttempt(attempt));
   const successfulAttempts = activeAttempts.filter(
-    (attempt) => attempt.status !== LEARNING_STATUS.uploadFailed && Boolean(attempt.materialId),
+    (attempt) => attempt.status !== TUTORING_STATUS.uploadFailed && Boolean(attempt.materialId),
   );
 
   return {
@@ -99,8 +99,8 @@ export async function processLearningMaterialBatchFinalizer(
           classroomId: data.classroomId,
           lessonId: attempt.lessonId,
           batchId: attempt.batchId,
-          status: LEARNING_STATUS.uploadSucceeded,
-          stage: LEARNING_STATUS.uploadStagePackBuild,
+          status: TUTORING_STATUS.uploadSucceeded,
+          stage: TUTORING_STATUS.uploadStagePackBuild,
           userMessage: null,
           internalError: null,
           errorCode: null,
@@ -137,8 +137,8 @@ export async function processLearningMaterialBatchFinalizer(
         classroomId: data.classroomId,
         lessonId: attempt.lessonId,
         batchId: attempt.batchId,
-        status: LEARNING_STATUS.uploadSucceeded,
-        stage: LEARNING_STATUS.uploadStagePackBuild,
+        status: TUTORING_STATUS.uploadSucceeded,
+        stage: TUTORING_STATUS.uploadStagePackBuild,
         userMessage: null,
         internalError: null,
         errorCode: null,
@@ -174,7 +174,7 @@ export async function markLearningMaterialBatchFinalizerFailed(
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
   const { successfulAttempts } = buildLatestBatchLeafState(attempts);
-  const failure = buildUploadAttemptFailure(LEARNING_STATUS.uploadStagePackBuild, error);
+  const failure = buildUploadAttemptFailure(TUTORING_STATUS.uploadStagePackBuild, error);
 
   await Promise.all(
     successfulAttempts.map((attempt) =>
@@ -183,8 +183,8 @@ export async function markLearningMaterialBatchFinalizerFailed(
         classroomId: data.classroomId,
         lessonId: attempt.lessonId,
         batchId: attempt.batchId,
-        status: LEARNING_STATUS.uploadFailed,
-        stage: LEARNING_STATUS.uploadStagePackBuild,
+        status: TUTORING_STATUS.uploadFailed,
+        stage: TUTORING_STATUS.uploadStagePackBuild,
         userMessage: failure.userMessage,
         internalError: failure.internalError,
         errorCode: failure.errorCode,
@@ -197,4 +197,5 @@ export async function markLearningMaterialBatchFinalizerFailed(
     ),
   );
 }
+
 

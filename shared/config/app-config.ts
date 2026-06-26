@@ -44,8 +44,8 @@ export const UPLOAD_LIMITS = {
   MAX_AUDIO_UPLOAD_BYTES: 8 * 1024 * 1024,
   
   /** Lesson material upload limit */
-  MAX_LEARNING_MATERIAL_MB: 12,
-  MAX_LEARNING_MATERIAL_BYTES: 12 * 1024 * 1024,
+  MAX_LESSON_MATERIAL_MB: 12,
+  MAX_LESSON_MATERIAL_BYTES: 12 * 1024 * 1024,
   
   /** Maximum text extraction length */
   MAX_TEXT_EXTRACTION_CHARS: 120_000,

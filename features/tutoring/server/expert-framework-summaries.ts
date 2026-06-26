@@ -1,6 +1,6 @@
 import { listCourses } from "@/features/tutoring/server/course-service";
 import { listFrameworkRecords } from "@/features/tutoring/server/framework-records";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 
 export type ExpertFrameworkCourseSummary = {
   courseId: string;
@@ -26,7 +26,7 @@ export async function listExpertFrameworkCourseSummaries(): Promise<
     );
     const activeFramework =
       courseFrameworks.find(
-        (framework) => framework.status === LEARNING_STATUS.frameworkActive,
+        (framework) => framework.status === TUTORING_STATUS.frameworkActive,
       ) ?? null;
     const latestFramework = courseFrameworks[0] ?? null;
 
@@ -41,3 +41,4 @@ export async function listExpertFrameworkCourseSummaries(): Promise<
     };
   });
 }
+

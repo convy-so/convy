@@ -6,11 +6,11 @@ import {
 } from "@/features/tutoring/public-server";
 import type { StudentSessionState } from "@/features/tutoring/public-server";
 import {
-  LEARNING_DEFAULT_LOCALE,
-  LEARNING_STATUS,
+  TUTORING_DEFAULT_LOCALE,
+  TUTORING_STATUS,
   TUTORING_COMPLETION_REASON,
   TUTORING_COMPLETION_REASON_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 const STUDENT_COMPLETE_MESSAGE = "Tutoring session completed by the student.";
 const TUTOR_COMPLETE_MESSAGE = "Tutoring session completed by the tutor.";
@@ -41,7 +41,7 @@ export async function finalizeTutoringSession(params: {
   const completedSession = await updateStudentSessionState({
     sessionId: params.sessionId,
     state: completedState,
-    sessionStatus: LEARNING_STATUS.sessionCompleted,
+    sessionStatus: TUTORING_STATUS.sessionCompleted,
     summary: params.summary ?? null,
     expectedStateVersion: params.expectedStateVersion,
   });
@@ -76,7 +76,7 @@ export async function finalizeTutoringSession(params: {
     lessonTitle: params.lessonTitle,
     courseId: params.courseId ?? null,
     courseTitle: params.courseTitle ?? null,
-    sourceLocale: params.sourceLocale ?? LEARNING_DEFAULT_LOCALE,
+    sourceLocale: params.sourceLocale ?? TUTORING_DEFAULT_LOCALE,
     previousReport:
       previousReport?.generatedFromSessionId === params.sessionId
         ? null
@@ -85,4 +85,5 @@ export async function finalizeTutoringSession(params: {
 
   return completedSession;
 }
+
 

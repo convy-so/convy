@@ -6,7 +6,7 @@ import {
 } from "@/features/tutoring/server/patterns";
 import type { StudentPatternProfile } from "@/features/tutoring/server/pattern-types";
 import { createTutoringTimer, measureTutoringStep } from "@/features/tutoring/public-server";
-import { LEARNING_SUBJECT_DEFAULTS } from "@/shared/learning/constants";
+import { TUTORING_SUBJECT_DEFAULTS } from "@/shared/tutoring/constants";
 
 import {
   type Mem0Memory,
@@ -122,7 +122,7 @@ async function summarizeStudentPatternMemoryImpl(params: {
     if (getMemoryMetadataString(memory, "scopeType") !== "subject") continue;
     const subjectKey =
       getMemoryMetadataString(memory, "subjectKey") ??
-      LEARNING_SUBJECT_DEFAULTS.key;
+      TUTORING_SUBJECT_DEFAULTS.key;
     const current = subjectGroups.get(subjectKey) ?? [];
     current.push(memory);
     subjectGroups.set(subjectKey, current);
@@ -170,3 +170,4 @@ async function summarizeStudentPatternMemoryImpl(params: {
     memoryState,
   };
 }
+

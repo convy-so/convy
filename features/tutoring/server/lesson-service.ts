@@ -1,12 +1,12 @@
-﻿import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
 import { lessons } from "@/shared/db/schema";
 import {
-  LEARNING_LIMITS,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_LIMITS,
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 import { getCourseById } from "@/features/tutoring/server/course-service";
 import {
   learningOutcomeDefinitionSchema,
@@ -26,7 +26,7 @@ function normalizeLearningOutcome(
     description: outcome.description,
     evidenceSignals: outcome.evidenceSignals ?? [],
     masteryThreshold:
-      outcome.masteryThreshold ?? LEARNING_LIMITS.defaultLearningOutcomeMasteryThreshold,
+      outcome.masteryThreshold ?? TUTORING_LIMITS.defaultLearningOutcomeMasteryThreshold,
     misconceptionTags: outcome.misconceptionTags ?? [],
   });
 }
@@ -69,8 +69,8 @@ export async function createLesson(params: {
     title: params.title,
     description: params.description || null,
     contentLocale: params.contentLocale,
-    status: LEARNING_STATUS.lessonDraft,
-    openingPreference: LEARNING_STATUS.lessonOpeningAuto,
+    status: TUTORING_STATUS.lessonDraft,
+    openingPreference: TUTORING_STATUS.lessonOpeningAuto,
     sourceBoundary,
     learningOutcomes,
     createdAt: now,
@@ -143,4 +143,5 @@ export async function listLessonsByClassroom(classroomId: string) {
 export const createTeachingSession = createLesson;
 export const updateTeachingSessionDetails = updateLessonDetails;
 export const listSessionsByClassroom = listLessonsByClassroom;
+
 

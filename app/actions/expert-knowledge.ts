@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { getDb } from "@/shared/db";
-import { expertCrystallizations } from "@/shared/db/schema/learning";
+import { expertCrystallizations } from "@/shared/db/schema/tutoring";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { isExpert } from "@/features/auth/public-server";
 import {
@@ -19,7 +19,7 @@ import {
   validateInput,
 } from "@/shared/http/action-result";
 import { InferSelectModel } from "drizzle-orm";
-import { lessons } from "@/shared/db/schema/learning";
+import { lessons } from "@/shared/db/schema/tutoring";
 
 export type ExpertCrystallizationWithLesson = InferSelectModel<typeof expertCrystallizations> & {
   lesson: InferSelectModel<typeof lessons> | null;
@@ -104,3 +104,4 @@ export async function rejectCrystallization(id: string): Promise<ActionResult<vo
     return { success: true, data: undefined };
   }, "rejectCrystallization");
 }
+

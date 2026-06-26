@@ -13,9 +13,9 @@ import {
   type StudentInterestProfile,
 } from "@/features/tutoring/public-server";
 import {
-  LEARNING_LIMITS,
+  TUTORING_LIMITS,
   ONBOARDING_TURN_STATUS_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 const onboardingTurnSchema = z.object({
   response: z.string(),
@@ -46,7 +46,7 @@ export function shouldRefreshInterestProfile(
   const lastUpdated = new Date(profile.lastUpdated);
   const daysSince = (Date.now() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24);
 
-  return daysSince >= LEARNING_LIMITS.interestProfileRefreshDays;
+  return daysSince >= TUTORING_LIMITS.interestProfileRefreshDays;
 }
 
 export async function runInterestOnboardingTurn(params: {
@@ -65,7 +65,7 @@ export async function runInterestOnboardingTurn(params: {
       transcript,
     }),
     promptSpec: onboardingTurnPromptSpec,
-    maxOutputTokens: LEARNING_LIMITS.onboardingEvaluationMaxOutputTokens,
+    maxOutputTokens: TUTORING_LIMITS.onboardingEvaluationMaxOutputTokens,
   });
 
   return {
@@ -99,7 +99,7 @@ export async function streamInterestOnboardingTurn(params: {
       existingProfile: params.existingProfile,
       transcript,
     }),
-    maxOutputTokens: LEARNING_LIMITS.onboardingStreamMaxOutputTokens,
+    maxOutputTokens: TUTORING_LIMITS.onboardingStreamMaxOutputTokens,
     temperature: 0.4,
     promptSpec: onboardingTurnPromptSpec,
   });
@@ -108,3 +108,4 @@ export async function streamInterestOnboardingTurn(params: {
 export function buildOnboardingGreeting(studentName: string) {
   return buildOnboardingGreetingPrompt(studentName);
 }
+

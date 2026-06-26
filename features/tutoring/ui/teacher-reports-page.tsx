@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -26,6 +26,67 @@ import { StatsCard } from "@/shared/ui/workspace/workspace-stat-card";
 import { SectionHeading } from "@/features/tutoring/ui/section-heading";
 import { getSubjectDisplayLabel } from "@/features/tutoring/server/subject-packages";
 
+type TeacherClassroom = {
+  id: string;
+  title: string;
+  gradeLabel: string;
+};
+
+type TeacherClassroomsResponse = {
+  success: true;
+  data: TeacherClassroom[];
+};
+
+type ClassroomLesson = {
+  id: string;
+  title: string;
+  courseTitle?: string | null;
+};
+
+type ClassroomLessonsResponse = {
+  success: true;
+  data: ClassroomLesson[];
+};
+
+type LessonReportRow = {
+  id: string;
+  updatedAt: string | Date;
+  masteryPercent: number;
+  student: {
+    id: string;
+    fullName: string;
+  };
+  report: {
+    studentSummary: string;
+    identifiedGaps?: string[];
+    studentConfidenceScore?: number | null;
+    transferReadiness?: string | null;
+    originalityWithinConstraint?: string | null;
+    recommendedInterventionType?: string | null;
+    metacognitiveMirror?: string | null;
+    riskFlags?: string[];
+    homeworkAssigned?: string[];
+  };
+};
+
+type LessonReportsSummary = {
+  averageMasteryPercent: number | null;
+  studentsNeedingAttention: number;
+  averageConfidenceScore: number | null;
+  latestReportAt: string | null;
+  commonGaps: string[];
+  commonRiskFlags: string[];
+  recommendedTeacherFocus: string[];
+};
+
+type LessonReportsResponse = {
+  success: true;
+  data: {
+    reports: LessonReportRow[];
+    summary: LessonReportsSummary | null;
+  };
+};
+
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "Not yet";
   return new Intl.DateTimeFormat(undefined, {
@@ -40,9 +101,9 @@ export function TeacherReportsPage({
   initialLessons,
   initialReportsPayload,
 }: {
-  initialClassrooms?: Awaited<ReturnType<typeof fetchTeacherClassrooms>>;
-  initialLessons?: Awaited<ReturnType<typeof fetchClassroomLessons>>;
-  initialReportsPayload?: Awaited<ReturnType<typeof fetchLessonReports>>;
+  initialClassrooms?: TeacherClassroomsResponse;
+  initialLessons?: ClassroomLessonsResponse;
+  initialReportsPayload?: LessonReportsResponse;
 }) {
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(
     initialClassrooms?.data?.[0]?.id ?? null,
@@ -69,15 +130,18 @@ export function TeacherReportsPage({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const classroomsQuery = useQuery({
-    queryKey: queryKeys.learning.classrooms,
+  const classroomsQuery = useQuery<TeacherClassroomsResponse>({
+    queryKey: queryKeys.tutoring.classrooms,
     queryFn: fetchTeacherClassrooms,
     initialData: initialClassrooms,
     staleTime: 30_000,
   });
 
-  const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
-  const accessibleClassrooms = classrooms;
+  const classrooms = useMemo<TeacherClassroom[]>(
+    () => classroomsQuery.data?.data ?? [],
+    [classroomsQuery.data],
+  );
+  const accessibleClassrooms: TeacherClassroom[] = classrooms;
   const effectiveSelectedClassroomId = accessibleClassrooms.some(
     (classroom) => classroom.id === selectedClassroomId,
   )
@@ -86,9 +150,9 @@ export function TeacherReportsPage({
   const selectedClassroom =
     accessibleClassrooms.find((classroom) => classroom.id === effectiveSelectedClassroomId) ?? null;
 
-  const lessonsQuery = useQuery({
+  const lessonsQuery = useQuery<ClassroomLessonsResponse>({
     queryKey: effectiveSelectedClassroomId
-      ? queryKeys.learning.lessons(effectiveSelectedClassroomId)
+      ? queryKeys.tutoring.lessons(effectiveSelectedClassroomId)
       : ["lessons", "reports-idle"],
     queryFn: async () => {
       if (!effectiveSelectedClassroomId) {
@@ -106,17 +170,20 @@ export function TeacherReportsPage({
     staleTime: 30_000,
   });
 
-  const lessons = useMemo(() => lessonsQuery.data?.data ?? [], [lessonsQuery.data]);
+  const lessons = useMemo<ClassroomLesson[]>(
+    () => lessonsQuery.data?.data ?? [],
+    [lessonsQuery.data],
+  );
   const effectiveSelectedLessonId = lessons.some((lesson) => lesson.id === selectedLessonId)
     ? selectedLessonId
     : (lessons[0]?.id ?? null);
-  const selectedLesson =
+  const selectedLesson: ClassroomLesson | null =
     lessons.find((lesson) => lesson.id === effectiveSelectedLessonId) ?? null;
 
-  const reportsQuery = useQuery({
+  const reportsQuery = useQuery<LessonReportsResponse>({
     queryKey: effectiveSelectedLessonId
-      ? queryKeys.learning.reports(effectiveSelectedLessonId)
-      : ["learningReports", "idle"],
+      ? queryKeys.tutoring.reports(effectiveSelectedLessonId)
+      : ["lessonReports", "idle"],
     queryFn: async () => {
       if (!effectiveSelectedLessonId) {
         throw new Error("Missing lesson id");
@@ -134,7 +201,10 @@ export function TeacherReportsPage({
   });
 
   const reportsPayload = reportsQuery.data?.data ?? null;
-  const reports = useMemo(() => reportsPayload?.reports ?? [], [reportsPayload]);
+  const reports = useMemo<LessonReportRow[]>(
+    () => reportsPayload?.reports ?? [],
+    [reportsPayload],
+  );
   const summary = reportsPayload?.summary ?? null;
 
   return (
@@ -444,7 +514,7 @@ export function TeacherReportsPage({
                                   <div className="space-y-3">
                                     {riskFlags.map((flag) => (
                                       <div key={flag} className="text-sm font-medium leading-relaxed text-amber-900 flex items-start gap-2">
-                                        <span className="text-amber-400 mt-0.5">Ã¢â‚¬Â¢</span>
+                                        <span className="text-amber-400 mt-0.5">â€¢</span>
                                         {flag}
                                       </div>
                                     ))}
@@ -460,7 +530,7 @@ export function TeacherReportsPage({
                                   <div className="space-y-3">
                                     {homeworkAssigned.map((task) => (
                                       <div key={task} className="text-sm font-medium leading-relaxed text-sky-900 flex items-start gap-2">
-                                        <span className="text-sky-400 mt-0.5">Ã¢â‚¬Â¢</span>
+                                        <span className="text-sky-400 mt-0.5">â€¢</span>
                                         {task}
                                       </div>
                                     ))}
@@ -497,5 +567,6 @@ export function TeacherReportsPage({
     </div>
   );
 }
+
 
 

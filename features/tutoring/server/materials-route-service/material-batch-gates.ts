@@ -1,8 +1,8 @@
-﻿import { lessonSourceBoundarySchema } from "@/features/tutoring/public-server";
+import { lessonSourceBoundarySchema } from "@/features/tutoring/public-server";
 import {
-  LEARNING_STATUS,
+  TUTORING_STATUS,
   MATERIAL_BATCH_GATE_STATUS,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
 
 import { isMaterialAnalysisFailed } from "./material-upload-attempt-state";
@@ -91,15 +91,15 @@ export function getLatestMaterialBatchGateState(
     sorted.filter((attempt) => attempt.batchId === latestBatchId),
   );
   const succeededCount = latestBatchAttempts.filter(
-    (attempt) => attempt.status === LEARNING_STATUS.uploadSucceeded,
+    (attempt) => attempt.status === TUTORING_STATUS.uploadSucceeded,
   ).length;
   const failedCount = latestBatchAttempts.filter(
-    (attempt) => attempt.status === LEARNING_STATUS.uploadFailed,
+    (attempt) => attempt.status === TUTORING_STATUS.uploadFailed,
   ).length;
   const processingCount = latestBatchAttempts.filter(
     (attempt) =>
-      attempt.status === LEARNING_STATUS.uploadQueued ||
-      attempt.status === LEARNING_STATUS.uploadProcessing,
+      attempt.status === TUTORING_STATUS.uploadQueued ||
+      attempt.status === TUTORING_STATUS.uploadProcessing,
   ).length;
 
   return {
@@ -154,8 +154,8 @@ export function getLessonActivationMaterialGate(params: {
   const completedMaterialIds = params.materials
     .filter(
       (material) =>
-        material.extractionStatus === LEARNING_STATUS.materialCompleted &&
-        material.indexingStatus === LEARNING_STATUS.materialCompleted &&
+        material.extractionStatus === TUTORING_STATUS.materialCompleted &&
+        material.indexingStatus === TUTORING_STATUS.materialCompleted &&
         !isMaterialAnalysisFailed(material.analysis),
     )
     .map((material) => material.id);
@@ -168,8 +168,8 @@ export function getLessonActivationMaterialGate(params: {
   const onlyPackBuildFailures =
     activeBatchAttempts.length > 0 &&
     activeBatchAttempts
-      .filter((attempt) => attempt.status === LEARNING_STATUS.uploadFailed)
-      .every((attempt) => attempt.stage === LEARNING_STATUS.uploadStagePackBuild);
+      .filter((attempt) => attempt.status === TUTORING_STATUS.uploadFailed)
+      .every((attempt) => attempt.stage === TUTORING_STATUS.uploadStagePackBuild);
 
   if (batch.status === MATERIAL_BATCH_GATE_STATUS.PROCESSING) {
     return {
@@ -224,4 +224,5 @@ export function getLessonActivationMaterialGate(params: {
     reason: "",
   };
 }
+
 

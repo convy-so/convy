@@ -1,11 +1,11 @@
-﻿import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { getTeacherLessonAccess } from "@/features/tutoring/server/access";
 import { indexLessonMaterialEvidence } from "@/features/tutoring/server/evidence";
 import { lessonSourceBoundarySchema } from "@/features/tutoring/public-server";
 import { getDb } from "@/shared/db";
 import { lessons, lessonMaterials } from "@/shared/db/schema";
-import { LEARNING_STATUS } from "@/shared/learning/constants";
+import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 
 export async function indexMaterialAndSyncBoundary(params: {
   lessonId: string;
@@ -65,7 +65,7 @@ export async function indexMaterialAndSyncBoundary(params: {
     getDb()
       .update(lessonMaterials)
       .set({
-        indexingStatus: LEARNING_STATUS.materialCompleted,
+        indexingStatus: TUTORING_STATUS.materialCompleted,
         indexingError: null,
         updatedAt: new Date(),
       })
@@ -80,4 +80,5 @@ export async function indexMaterialAndSyncBoundary(params: {
       .where(eq(lessons.id, params.lessonId)),
   ]);
 }
+
 

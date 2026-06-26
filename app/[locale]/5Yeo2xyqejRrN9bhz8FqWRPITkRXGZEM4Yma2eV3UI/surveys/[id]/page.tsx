@@ -242,7 +242,7 @@ async function ReviewContent({
               </h2>
               <p className="text-sm text-gray-500">
                 The legacy admin feedback textbox has been removed. This page now
-                serves as a clean read-only review of the survey brief and
+                serves as a clean read-only survey review of the brief and
                 creation transcript.
               </p>
             </div>

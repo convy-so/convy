@@ -5,8 +5,8 @@ import { courses, expertFrameworks } from "@/shared/db/schema";
 import type { ExpertFramework } from "@/features/tutoring/public-server";
 import {
   EXPERT_FRAMEWORK_STATUS_VALUES,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 
 export type FrameworkCourseLite = {
   id: string;
@@ -68,7 +68,7 @@ export async function listFrameworkRecords(params?: {
         params?.courseId ? eq(expertFrameworks.courseId, params.courseId) : undefined,
         params?.includeArchived
           ? undefined
-          : ne(expertFrameworks.status, LEARNING_STATUS.frameworkArchived),
+          : ne(expertFrameworks.status, TUTORING_STATUS.frameworkArchived),
       ),
     )
     .orderBy(desc(expertFrameworks.updatedAt));
@@ -91,3 +91,4 @@ export async function getFrameworkRecord(frameworkId: string) {
 
   return row ? mapFrameworkRow(row) : null;
 }
+

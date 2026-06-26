@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -81,7 +81,7 @@ export function CreateLessonModal({
 
             toast.success("Session draft created");
             await queryClient.invalidateQueries({
-                queryKey: queryKeys.learning.lessons(classroomId),
+                queryKey: queryKeys.tutoring.lessons(classroomId),
             });
             resetForm();
             onClose();
@@ -211,4 +211,5 @@ export function CreateLessonModal({
         document.body
     );
 }
+
 

@@ -520,4 +520,3 @@ export const tutoringSessionResponseSchema = z.object({
 export {
   classroomStudentPatternResponseSchema,
 };
-

@@ -1,4 +1,4 @@
-﻿import {
+import {
   buildPromptFrame,
   renderInterestProfile,
   renderLearningOutcomes,
@@ -8,7 +8,7 @@ import type { StudentInterestProfile } from "@/features/tutoring/public-server";
 import {
   OUT_OF_SESSION_CLASSIFICATION,
   OUT_OF_SESSION_CLASSIFICATION_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export function buildOutOfSessionClassificationPrompt(input: {
   lessonTitle: string;
@@ -73,4 +73,5 @@ export function buildOutOfSessionReplyPrompt(input: {
     .filter(Boolean)
     .join("\n\n");
 }
+
 

@@ -28,9 +28,9 @@ import {
 } from "@/features/tutoring/server/student-profile-storage";
 import type { StudentInterestProfile } from "@/features/tutoring/public-server";
 import {
-  LEARNING_STATUS,
+  TUTORING_STATUS,
   ONBOARDING_TURN_STATUS,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export async function getOnboardingState(userId: string) {
   const membership = await getPrimaryStudentMembership(userId);
@@ -52,14 +52,14 @@ export async function getOnboardingState(userId: string) {
   let activeSession = await getActiveStudentSession({
     classroomStudentId: membership.id,
     lessonId: null,
-    sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
+    sessionType: TUTORING_STATUS.sessionTypeInterestOnboarding,
   });
 
   if (!activeSession) {
     activeSession = await createStudentSession({
       classroomStudentId: membership.id,
       lessonId: null,
-      sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
+      sessionType: TUTORING_STATUS.sessionTypeInterestOnboarding,
     });
     await appendStudentMessage({
       sessionId: activeSession.id,
@@ -82,12 +82,12 @@ export async function ensureOnboardingSession(classroomStudentId: string) {
     (await getActiveStudentSession({
       classroomStudentId,
       lessonId: null,
-      sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
+      sessionType: TUTORING_STATUS.sessionTypeInterestOnboarding,
     })) ??
     (await createStudentSession({
       classroomStudentId,
       lessonId: null,
-      sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
+      sessionType: TUTORING_STATUS.sessionTypeInterestOnboarding,
     }))
   );
 }
@@ -226,4 +226,5 @@ export async function finalizeCompletedOnboarding(params: {
     expectedStateVersion: params.expectedStateVersion,
   });
 }
+
 

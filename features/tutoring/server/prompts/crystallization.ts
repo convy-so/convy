@@ -1,8 +1,8 @@
 import { buildPromptFrame, renderTaggedSection } from "@/features/tutoring/server/prompt-serializers";
 import {
   EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES,
-  LEARNING_STATUS,
-} from "@/shared/learning/constants";
+  TUTORING_STATUS,
+} from "@/shared/tutoring/constants";
 
 export function buildCrystallizationPrompt(params: {
   reviewCases: Array<Record<string, unknown>>;
@@ -10,7 +10,7 @@ export function buildCrystallizationPrompt(params: {
   scope: (typeof EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES)[number];
 }) {
   const scopeInstruction =
-    params.scope === LEARNING_STATUS.relevanceGeneral
+    params.scope === TUTORING_STATUS.relevanceGeneral
       ? "Focus on universal pedagogical principles that apply regardless of the specific framework. Avoid mentioning specific framework details unless they are fundamental concepts."
       : "Focus on improving the specific framework provided. You may reference specific framework details and objectives to create precise patches for the current framework structure.";
 
@@ -43,3 +43,4 @@ export function buildCrystallizationPrompt(params: {
     .filter(Boolean)
     .join("\n\n");
 }
+

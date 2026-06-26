@@ -4,7 +4,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
-import { studentSessions } from "@/shared/db/schema/learning";
+import { studentSessions } from "@/shared/db/schema/tutoring";
 
 import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
 import { resolveExpertReviewAnchor } from "@/features/tutoring/server/expert-access";
@@ -126,4 +126,5 @@ export async function POST(request: Request) {
     return handleTutoringRouteError(error, "Failed to save review case", "expert-annotations:post");
   }
 }
+
 

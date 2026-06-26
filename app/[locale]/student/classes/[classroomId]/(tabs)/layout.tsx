@@ -1,5 +1,5 @@
 import { getDb } from "@/shared/db";
-import { classroomStudents } from "@/shared/db/schema/learning";
+import { classroomStudents } from "@/shared/db/schema/tutoring";
 import { eq, and } from "drizzle-orm";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { redirect, notFound } from "next/navigation";
@@ -99,3 +99,4 @@ export default async function TabsLayout({ children, params }: TabsLayoutProps) 
 function TabLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
     return <ActiveTabLink href={href} icon={icon} label={label} />;
 }
+

@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 import { generateStructuredOutput } from "@/shared/ai/model-generation";
 import {
@@ -7,10 +7,10 @@ import {
 } from "@/features/tutoring/server/prompts/out-of-session";
 import type { StudentInterestProfile } from "@/features/tutoring/public-server";
 import {
-  LEARNING_LIMITS,
+  TUTORING_LIMITS,
   OUT_OF_SESSION_CLASSIFICATION,
   OUT_OF_SESSION_CLASSIFICATION_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 const questionClassificationSchema = z.object({
   classification: z.enum(OUT_OF_SESSION_CLASSIFICATION_VALUES),
@@ -26,7 +26,7 @@ function tokenize(value: string) {
   return value
     .toLowerCase()
     .split(/[^a-z0-9]+/i)
-    .filter((token) => token.length >= LEARNING_LIMITS.outOfSessionTokenMinLength);
+    .filter((token) => token.length >= TUTORING_LIMITS.outOfSessionTokenMinLength);
 }
 
 function buildQuestionClassification(
@@ -67,14 +67,14 @@ function classifyOutOfSessionHeuristically(params: {
     );
   }
 
-  if (overlap >= LEARNING_LIMITS.heuristicStrongLessonOverlapMinimum) {
+  if (overlap >= TUTORING_LIMITS.heuristicStrongLessonOverlapMinimum) {
     return buildQuestionClassification(
       OUT_OF_SESSION_CLASSIFICATION.IN_SCOPE,
       "Heuristic router found strong overlap with the lesson and learning outcomes.",
     );
   }
 
-  if (overlap >= LEARNING_LIMITS.heuristicLessonOverlapMinimum) {
+  if (overlap >= TUTORING_LIMITS.heuristicLessonOverlapMinimum) {
     return buildQuestionClassification(
       OUT_OF_SESSION_CLASSIFICATION.BORDERLINE,
       "Heuristic router found partial overlap, but the question may drift from the core lesson.",
@@ -118,4 +118,5 @@ export async function generateOutOfSessionReply(params: {
 
   return result.response;
 }
+
 

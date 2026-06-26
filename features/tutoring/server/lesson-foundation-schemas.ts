@@ -1,16 +1,16 @@
 import { z } from "zod";
 import {
   GRADE_BAND_VALUES,
-  LEARNING_INTERACTION_TYPE_VALUES,
-  LEARNING_NUMERIC_DEFAULTS,
-  LEARNING_RELATIONSHIP_VALUES,
+  TUTORING_INTERACTION_TYPE_VALUES,
+  TUTORING_NUMERIC_DEFAULTS,
+  TUTORING_RELATIONSHIP_VALUES,
   MOTIVATIONAL_STYLE_VALUES,
   PERCENTAGE_RANGE,
   QUESTION_INTENT_VALUES,
   SESSION_COMPARISON_TREND_VALUES,
   SESSION_OPENING_STRATEGY_VALUES,
   STUDENT_MASTERY_LEVEL_VALUES,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 export const gradeBandSchema = z.enum(GRADE_BAND_VALUES);
 export type GradeBand = z.infer<typeof gradeBandSchema>;
@@ -18,7 +18,7 @@ export type GradeBand = z.infer<typeof gradeBandSchema>;
 export const motivationalStyleSchema = z.enum(MOTIVATIONAL_STYLE_VALUES);
 export type MotivationalStyle = z.infer<typeof motivationalStyleSchema>;
 
-export const learningRelationshipSchema = z.enum(LEARNING_RELATIONSHIP_VALUES);
+export const learningRelationshipSchema = z.enum(TUTORING_RELATIONSHIP_VALUES);
 export type LearningRelationship = z.infer<typeof learningRelationshipSchema>;
 
 export const interestDetailSchema = z.object({
@@ -33,7 +33,7 @@ export const studentInterestProfileSchema = z.object({
   curiosityAreas: z.array(z.string()).default([]),
   motivationalStyle: z.array(motivationalStyleSchema).default([]),
   learningRelationship: learningRelationshipSchema.default(
-    LEARNING_RELATIONSHIP_VALUES[1],
+    TUTORING_RELATIONSHIP_VALUES[1],
   ),
   contextTags: z.array(z.string()).default([]),
   privateNotes: z.array(z.string()).default([]),
@@ -90,7 +90,7 @@ export const materialSourceSegmentSchema = z.object({
     .number()
     .int()
     .nonnegative()
-    .default(LEARNING_NUMERIC_DEFAULTS.zero),
+    .default(TUTORING_NUMERIC_DEFAULTS.zero),
 });
 export type MaterialSourceSegment = z.infer<typeof materialSourceSegmentSchema>;
 
@@ -158,7 +158,7 @@ export const materialGroundingSegmentSchema = z.object({
 export type MaterialGroundingSegment = z.infer<typeof materialGroundingSegmentSchema>;
 
 export const materialGroundingMapSchema = z.object({
-  version: z.number().int().positive().default(LEARNING_NUMERIC_DEFAULTS.initialVersion),
+  version: z.number().int().positive().default(TUTORING_NUMERIC_DEFAULTS.initialVersion),
   builtAt: z.string().min(1),
   sourceHash: z.string().default(""),
   materialId: z.string().default(""),
@@ -219,7 +219,7 @@ export const sessionOpeningPlanSchema = z.object({
 export type SessionOpeningPlan = z.infer<typeof sessionOpeningPlanSchema>;
 
 export const studentInteractionTypeSchema = z.enum(
-  LEARNING_INTERACTION_TYPE_VALUES,
+  TUTORING_INTERACTION_TYPE_VALUES,
 );
 export type StudentInteractionType = z.infer<typeof studentInteractionTypeSchema>;
 
@@ -233,4 +233,5 @@ export type SessionComparisonTrend = z.infer<typeof sessionComparisonTrendSchema
 
 export const studentMasteryLevelSchema = z.enum(STUDENT_MASTERY_LEVEL_VALUES);
 export type StudentMasteryLevel = z.infer<typeof studentMasteryLevelSchema>;
+
 

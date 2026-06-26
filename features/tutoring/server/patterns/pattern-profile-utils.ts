@@ -4,9 +4,9 @@ import {
   type StudentPatternProfile,
 } from "@/features/tutoring/server/pattern-types";
 import {
-  LEARNING_SUBJECT_DEFAULTS,
+  TUTORING_SUBJECT_DEFAULTS,
   PATTERN_CONFIDENCE_LABEL,
-} from "@/shared/learning/constants";
+} from "@/shared/tutoring/constants";
 
 const WELL_SUPPORTED_CONFIDENCE_THRESHOLD = 0.7;
 const EMERGING_CONFIDENCE_THRESHOLD = 0.3;
@@ -20,13 +20,13 @@ function isoNow() {
 }
 
 export function normalizeSubjectKey(value: string | null | undefined) {
-  const normalized = (value ?? LEARNING_SUBJECT_DEFAULTS.key)
+  const normalized = (value ?? TUTORING_SUBJECT_DEFAULTS.key)
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  return normalized || LEARNING_SUBJECT_DEFAULTS.key;
+  return normalized || TUTORING_SUBJECT_DEFAULTS.key;
 }
 
 export function deriveSubjectInfo(params: {
@@ -37,7 +37,7 @@ export function deriveSubjectInfo(params: {
   const label =
     params.subjectLabel?.trim() ||
     params.subject?.trim() ||
-    LEARNING_SUBJECT_DEFAULTS.label;
+    TUTORING_SUBJECT_DEFAULTS.label;
   const key = normalizeSubjectKey(params.subjectKey || label);
 
   return {
@@ -94,11 +94,11 @@ export function defaultLearningPatternProfile(params: {
     scopeType: params.scopeType,
     subjectKey:
       params.scopeType === "subject"
-        ? params.subjectKey ?? LEARNING_SUBJECT_DEFAULTS.key
+        ? params.subjectKey ?? TUTORING_SUBJECT_DEFAULTS.key
         : null,
     subjectLabel:
       params.scopeType === "subject"
-        ? params.subjectLabel ?? LEARNING_SUBJECT_DEFAULTS.label
+        ? params.subjectLabel ?? TUTORING_SUBJECT_DEFAULTS.label
         : null,
     patternConfidence: 0,
     confidenceLabel: PATTERN_CONFIDENCE_LABEL.EARLY,
@@ -127,3 +127,4 @@ export function sortProfilesForStorage(profiles: StudentPatternProfile[]) {
     return a.scopeType === "global" ? -1 : 1;
   });
 }
+

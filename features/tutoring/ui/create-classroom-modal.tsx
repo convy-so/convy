@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -76,7 +76,7 @@ export function CreateClassroomModal({
 
             toast.success("Classroom established");
             await queryClient.invalidateQueries({
-                queryKey: queryKeys.learning.classrooms,
+                queryKey: queryKeys.tutoring.classrooms,
             });
             const classroomId = getCreatedClassroomId(result.data);
             if (classroomId) {
@@ -231,4 +231,5 @@ export function CreateClassroomModal({
         document.body
     );
 }
+
 

@@ -1,9 +1,9 @@
-﻿import { Suspense } from "react";
+import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { WorkspaceHub } from "@/features/tutoring/ui/workspace-hub";
 import { getStudentMeData } from "@/shared/http/page-data";
 import { getDb } from "@/shared/db";
-import { studentSessions } from "@/shared/db/schema/learning";
+import { studentSessions as studentSessionsTable } from "@/shared/db/schema/tutoring";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 export default async function StudentDashboardPage() {
@@ -13,13 +13,13 @@ export default async function StudentDashboardPage() {
         ? studentMe.student.map((s) => s.classroomStudentId) 
         : [];
 
-    const studentSessions = studentIds.length > 0 
+    const studentSessionRows = studentIds.length > 0 
         ? await getDb().query.studentSessions.findMany({
             where: and(
-                inArray(studentSessions.classroomStudentId, studentIds),
-                eq(studentSessions.sessionType, "tutoring"),
+                inArray(studentSessionsTable.classroomStudentId, studentIds),
+                eq(studentSessionsTable.sessionType, "tutoring"),
             ),
-            orderBy: [desc(studentSessions.updatedAt)],
+            orderBy: [desc(studentSessionsTable.updatedAt)],
             with: {
                 lesson: true,
                 classroomStudent: {
@@ -32,7 +32,7 @@ export default async function StudentDashboardPage() {
         : [];
 
     // Serialize dates for React Server Components hydration safety
-    const serializedSessions = studentSessions.map((s) => ({
+    const serializedSessions = studentSessionRows.map((s) => ({
         ...s,
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
@@ -52,6 +52,7 @@ export default async function StudentDashboardPage() {
         </Suspense>
     );
 }
+
 
 
 

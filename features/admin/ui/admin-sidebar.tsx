@@ -23,7 +23,7 @@ export function AdminSidebar() {
     const navigation = [
         { name: "Overview", href: getAdminAppPath(), icon: LayoutDashboard },
         { name: "User Management", href: getAdminAppPath("/manage-users"), icon: UserCog2 },
-        { name: "Learning Topics", href: getAdminAppPath("/surveys"), icon: MessageSquare },
+        { name: "Survey Review", href: getAdminAppPath("/surveys"), icon: MessageSquare },
         { name: "Student Feedback", href: getAdminAppPath("/feedback"), icon: Inbox },
         { name: "Usage & Costs", href: getAdminAppPath("/usage"), icon: Database },
         { name: "User Growth", href: getAdminAppPath("/users"), icon: Users },

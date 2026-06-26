@@ -9,7 +9,7 @@ import {
   ensureClassroomOwnerAccess,
   requireStudentSession,
   requireTeachingSession,
-  revalidateLearningUi,
+  revalidateTutoringUi,
 } from "./action-access";
 
 const inviteStudentSchema = z.object({
@@ -38,7 +38,7 @@ export async function inviteStudentToClassroomAction(input: unknown): Promise<Ac
       invitedByUserId: session.user.id,
       email: body.email,
     });
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: result };
   }, "inviteStudentToClassroomAction");
 }
@@ -71,7 +71,7 @@ export async function bulkInviteStudentsToClassroomAction(input: unknown): Promi
       invitedByUserId: session.user.id,
       students: body.students,
     });
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: result };
   }, "bulkInviteStudentsToClassroomAction");
 }
@@ -87,7 +87,7 @@ export async function respondToInvitationAction(input: unknown): Promise<ActionR
       decision: body.decision,
     });
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: { success: true } };
   }, "respondToInvitationAction");
 }
@@ -108,7 +108,7 @@ export async function resendStudentInvitationAction(input: unknown): Promise<Act
       classroomId: body.classroomId,
       requestedByUserId: session.user.id,
     });
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: { email: result.email } };
   }, "resendStudentInvitationAction");
 }
@@ -130,7 +130,7 @@ export async function cancelStudentInvitationAction(input: unknown): Promise<Act
       requestedByUserId: session.user.id,
     });
 
-    revalidateLearningUi();
+    revalidateTutoringUi();
     return { success: true, data: { success: true } };
   }, "cancelStudentInvitationAction");
 }
