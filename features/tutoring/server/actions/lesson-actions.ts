@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { Output, generateText } from "ai";
 import { z } from "zod";
@@ -8,60 +8,60 @@ import { resolveUiLocaleForContentCreation } from "@/shared/i18n/resolve-locale"
 import {
   LEARNING_LIMITS,
   LEARNING_STATUS,
-  LEARNING_TOPIC_STATUS_VALUES,
+  LESSON_STATUS_VALUES,
 } from "@/shared/learning/constants";
-import * as TopicService from "@/features/tutoring/server/lesson-service";
+import * as LessonService from "@/features/tutoring/server/lesson-service";
 import {
   getSubjectDisplayLabel,
 } from "@/features/tutoring/server/subject-packages";
 import {
   learningOutcomeDefinitionSchema,
-  topicSourceBoundarySchema,
+  lessonSourceBoundarySchema,
 } from "@/features/tutoring/public-server";
 import { getDb } from "@/shared/db";
 import {
-  learningTopics,
-  topicMaterialUploadAttempts,
-  topicMaterials,
+  lessons,
+  lessonMaterialUploadAttempts,
+  lessonMaterials,
 } from "@/shared/db/schema";
 import { count, eq } from "drizzle-orm";
-import { getTeacherTopicAccess } from "@/features/tutoring/server/access";
-import { getTopicWithMaterials } from "@/features/tutoring/public-server";
+import { getTeacherLessonAccess } from "@/features/tutoring/server/access";
+import { getLessonWithMaterials } from "@/features/tutoring/public-server";
 import { getActiveFrameworkForCourse } from "@/features/tutoring/server/framework-runtime-storage";
 import {
-  getTopicActivationMaterialGate,
+  getLessonActivationMaterialGate,
   isMaterialAnalysisFailed,
 } from "@/features/tutoring/server/materials-route-service";
 import { ActionError, ActionResult, validateInput, withErrorHandling } from "@/shared/http/action-result";
 
 import { appLocaleSchema, ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./action-access";
 
-const createLearningTopicSchema = z.object({
+const createLessonSchema = z.object({
   classroomId: z.string().min(1),
   title: z.string().trim().min(2),
   description: z.string().trim().optional(),
   courseId: z.string().min(1),
   learningOutcomes: z.array(learningOutcomeDefinitionSchema).optional(),
-  sourceBoundary: topicSourceBoundarySchema.optional(),
+  sourceBoundary: lessonSourceBoundarySchema.optional(),
   contentLocale: appLocaleSchema.optional(),
 });
 
-const updateLearningTopicDetailsSchema = z.object({
-  topicId: z.string().min(1),
+const updateLessonDetailsSchema = z.object({
+  lessonId: z.string().min(1),
   title: z.string().trim().min(2).optional(),
   description: z.string().trim().optional(),
   learningOutcomes: z.array(learningOutcomeDefinitionSchema).optional(),
-  sourceBoundary: topicSourceBoundarySchema.optional(),
+  sourceBoundary: lessonSourceBoundarySchema.optional(),
   contentLocale: appLocaleSchema.optional(),
 });
 
-const updateTopicStatusSchema = z.object({
-  topicId: z.string().min(1),
-  status: z.enum(LEARNING_TOPIC_STATUS_VALUES),
+const updateLessonStatusSchema = z.object({
+  lessonId: z.string().min(1),
+  status: z.enum(LESSON_STATUS_VALUES),
 });
 
 const normalizeLearningOutcomesSchema = z.object({
-  topicId: z.string().min(1),
+  lessonId: z.string().min(1),
   rawNotes: z.string().trim().min(1),
   title: z.string().trim().min(1),
   description: z.string().trim().optional(),
@@ -104,7 +104,7 @@ function isOutcomeGenerationServiceError(error: unknown) {
   );
 }
 
-export async function createLearningTopicAction(input: unknown): Promise<
+export async function createLessonAction(input: unknown): Promise<
   ActionResult<{
     id: string;
     classroomId: string;
@@ -114,18 +114,18 @@ export async function createLearningTopicAction(input: unknown): Promise<
   }>
 > {
   return withErrorHandling(async () => {
-    const body = validateInput(input, createLearningTopicSchema);
+    const body = validateInput(input, createLessonSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
     const normalizedLearningOutcomes = (body.learningOutcomes ?? []).map((outcome) =>
       learningOutcomeDefinitionSchema.parse(outcome),
     );
-    const normalizedSourceBoundary = topicSourceBoundarySchema.parse(
+    const normalizedSourceBoundary = lessonSourceBoundarySchema.parse(
       body.sourceBoundary ?? {},
     );
 
     const contentLocale = resolveUiLocaleForContentCreation({ explicitLocale: body.contentLocale ?? null, session });
-    const result = await TopicService.createLearningTopic({
+    const result = await LessonService.createLesson({
       classroomId: body.classroomId,
       createdByUserId: session.user.id,
       title: body.title,
@@ -138,27 +138,27 @@ export async function createLearningTopicAction(input: unknown): Promise<
 
     revalidateLearningUi();
     return { success: true, data: { id: result.id, classroomId: result.classroomId, title: result.title, learningOutcomeCount: result.learningOutcomes.length, contentLocale: result.contentLocale } };
-  }, "createLearningTopicAction");
+  }, "createLessonAction");
 }
 
-export async function updateLearningTopicDetailsAction(input: unknown): Promise<ActionResult<{
+export async function updateLessonDetailsAction(input: unknown): Promise<ActionResult<{
   id: string;
   title: string;
 }>> {
   return withErrorHandling(async () => {
-    const body = validateInput(input, updateLearningTopicDetailsSchema);
+    const body = validateInput(input, updateLessonDetailsSchema);
     const { session } = await requireTeachingSession();
-    const topic = await getTeacherTopicAccess(session.user.id, body.topicId);
+    const lesson = await getTeacherLessonAccess(session.user.id, body.lessonId);
 
-    if (!topic) {
+    if (!lesson) {
       throw new Error("Unauthorized");
     }
 
-    const normalizedLearningOutcomes = (body.learningOutcomes ?? topic.learningOutcomes ?? []).map(
+    const normalizedLearningOutcomes = (body.learningOutcomes ?? lesson.learningOutcomes ?? []).map(
       (outcome) => learningOutcomeDefinitionSchema.parse(outcome),
     );
-    const normalizedSourceBoundary = topicSourceBoundarySchema.parse({
-      ...(topic.sourceBoundary ?? {}),
+    const normalizedSourceBoundary = lessonSourceBoundarySchema.parse({
+      ...(lesson.sourceBoundary ?? {}),
       ...(body.sourceBoundary ?? {}),
     });
     const contentLocale = body.contentLocale
@@ -168,8 +168,8 @@ export async function updateLearningTopicDetailsAction(input: unknown): Promise<
         })
       : undefined;
 
-    const result = await TopicService.updateLearningTopicDetails({
-      topicId: body.topicId,
+    const result = await LessonService.updateLessonDetails({
+      lessonId: body.lessonId,
       title: body.title,
       description: body.description,
       contentLocale,
@@ -185,7 +185,7 @@ export async function updateLearningTopicDetailsAction(input: unknown): Promise<
         title: result.title,
       },
     };
-  }, "updateLearningTopicDetailsAction");
+  }, "updateLessonDetailsAction");
 }
 
 export async function normalizeLearningOutcomesAction(input: unknown): Promise<
@@ -201,13 +201,13 @@ export async function normalizeLearningOutcomesAction(input: unknown): Promise<
     try {
       const body = validateInput(input, normalizeLearningOutcomesSchema);
       const { session } = await requireTeachingSession();
-      const topic = await getTeacherTopicAccess(session.user.id, body.topicId);
+      const lesson = await getTeacherLessonAccess(session.user.id, body.lessonId);
 
-      if (!topic) {
+      if (!lesson) {
         throw new Error("Unauthorized");
       }
 
-      const subjectName = topic.course?.title ?? getSubjectDisplayLabel(null);
+      const subjectName = lesson.course?.title ?? getSubjectDisplayLabel(null);
 
       const { output } = await generateText({
         model: analysisModel,
@@ -273,24 +273,24 @@ Instructions:
   }, "normalizeLearningOutcomesAction");
 }
 
-export async function updateTopicStatusAction(input: unknown): Promise<ActionResult<{ id: string; status: string }>> {
+export async function updateLessonStatusAction(input: unknown): Promise<ActionResult<{ id: string; status: string }>> {
   return withErrorHandling(async () => {
-    const body = validateInput(input, updateTopicStatusSchema);
+    const body = validateInput(input, updateLessonStatusSchema);
     const { session } = await requireTeachingSession();
-    const topic = await getTeacherTopicAccess(session.user.id, body.topicId);
+    const lesson = await getTeacherLessonAccess(session.user.id, body.lessonId);
 
-    if (!topic) {
+    if (!lesson) {
       throw new Error("Unauthorized");
     }
 
     const materialCountResult = await getDb()
       .select({ value: count() })
-      .from(topicMaterials)
-      .where(eq(topicMaterials.topicId, body.topicId));
+      .from(lessonMaterials)
+      .where(eq(lessonMaterials.lessonId, body.lessonId));
     const materialCount = Number(materialCountResult[0]?.value ?? 0);
-    const hasLearningOutcomes = (topic.learningOutcomes?.length ?? 0) > 0;
+    const hasLearningOutcomes = (lesson.learningOutcomes?.length ?? 0) > 0;
 
-    if (body.status === LEARNING_STATUS.topicActive) {
+    if (body.status === LEARNING_STATUS.lessonActive) {
       if (!hasLearningOutcomes || materialCount === 0) {
         throw new Error(
           "Add at least one learning outcome and one supporting material before activating this session.",
@@ -298,22 +298,22 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
       }
 
       if (
-        topic.status !== LEARNING_STATUS.topicDraft &&
-        topic.status !== LEARNING_STATUS.topicPaused
+        lesson.status !== LEARNING_STATUS.lessonDraft &&
+        lesson.status !== LEARNING_STATUS.lessonPaused
       ) {
         throw new Error("Only draft or paused sessions can be activated.");
       }
 
-      const topicWithMaterials = await getTopicWithMaterials(body.topicId);
-      if (!topicWithMaterials) {
+      const lessonWithMaterials = await getLessonWithMaterials(body.lessonId);
+      if (!lessonWithMaterials) {
         throw new Error("Session not found.");
       }
-      const materialAttempts = await getDb().query.topicMaterialUploadAttempts.findMany({
-        where: eq(topicMaterialUploadAttempts.topicId, body.topicId),
+      const materialAttempts = await getDb().query.lessonMaterialUploadAttempts.findMany({
+        where: eq(lessonMaterialUploadAttempts.lessonId, body.lessonId),
         orderBy: (table, operators) => [operators.desc(table.createdAt)],
       });
 
-      const completedMaterials = topicWithMaterials.materials.filter(
+      const completedMaterials = lessonWithMaterials.materials.filter(
         (material) =>
           material.extractionStatus === LEARNING_STATUS.materialCompleted &&
           material.indexingStatus === LEARNING_STATUS.materialCompleted &&
@@ -327,9 +327,9 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
         );
       }
 
-      const materialGate = getTopicActivationMaterialGate({
-        topic: topicWithMaterials,
-        materials: topicWithMaterials.materials,
+      const materialGate = getLessonActivationMaterialGate({
+        lesson: lessonWithMaterials,
+        materials: lessonWithMaterials.materials,
         attempts: materialAttempts,
       });
       if (!materialGate.ready) {
@@ -340,7 +340,7 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
         );
       }
 
-      const activeFramework = await getActiveFrameworkForCourse(topic.courseId);
+      const activeFramework = await getActiveFrameworkForCourse(lesson.courseId);
       if (!activeFramework?.liveFramework) {
         throw new ActionError(
           "Activate an expert framework before activating tutoring for this lesson.",
@@ -351,35 +351,36 @@ export async function updateTopicStatusAction(input: unknown): Promise<ActionRes
     }
 
     if (
-      body.status === LEARNING_STATUS.topicPaused &&
-      topic.status !== LEARNING_STATUS.topicActive
+      body.status === LEARNING_STATUS.lessonPaused &&
+      lesson.status !== LEARNING_STATUS.lessonActive
     ) {
       throw new Error("Only active sessions can be paused.");
     }
 
     if (
-      body.status === LEARNING_STATUS.topicArchived &&
-      topic.status !== LEARNING_STATUS.topicActive
+      body.status === LEARNING_STATUS.lessonArchived &&
+      lesson.status !== LEARNING_STATUS.lessonActive
     ) {
       throw new Error("Only active sessions can be archived.");
     }
 
     if (
-      body.status === LEARNING_STATUS.topicDraft &&
-      topic.status !== LEARNING_STATUS.topicDraft
+      body.status === LEARNING_STATUS.lessonDraft &&
+      lesson.status !== LEARNING_STATUS.lessonDraft
     ) {
       throw new Error("Sessions cannot be moved back to draft.");
     }
 
     await getDb()
-      .update(learningTopics)
+      .update(lessons)
       .set({
         status: body.status,
         updatedAt: new Date(),
       })
-      .where(eq(learningTopics.id, body.topicId));
+      .where(eq(lessons.id, body.lessonId));
 
     revalidateLearningUi();
-    return { success: true, data: { id: body.topicId, status: body.status } };
-  }, "updateTopicStatusAction");
+    return { success: true, data: { id: body.lessonId, status: body.status } };
+  }, "updateLessonStatusAction");
 }
+

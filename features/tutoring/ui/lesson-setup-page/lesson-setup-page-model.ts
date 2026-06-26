@@ -1,11 +1,11 @@
-import type { getTopicMaterialsData, getTopicSetupData } from "@/shared/http/page-data";
+﻿import type { getLessonMaterialsData, getLessonSetupData } from "@/shared/http/page-data";
 
-export type TopicMaterialItem = Awaited<
-  ReturnType<typeof getTopicMaterialsData>
+export type LessonMaterialItem = Awaited<
+  ReturnType<typeof getLessonMaterialsData>
 >["data"][number];
 
-export type TopicMaterialListItem = Pick<
-  TopicMaterialItem,
+export type LessonMaterialListItem = Pick<
+  LessonMaterialItem,
   | "id"
   | "title"
   | "description"
@@ -18,6 +18,7 @@ export type TopicMaterialListItem = Pick<
 >;
 
 export type LessonSetupPageProps = {
-  initialData: Awaited<ReturnType<typeof getTopicSetupData>>;
-  initialMaterials: Awaited<ReturnType<typeof getTopicMaterialsData>>;
+  initialData: Awaited<ReturnType<typeof getLessonSetupData>>;
+  initialMaterials: Awaited<ReturnType<typeof getLessonMaterialsData>>;
 };
+

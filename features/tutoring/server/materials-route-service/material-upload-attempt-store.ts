@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
-import { topicMaterialUploadAttempts } from "@/shared/db/schema";
+import { lessonMaterialUploadAttempts } from "@/shared/db/schema";
 import { publishClassroomRealtimeEvent } from "@/shared/infra/realtime";
 import { requireValue } from "@/shared/utils/collections";
 
@@ -12,13 +12,13 @@ import {
 
 async function publishMaterialUploadUpdated(params: {
   classroomId: string;
-  topicId: string;
+  lessonId: string;
   batchId: string;
   attemptId: string;
 }) {
   await publishClassroomRealtimeEvent(params.classroomId, {
-    type: "learning_material_upload_updated",
-    topicId: params.topicId,
+    type: "lesson_material_upload_updated",
+    lessonId: params.lessonId,
     batchId: params.batchId,
     attemptIds: [params.attemptId],
   });
@@ -27,7 +27,7 @@ async function publishMaterialUploadUpdated(params: {
 export async function updateLearningMaterialUploadAttempt(params: {
   attemptId: string;
   classroomId?: string;
-  topicId?: string;
+  lessonId?: string;
   batchId?: string;
   status?: LearningMaterialUploadAttemptStatus;
   stage?: LearningMaterialUploadAttemptStage;
@@ -51,7 +51,7 @@ export async function updateLearningMaterialUploadAttempt(params: {
   previousAttemptId?: string | null;
 }) {
   const [attempt] = await getDb()
-    .update(topicMaterialUploadAttempts)
+    .update(lessonMaterialUploadAttempts)
     .set({
       ...(params.previousAttemptId !== undefined
         ? { previousAttemptId: params.previousAttemptId }
@@ -87,14 +87,14 @@ export async function updateLearningMaterialUploadAttempt(params: {
       ...(params.materialId !== undefined ? { materialId: params.materialId } : {}),
       updatedAt: new Date(),
     })
-    .where(eq(topicMaterialUploadAttempts.id, params.attemptId))
+    .where(eq(lessonMaterialUploadAttempts.id, params.attemptId))
     .returning();
 
   const classroomId = params.classroomId;
   if (attempt && classroomId) {
     await publishMaterialUploadUpdated({
       classroomId,
-      topicId: params.topicId ?? attempt.topicId,
+      lessonId: params.lessonId ?? attempt.lessonId,
       batchId: params.batchId ?? attempt.batchId,
       attemptId: attempt.id,
     });
@@ -106,7 +106,7 @@ export async function updateLearningMaterialUploadAttempt(params: {
 export async function createLearningMaterialUploadAttempt(params: {
   id: string;
   batchId: string;
-  topicId: string;
+  lessonId: string;
   uploadedByUserId: string;
   fileName: string;
   previousAttemptId?: string | null;
@@ -131,12 +131,12 @@ export async function createLearningMaterialUploadAttempt(params: {
 }) {
   const now = new Date();
   const [attempt] = await getDb()
-    .insert(topicMaterialUploadAttempts)
+    .insert(lessonMaterialUploadAttempts)
     .values({
       id: params.id,
       previousAttemptId: params.previousAttemptId ?? null,
       batchId: params.batchId,
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       uploadedByUserId: params.uploadedByUserId,
       fileName: params.fileName,
       title: params.title?.trim() || null,
@@ -167,3 +167,4 @@ export async function createLearningMaterialUploadAttempt(params: {
     `Failed to create learning material upload attempt ${params.id}`,
   );
 }
+

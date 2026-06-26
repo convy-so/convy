@@ -1,7 +1,7 @@
 import {
   patternConfidenceLabelSchema,
-  studentLearningPatternProfileSchema,
-  type StudentLearningPatternProfile,
+  studentPatternProfileSchema,
+  type StudentPatternProfile,
 } from "@/features/tutoring/server/pattern-types";
 import {
   LEARNING_SUBJECT_DEFAULTS,
@@ -63,7 +63,7 @@ export function getPatternConfidenceLabel(confidence: number) {
   return PATTERN_CONFIDENCE_LABEL.EARLY;
 }
 
-export function buildConfidenceByDimension(profile: StudentLearningPatternProfile) {
+export function buildConfidenceByDimension(profile: StudentPatternProfile) {
   return {
     firstSessionDiscovery: profile.patternConfidence,
     explanationApproaches:
@@ -90,7 +90,7 @@ export function defaultLearningPatternProfile(params: {
   subjectKey?: string | null;
   subjectLabel?: string | null;
 }) {
-  return studentLearningPatternProfileSchema.parse({
+  return studentPatternProfileSchema.parse({
     scopeType: params.scopeType,
     subjectKey:
       params.scopeType === "subject"
@@ -109,9 +109,9 @@ export function defaultLearningPatternProfile(params: {
   });
 }
 
-export function withNormalizedProfile(profile: StudentLearningPatternProfile) {
+export function withNormalizedProfile(profile: StudentPatternProfile) {
   const confidence = Math.max(0, Math.min(1, profile.patternConfidence));
-  return studentLearningPatternProfileSchema.parse({
+  return studentPatternProfileSchema.parse({
     ...profile,
     patternConfidence: confidence,
     confidenceLabel: patternConfidenceLabelSchema.parse(
@@ -121,7 +121,7 @@ export function withNormalizedProfile(profile: StudentLearningPatternProfile) {
   });
 }
 
-export function sortProfilesForStorage(profiles: StudentLearningPatternProfile[]) {
+export function sortProfilesForStorage(profiles: StudentPatternProfile[]) {
   return [...profiles].sort((a, b) => {
     if (a.scopeType === b.scopeType) return 0;
     return a.scopeType === "global" ? -1 : 1;

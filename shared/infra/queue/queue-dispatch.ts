@@ -5,8 +5,8 @@ import type {
   ContentTranslationJobData,
   EmailJobData,
   ImageUploadJobData,
-  LearningMaterialBatchFinalizeJobData,
-  LearningMaterialProcessingJobData,
+  LessonMaterialBatchFinalizeJobData,
+  LessonMaterialProcessingJobData,
   NotificationJobData,
   SurveyAnalyticsJobData,
   TutoringReportJobData,
@@ -17,8 +17,8 @@ import {
   getEmailQueue,
   getExperimentEvaluationQueue,
   getImageUploadQueue,
-  getLearningMaterialBatchFinalizeQueue,
-  getLearningMaterialProcessingQueue,
+  getLessonMaterialBatchFinalizeQueue,
+  getLessonMaterialProcessingQueue,
   getNotificationQueue,
   getSurveyAnalyticsQueue,
   getTutoringReportQueue,
@@ -125,14 +125,14 @@ export async function enqueueTutoringReportGeneration(
   });
 }
 
-export async function enqueueLearningMaterialProcessing(
-  data: LearningMaterialProcessingJobData,
+export async function enqueueLessonMaterialProcessing(
+  data: LessonMaterialProcessingJobData,
 ) {
-  const jobId = `learning-material-${data.attemptId}`;
+  const jobId = `lesson-material-${data.attemptId}`;
 
-  console.log("[queue] enqueueLearningMaterialProcessing: enqueueing job", {
+  console.log("[queue] enqueueLessonMaterialProcessing: enqueueing job", {
     attemptId: data.attemptId,
-    topicId: data.topicId,
+    lessonId: data.lessonId,
     classroomId: data.classroomId,
     storagePath: data.storagePath,
     fileName: data.fileName,
@@ -141,8 +141,8 @@ export async function enqueueLearningMaterialProcessing(
     jobId,
   });
 
-  const job = await getLearningMaterialProcessingQueue().add(
-    "process-learning-material",
+  const job = await getLessonMaterialProcessingQueue().add(
+    "process-lesson-material",
     data,
     {
       jobId,
@@ -150,30 +150,30 @@ export async function enqueueLearningMaterialProcessing(
     },
   );
 
-  console.log("[queue] enqueueLearningMaterialProcessing: job enqueued", {
+  console.log("[queue] enqueueLessonMaterialProcessing: job enqueued", {
     attemptId: data.attemptId,
-    topicId: data.topicId,
+    lessonId: data.lessonId,
     jobId: job?.id ?? jobId,
-    queueName: job?.queueName ?? "learning-material-processing",
+    queueName: job?.queueName ?? "lesson-material-processing",
   });
 
   return job;
 }
 
-export async function enqueueLearningMaterialBatchFinalize(
-  data: LearningMaterialBatchFinalizeJobData,
+export async function enqueueLessonMaterialBatchFinalize(
+  data: LessonMaterialBatchFinalizeJobData,
 ) {
-  const jobId = `learning-material-batch-${data.batchId}`;
+  const jobId = `lesson-material-batch-${data.batchId}`;
 
-  console.log("[queue] enqueueLearningMaterialBatchFinalize: enqueueing job", {
+  console.log("[queue] enqueueLessonMaterialBatchFinalize: enqueueing job", {
     batchId: data.batchId,
-    topicId: data.topicId,
+    lessonId: data.lessonId,
     classroomId: data.classroomId,
     jobId,
   });
 
-  const job = await getLearningMaterialBatchFinalizeQueue().add(
-    "finalize-learning-material-batch",
+  const job = await getLessonMaterialBatchFinalizeQueue().add(
+    "finalize-lesson-material-batch",
     data,
     {
       jobId,
@@ -181,11 +181,11 @@ export async function enqueueLearningMaterialBatchFinalize(
     },
   );
 
-  console.log("[queue] enqueueLearningMaterialBatchFinalize: job enqueued", {
+  console.log("[queue] enqueueLessonMaterialBatchFinalize: job enqueued", {
     batchId: data.batchId,
-    topicId: data.topicId,
+    lessonId: data.lessonId,
     jobId: job?.id ?? jobId,
-    queueName: job?.queueName ?? "learning-material-batch-finalize",
+    queueName: job?.queueName ?? "lesson-material-batch-finalize",
   });
 
   return job;
@@ -226,3 +226,4 @@ export async function closeQueues() {
 
   await closeRedisConnections();
 }
+

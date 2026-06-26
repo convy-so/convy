@@ -1,10 +1,10 @@
-import { BookOpen, Calendar, CheckCircle, ChevronLeft, Clock, PlayCircle } from "lucide-react";
+﻿import { BookOpen, Calendar, CheckCircle, ChevronLeft, Clock, PlayCircle } from "lucide-react";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { Link } from "@/i18n/routing";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { getDb } from "@/shared/db";
-import { classroomStudents, learningSessions } from "@/shared/db/schema/learning";
+import { classroomStudents, studentSessions } from "@/shared/db/schema/learning";
 
 export async function StudentSessionsPageContent({
   classroomId,
@@ -32,14 +32,14 @@ export async function StudentSessionsPageContent({
 
   const sessions =
     studentIds.length > 0
-      ? await getDb().query.learningSessions.findMany({
+      ? await getDb().query.studentSessions.findMany({
           where: and(
-            inArray(learningSessions.classroomStudentId, studentIds),
-            eq(learningSessions.sessionType, "tutoring"),
+            inArray(studentSessions.classroomStudentId, studentIds),
+            eq(studentSessions.sessionType, "tutoring"),
           ),
-          orderBy: [desc(learningSessions.updatedAt)],
+          orderBy: [desc(studentSessions.updatedAt)],
           with: {
-            topic: true,
+            lesson: true,
             classroomStudent: {
               with: {
                 classroom: true,
@@ -62,12 +62,12 @@ export async function StudentSessionsPageContent({
           </Link>
         ) : null}
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          Tutoring Sessions
+          Learning Sessions
         </h1>
         <p className="mt-1 text-lg text-slate-500">
           {selectedClassroom
-            ? `Review or resume sessions for ${selectedClassroom.title}.`
-            : "Review your past conversations or resume active ones."}
+            ? `Review or continue your lesson sessions for ${selectedClassroom.title}.`
+            : "Review your past lesson activity or continue active lessons."}
         </p>
       </div>
 
@@ -95,7 +95,7 @@ export async function StudentSessionsPageContent({
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">
-                      {learningSession.topic?.title || "General Tutoring Session"}
+                      {learningSession.lesson?.title || "General Learning Session"}
                     </h3>
                     <p className="mt-1 text-sm font-medium text-slate-600">
                       {learningSession.classroomStudent?.classroom.title ??
@@ -124,14 +124,14 @@ export async function StudentSessionsPageContent({
                   {learningSession.sessionStatus === "active" ? (
                     <Link
                       href={
-                        learningSession.topicId
-                          ? `/student/classes/${learningSession.classroomStudent?.classroomId}/lessons/${learningSession.topicId}`
+                        learningSession.lessonId
+                          ? `/student/classes/${learningSession.classroomStudent?.classroomId}/lessons/${learningSession.lessonId}`
                           : "/student/classes"
                       }
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 font-medium text-white transition-colors hover:bg-slate-800 sm:w-auto"
                     >
                       <PlayCircle className="h-4 w-4" />
-                      Resume Session
+                      Continue Lesson
                     </Link>
                   ) : null}
                   {learningSession.sessionStatus === "completed" &&
@@ -150,11 +150,11 @@ export async function StudentSessionsPageContent({
               <BookOpen className="h-10 w-10 text-slate-300" />
             </div>
             <h3 className="mb-2 text-xl font-bold text-slate-900">
-              No learning sessions yet
+              No sessions yet
             </h3>
             <p className="mx-auto max-w-sm text-slate-500">
-              When your teacher starts a class or assigns a topic, your sessions
-              will appear here.
+              When your teacher activates a lesson for your class, your learning
+              sessions will appear here.
             </p>
           </div>
         )}
@@ -162,3 +162,4 @@ export async function StudentSessionsPageContent({
     </div>
   );
 }
+

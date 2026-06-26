@@ -1,11 +1,11 @@
 export {
-  getLearningMeDataForSession,
-  getLearningMeData,
+  getStudentMeDataForSession,
+  getStudentMeData,
   getMyPatternSummaries,
   getOnboardingStateData,
   getTutoringSessionInitialData,
-  getStudentLearningWorkspaceInitialData,
-} from "@/shared/http/page-data/student-learning-page-data";
+  getStudentWorkspaceInitialData,
+} from "@/shared/http/page-data/student-workspace-page-data";
 
 export {
   getClassroomStudentOverviewData,
@@ -14,21 +14,21 @@ export {
 } from "@/shared/http/page-data/teacher-student-page-data";
 
 export {
-  getTopicOverviewData,
-  getTopicSetupData,
-  getTopicReportsData,
-  getTopicQuestionsData,
-  getTopicMaterialsData,
-  getTopicReadinessData,
-} from "@/shared/http/page-data/teacher-topic-page-data";
+  getLessonOverviewData,
+  getLessonSetupData,
+  getLessonReportsData,
+  getLessonQuestionsData,
+  getLessonMaterialsData,
+  getLessonReadinessData,
+} from "@/shared/http/page-data/teacher-lesson-page-data";
 
 export {
   getClassroomStudentsData,
   getTeacherClassroomsData,
-  getClassroomTopicsData,
+  getClassroomLessonsData,
   getClassroomAssignedSurveysData,
-  getLearningInterventionsData,
-  getTeacherLearningWorkspaceInitialData,
+  getLessonInterventionsData,
+  getTeacherTeachingWorkspaceInitialData,
 } from "@/shared/http/page-data/teacher-classroom-page-data";
 
 export {
@@ -57,3 +57,4 @@ export {
 export {
   getSurveyAnalyticsInitialData,
 } from "@/shared/http/page-data/survey-analytics-page-data";
+

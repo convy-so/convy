@@ -1,10 +1,10 @@
-import { normalizeLearningMaterialUploadAttemptStage } from "@/features/tutoring/server/materials-route-service";
+﻿import { normalizeLearningMaterialUploadAttemptStage } from "@/features/tutoring/server/materials-route-service";
 
 export function serializeUploadAttempt(attempt: {
   id: string;
   previousAttemptId?: string | null;
   batchId: string;
-  topicId: string;
+  lessonId: string;
   uploadedByUserId: string;
   fileName: string;
   title?: string | null;
@@ -31,7 +31,7 @@ export function serializeUploadAttempt(attempt: {
     id: attempt.id,
     previousAttemptId: attempt.previousAttemptId ?? null,
     batchId: attempt.batchId,
-    topicId: attempt.topicId,
+    lessonId: attempt.lessonId,
     uploadedByUserId: attempt.uploadedByUserId,
     fileName: attempt.fileName,
     title: attempt.title ?? null,
@@ -56,3 +56,4 @@ export function serializeUploadAttempt(attempt: {
     updatedAt: attempt.updatedAt,
   };
 }
+

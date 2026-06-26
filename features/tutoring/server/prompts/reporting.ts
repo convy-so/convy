@@ -7,7 +7,7 @@ import {
   renderTranscript,
 } from "@/features/tutoring/server/prompt-serializers";
 import type {
-  LearningSessionState,
+  StudentSessionState,
   StudentInterestProfile,
   TeacherProgressReport,
 } from "@/features/tutoring/public-server";
@@ -39,8 +39,8 @@ export function buildTeacherOnboardingSummaryPrompt(input: {
 
 export function buildReportingPrompt(input: {
   studentName: string;
-  topicTitle: string;
-  sessionState: LearningSessionState;
+  lessonTitle: string;
+  sessionState: StudentSessionState;
   teachingPlaybook: Record<string, unknown> | null;
   transcript: Array<{
     role: string;
@@ -52,7 +52,7 @@ export function buildReportingPrompt(input: {
   return [
     buildPromptFrame({
       role: "Generate a teacher-facing progress report for one tutoring session.",
-      goal: `Explain ${input.studentName}'s progress in ${input.topicTitle} using grounded session evidence.`,
+      goal: `Explain ${input.studentName}'s progress in ${input.lessonTitle} using grounded session evidence.`,
       constraints: [
         "Ground claims in the extracted evidence, session state, and transcript.",
         "Be explicit about uncertainty when evidence is limited.",
@@ -67,7 +67,7 @@ export function buildReportingPrompt(input: {
       ],
     }),
     renderTaggedSection("student", input.studentName),
-    renderTaggedSection("topic", input.topicTitle),
+    renderTaggedSection("lesson", input.lessonTitle),
     renderTaggedSection(
       "session_state",
       renderReportState(input.sessionState, input.teachingPlaybook),
@@ -78,3 +78,4 @@ export function buildReportingPrompt(input: {
     .filter(Boolean)
     .join("\n\n");
 }
+

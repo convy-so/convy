@@ -1,6 +1,5 @@
-import {
+﻿import {
   LEARNING_STATUS,
-  MATERIAL_UPLOAD_ATTEMPT_REVIEW_ALIAS,
   MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES,
   MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES,
 } from "@/shared/learning/constants";
@@ -8,15 +7,11 @@ import {
 export type LearningMaterialUploadAttemptStatus =
   (typeof MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES)[number];
 
-export type LearningMaterialUploadAttemptStage = Exclude<
-  (typeof MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES)[number],
-  "review"
->;
+export type LearningMaterialUploadAttemptStage =
+  (typeof MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES)[number];
 
 export function normalizeLearningMaterialUploadAttemptStage(stage: string) {
-  return stage === MATERIAL_UPLOAD_ATTEMPT_REVIEW_ALIAS
-    ? LEARNING_STATUS.uploadStageAnalysis
-    : stage;
+  return stage;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -78,7 +73,7 @@ function isRetryableAttemptError(error: unknown) {
     message.includes("unsupported learning material format") ||
     message.includes("file is required") ||
     message.includes("user is no longer authorized") ||
-    message.includes("topic not found") ||
+    message.includes("lesson not found") ||
     message.includes("could not be found for processing")
   ) {
     return false;
@@ -124,11 +119,11 @@ function getUserMessageForStageFailure(
     case "extraction":
       return "This file was uploaded, but its text could not be extracted. Try again or use a different file.";
     case "analysis":
-      return "This file was uploaded, but the teaching-material review step failed. Try again.";
+      return "This file was uploaded, but the material analysis step failed. Try again.";
     case "indexing":
       return "This file was uploaded, but saving the processed material failed. Try again.";
     case "pack_build":
-      return "This file was processed, but the topic grounding pack could not be rebuilt. Try again.";
+      return "This file was processed, but the lesson grounding pack could not be rebuilt. Try again.";
     default:
       return "This file could not be processed. Try again.";
   }
@@ -185,3 +180,5 @@ export function isMaterialAnalysisFailed(
     typeof analysis?.analysisError === "string"
   );
 }
+
+

@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 import { LANG_TO_PG_CONFIG, type PgLanguage } from "@/shared/retrieval/core";
 
@@ -11,13 +11,13 @@ export type EvidenceContextItem = {
   metadata: Record<string, unknown>;
 };
 
-export type ReplaceLearningEvidenceEmbeddingsParams = {
+export type ReplaceLessonEvidenceEmbeddingsParams = {
   sourceType: "material" | "report" | "interaction" | "pattern";
   sourceId: string;
   content: string;
   classroomStudentId?: string | null;
   studentUserId?: string | null;
-  topicId?: string | null;
+  lessonId?: string | null;
   classroomId?: string | null;
   language?: string | null;
   subjectKey?: string | null;
@@ -67,7 +67,7 @@ function getStringArray(value: unknown, key: string): string[] {
 }
 
 export function buildReportEvidenceText(report: {
-  topic?: { title?: string | null } | null;
+  lesson?: { title?: string | null } | null;
   masteryPercent: number;
   report: Record<string, unknown>;
 }) {
@@ -80,7 +80,7 @@ export function buildReportEvidenceText(report: {
     : [];
 
   return [
-    `Topic: ${report.topic?.title ?? "Unknown topic"}`,
+    `Lesson: ${report.lesson?.title ?? "Unknown lesson"}`,
     `Mastery percent: ${report.masteryPercent}`,
     `Student summary: ${getScalarText(payload.studentSummary)}`,
     `Pedagogical summary: ${getScalarText(payload.pedagogicalSummary)}`,
@@ -172,3 +172,4 @@ export function buildMaterialEvidenceText(params: {
     })
     .join("\n\n---\n\n");
 }
+

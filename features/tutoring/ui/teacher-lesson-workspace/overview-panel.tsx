@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { Check, ExternalLink, Loader2, RotateCcw, Sparkles, UploadCloud } from "lucide-react";
 
 import { formatAttemptStatus } from "@/features/tutoring/ui/lesson-editor-helpers";
 
-import type { MaterialUploadAttempt, TopicMaterial } from "./workspace-model";
+import type { MaterialUploadAttempt, LessonMaterial } from "./workspace-model";
 
 function getStringArray(value: unknown) {
   return Array.isArray(value)
@@ -12,7 +12,7 @@ function getStringArray(value: unknown) {
     : [];
 }
 
-function getMaterialReviewState(material: TopicMaterial) {
+function getMaterialReviewState(material: LessonMaterial) {
   const analysis = material.analysis ?? {};
   const failed =
     analysis.analysisStatus === "failed" ||
@@ -26,22 +26,22 @@ function getMaterialReviewState(material: TopicMaterial) {
   return { failed, coverage, recommendedEdits, groundingSummary };
 }
 
-function formatTopicStatusLabel(value: string) {
+function formatLessonStatusLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 type OverviewPanelProps = {
   classroomTitle: string;
-  topicStatus: string;
-  topicSubjectLabel: string;
-  topicLocaleLabel: string;
+  lessonStatus: string;
+  lessonSubjectLabel: string;
+  lessonLocaleLabel: string;
   sessionTitle: string;
   setSessionTitle: (value: string) => void;
-  selectedTopicTitle: string;
+  selectedLessonTitle: string;
   rawOutcomeNotes: string;
   setRawOutcomeNotes: (value: string) => void;
   outcomeReviewNotes: string[];
-  materials: TopicMaterial[];
+  materials: LessonMaterial[];
   materialTitle: string;
   setMaterialTitle: (value: string) => void;
   materialDescription: string;
@@ -56,15 +56,15 @@ type OverviewPanelProps = {
   handleSaveOutcomes: () => Promise<void>;
   uploadMaterial: () => void;
   statusHint: string;
-  isActivationEligibleTopic: boolean;
+  isActivationEligibleLesson: boolean;
   isActivationStateLoading: boolean;
   isActivationReady: boolean;
   canActivate: boolean;
   canPause: boolean;
   canArchive: boolean;
   isActivationStateError: boolean;
-  updateTopicStatus: (status: "active" | "paused" | "archived") => void;
-  isUpdateTopicStatusPending: boolean;
+  updateLessonStatus: (status: "active" | "paused" | "archived") => void;
+  isUpdateLessonStatusPending: boolean;
   isSavingSessionTitle: boolean;
   isGeneratingOutcomes: boolean;
   isSavingOutcomes: boolean;
@@ -74,12 +74,12 @@ type OverviewPanelProps = {
 export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
   const {
     classroomTitle,
-    topicStatus,
-    topicSubjectLabel,
-    topicLocaleLabel,
+    lessonStatus,
+    lessonSubjectLabel,
+    lessonLocaleLabel,
     sessionTitle,
     setSessionTitle,
-    selectedTopicTitle,
+    selectedLessonTitle,
     rawOutcomeNotes,
     setRawOutcomeNotes,
     outcomeReviewNotes,
@@ -98,14 +98,14 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
     handleSaveOutcomes,
     uploadMaterial,
     statusHint,
-    isActivationEligibleTopic,
+    isActivationEligibleLesson,
     isActivationStateLoading,
     isActivationReady,
     canActivate,
     canPause,
     canArchive,
-    updateTopicStatus,
-    isUpdateTopicStatusPending,
+    updateLessonStatus,
+    isUpdateLessonStatusPending,
     isSavingSessionTitle,
     isGeneratingOutcomes,
     isSavingOutcomes,
@@ -119,9 +119,9 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
           <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <span>{classroomTitle}</span>
             <span>&bull;</span>
-            <span>{topicSubjectLabel}</span>
+            <span>{lessonSubjectLabel}</span>
             <span>&bull;</span>
-            <span>{topicLocaleLabel}</span>
+            <span>{lessonLocaleLabel}</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
             {sessionTitle}
@@ -136,9 +136,9 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-                {formatTopicStatusLabel(topicStatus)}
+                {formatLessonStatusLabel(lessonStatus)}
               </span>
-              {isActivationEligibleTopic ? (
+              {isActivationEligibleLesson ? (
                 isActivationStateLoading ? (
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
                     Checking readiness
@@ -160,25 +160,25 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => updateTopicStatus("active")}
-              disabled={!canActivate || isUpdateTopicStatusPending}
+              onClick={() => updateLessonStatus("active")}
+              disabled={!canActivate || isUpdateLessonStatusPending}
               className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {topicStatus === "active" ? <Check className="h-4 w-4" /> : null}
-              {topicStatus === "paused" ? "Resume session" : "Activate session"}
+              {lessonStatus === "active" ? <Check className="h-4 w-4" /> : null}
+              {lessonStatus === "paused" ? "Resume session" : "Activate session"}
             </button>
             <button
               type="button"
-              onClick={() => updateTopicStatus("paused")}
-              disabled={!canPause || isUpdateTopicStatusPending}
+              onClick={() => updateLessonStatus("paused")}
+              disabled={!canPause || isUpdateLessonStatusPending}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Pause
             </button>
             <button
               type="button"
-              onClick={() => updateTopicStatus("archived")}
-              disabled={!canArchive || isUpdateTopicStatusPending}
+              onClick={() => updateLessonStatus("archived")}
+              disabled={!canArchive || isUpdateLessonStatusPending}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Archive
@@ -216,7 +216,7 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
                 <button
                   type="button"
                   onClick={() => void handleSaveSessionTitle()}
-                  disabled={isSavingSessionTitle || sessionTitle.trim() === selectedTopicTitle.trim()}
+                  disabled={isSavingSessionTitle || sessionTitle.trim() === selectedLessonTitle.trim()}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSavingSessionTitle ? (
@@ -474,7 +474,7 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
                               </div>
                               {review.failed ? (
                                 <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                                  AI review did not complete. The file is stored, but activation will wait until the material can be checked against the outcomes.
+                                  AI analysis did not complete. The file is stored, but activation will wait until the material can be checked against the outcomes.
                                 </div>
                               ) : review.groundingSummary || review.coverage[0] || review.recommendedEdits[0] ? (
                                 <div className="mt-3 space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-950">
@@ -496,7 +496,7 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
                             </div>
 
                             <a
-                              href={`/api/media/learning/${material.id}`}
+                              href={`/api/media/lessons/${material.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
@@ -522,3 +522,4 @@ export function TeacherLessonOverviewPanel(props: OverviewPanelProps) {
     </section>
   );
 }
+

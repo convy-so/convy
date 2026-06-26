@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 
 import { createTutorTools } from "@/features/tutoring/server/agent-tools";
 import type { ExpertFrameworkCapabilityGuidance } from "@/features/tutoring/public-server";
@@ -206,7 +206,7 @@ async function run() {
     }
 
     const tools = createTutorTools({
-      topicTitle: "Cell Biology",
+      lessonTitle: "Cell Biology",
       studentContext: "Prefers concrete visuals.",
       capabilityGuidance: createCapabilityGuidance(),
       priorQuizIds: ["quiz_123"],
@@ -289,7 +289,7 @@ async function run() {
     assert.equal(parsedGradeInput.conceptKey, "mitosis");
 
     const missingQuizContextTools = createTutorTools({
-      topicTitle: "Cell Biology",
+      lessonTitle: "Cell Biology",
       studentContext: "Prefers concrete visuals.",
       capabilityGuidance: createCapabilityGuidance({
         search_image: { enabled: false, policy: "", maxUsesPerTurn: 2 },
@@ -315,7 +315,7 @@ async function run() {
     assert.equal(missingQuizGrade.success, false);
 
     const limitedMediaTools = createTutorTools({
-      topicTitle: "Cell Biology",
+      lessonTitle: "Cell Biology",
       studentContext: "Prefers concrete visuals.",
       capabilityGuidance: createCapabilityGuidance({
         search_image: {
@@ -385,3 +385,4 @@ run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+

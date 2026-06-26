@@ -219,7 +219,7 @@
         "batch": "Batch B"
       },
       {
-        "path": "shared/http/page-data/student-learning-page-data.ts",
+        "path": "shared/http/page-data/student-workspace-page-data.ts",
         "action": "keep",
         "lineCount": 333,
         "tags": [
@@ -5750,7 +5750,7 @@
         "features/tutoring/server/student-service/validation.ts",
         "shared/http/action-result.ts",
         "shared/http/page-data/page-data-context.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/survey-analytics-page-data.ts",
         "shared/http/page-data/survey-creation-page-data.ts",
         "shared/http/page-data/survey-details-page-data.ts",
@@ -10374,7 +10374,7 @@
         "features/tutoring/ui/student-profile-page.tsx",
         "features/tutoring/ui/teacher-lesson-workspace/index.tsx",
         "features/tutoring/ui/teacher-reports-page.tsx",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/teacher-student-page-data.ts",
         "shared/http/page-data/teacher-topic-page-data.ts",
         "shared/ui/workspace/dashboard-sidebar.tsx"
@@ -10398,9 +10398,9 @@
         "server-only",
         "@/features/tutoring/server/classroom-access",
         "@/features/tutoring/server/expert-framework-schemas",
-        "@/features/tutoring/server/learning-foundation-schemas",
-        "@/features/tutoring/server/learning-session-schemas",
-        "@/features/tutoring/server/learning-session-storage",
+        "@/features/tutoring/server/lesson-foundation-schemas",
+        "@/features/tutoring/server/student-session-schemas",
+        "@/features/tutoring/server/student-session-storage",
         "@/features/tutoring/server/mem0",
         "@/features/tutoring/server/expert-review-storage",
         "@/features/tutoring/server/framework-runtime-storage",
@@ -10492,7 +10492,7 @@
         "shared/ai/index.ts",
         "shared/ai/scope-policy.ts",
         "shared/db/schema/learning.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/teacher-topic-page-data.ts",
         "shared/realtime/server.ts"
       ],
@@ -10500,7 +10500,7 @@
       "dependentCount": 87
     },
     {
-      "path": "features/tutoring/scripts/cleanup-failed-learning-materials.ts",
+      "path": "features/tutoring/scripts/cleanup-failed-lesson-materials.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "feature-module",
       "boundary": "private module",
@@ -10541,7 +10541,7 @@
       "dependentCount": 0
     },
     {
-      "path": "features/tutoring/scripts/prune-learning-material-upload-attempts.ts",
+      "path": "features/tutoring/scripts/prune-lesson-material-upload-attempts.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "feature-module",
       "boundary": "private module",
@@ -10615,7 +10615,7 @@
         "features/tutoring/server/onboarding-route-service.ts",
         "features/tutoring/server/teacher-route-access.ts",
         "features/tutoring/server/tutoring-route-orchestrator.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/teacher-topic-page-data.ts"
       ],
       "importCount": 5,
@@ -11405,7 +11405,7 @@
       ],
       "directDependents": [
         "features/tutoring/public-server.ts",
-        "features/tutoring/server/learning-session-schemas.ts"
+        "features/tutoring/server/student-session-schemas.ts"
       ],
       "importCount": 2,
       "dependentCount": 2
@@ -11628,7 +11628,7 @@
       "dependentCount": 3
     },
     {
-      "path": "features/tutoring/server/learning-foundation-schemas.ts",
+      "path": "features/tutoring/server/lesson-foundation-schemas.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "server-module",
       "boundary": "private module",
@@ -11642,14 +11642,14 @@
       ],
       "directDependents": [
         "features/tutoring/public-server.ts",
-        "features/tutoring/server/learning-session-schemas.ts",
-        "features/tutoring/server/learning-session-storage.ts"
+        "features/tutoring/server/student-session-schemas.ts",
+        "features/tutoring/server/student-session-storage.ts"
       ],
       "importCount": 1,
       "dependentCount": 3
     },
     {
-      "path": "features/tutoring/server/learning-session-schemas.ts",
+      "path": "features/tutoring/server/student-session-schemas.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "server-module",
       "boundary": "private module",
@@ -11661,17 +11661,17 @@
       "imports": [
         "zod",
         "@/features/tutoring/server/expert-framework-schemas",
-        "@/features/tutoring/server/learning-foundation-schemas"
+        "@/features/tutoring/server/lesson-foundation-schemas"
       ],
       "directDependents": [
         "features/tutoring/public-server.ts",
-        "features/tutoring/server/learning-session-storage.ts"
+        "features/tutoring/server/student-session-storage.ts"
       ],
       "importCount": 3,
       "dependentCount": 2
     },
     {
-      "path": "features/tutoring/server/learning-session-state-errors.ts",
+      "path": "features/tutoring/server/student-session-state-errors.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "server-module",
       "boundary": "private module",
@@ -11682,14 +11682,14 @@
       "lineCount": 13,
       "imports": [],
       "directDependents": [
-        "features/tutoring/server/learning-session-storage.ts",
+        "features/tutoring/server/student-session-storage.ts",
         "features/tutoring/server/route-errors.ts"
       ],
       "importCount": 0,
       "dependentCount": 2
     },
     {
-      "path": "features/tutoring/server/learning-session-storage.ts",
+      "path": "features/tutoring/server/student-session-storage.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "server-module",
       "boundary": "private module",
@@ -11705,9 +11705,9 @@
         "@/shared/db",
         "@/shared/db/schema",
         "@/shared/db/schema/learning",
-        "@/features/tutoring/server/learning-foundation-schemas",
-        "@/features/tutoring/server/learning-session-schemas",
-        "@/features/tutoring/server/learning-session-state-errors"
+        "@/features/tutoring/server/lesson-foundation-schemas",
+        "@/features/tutoring/server/student-session-schemas",
+        "@/features/tutoring/server/student-session-state-errors"
       ],
       "directDependents": [
         "features/tutoring/public-server.ts"
@@ -11793,7 +11793,7 @@
         "./rebuild-pack"
       ],
       "directDependents": [
-        "features/tutoring/scripts/cleanup-failed-learning-materials.ts",
+        "features/tutoring/scripts/cleanup-failed-lesson-materials.ts",
         "features/tutoring/server/content-scope-service.ts",
         "features/tutoring/server/materials-route-service/material-batch-finalizer.ts"
       ],
@@ -11875,7 +11875,7 @@
         "@/features/tutoring/server/access"
       ],
       "directDependents": [
-        "features/tutoring/scripts/cleanup-failed-learning-materials.ts",
+        "features/tutoring/scripts/cleanup-failed-lesson-materials.ts",
         "features/tutoring/server/actions/lesson-actions.ts",
         "features/tutoring/server/api/lesson-activation-state-route.ts",
         "features/tutoring/server/api/lesson-material-upload-attempts-route.ts",
@@ -11883,8 +11883,8 @@
         "features/tutoring/server/api/lesson-materials-route.ts",
         "features/tutoring/server/api/lesson-readiness-route.ts",
         "features/tutoring/server/api/retry-lesson-material-upload-route.ts",
-        "features/tutoring/workers/learning-material-batch.worker.ts",
-        "features/tutoring/workers/learning-material.worker.ts",
+        "features/tutoring/workers/lesson-material-batch.worker.ts",
+        "features/tutoring/workers/lesson-material.worker.ts",
         "shared/http/page-data/teacher-topic-page-data.ts"
       ],
       "importCount": 7,
@@ -12523,7 +12523,7 @@
       ],
       "directDependents": [
         "app/api/learning/onboarding/route.ts",
-        "shared/http/page-data/student-learning-page-data.ts"
+        "shared/http/page-data/student-workspace-page-data.ts"
       ],
       "importCount": 10,
       "dependentCount": 2
@@ -12601,7 +12601,7 @@
         "features/tutoring/server/tutor-runtime-service.ts",
         "features/tutoring/server/tutoring-prompt-service.ts",
         "features/tutoring/workers/tutoring-report.worker.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/teacher-student-page-data.ts"
       ],
       "importCount": 4,
@@ -13197,7 +13197,7 @@
       "imports": [
         "@/shared/http/api-error",
         "@/features/auth/public-server",
-        "@/features/tutoring/server/learning-session-state-errors",
+        "@/features/tutoring/server/student-session-state-errors",
         "@/features/tutoring/public-server"
       ],
       "directDependents": [
@@ -13297,7 +13297,7 @@
       ],
       "directDependents": [
         "features/tutoring/server/actions/student-actions.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/teacher-classroom-page-data.ts"
       ],
       "importCount": 4,
@@ -13652,7 +13652,7 @@
         "features/tutoring/server/actions/tutoring-actions.ts",
         "features/tutoring/server/api/lesson-tutoring-session-route.ts",
         "features/tutoring/server/tutoring-turn-types.ts",
-        "shared/http/page-data/student-learning-page-data.ts"
+        "shared/http/page-data/student-workspace-page-data.ts"
       ],
       "importCount": 7,
       "dependentCount": 4
@@ -14598,7 +14598,7 @@
       "dependentCount": 1
     },
     {
-      "path": "features/tutoring/workers/learning-material-batch.worker.ts",
+      "path": "features/tutoring/workers/lesson-material-batch.worker.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "worker-module",
       "boundary": "private module",
@@ -14622,7 +14622,7 @@
       "dependentCount": 1
     },
     {
-      "path": "features/tutoring/workers/learning-material.worker.ts",
+      "path": "features/tutoring/workers/lesson-material.worker.ts",
       "ownerArea": "features/tutoring",
       "fileRole": "worker-module",
       "boundary": "private module",
@@ -15960,9 +15960,9 @@
         "features/surveys/server/use-cases/get-survey-analytics.ts",
         "features/surveys/server/use-cases/submit-sample-turn-helpers.ts",
         "features/surveys/server/use-cases/submit-sample-turn.ts",
-        "features/tutoring/scripts/cleanup-failed-learning-materials.ts",
+        "features/tutoring/scripts/cleanup-failed-lesson-materials.ts",
         "features/tutoring/scripts/inspect-expert-frameworks.ts",
-        "features/tutoring/scripts/prune-learning-material-upload-attempts.ts",
+        "features/tutoring/scripts/prune-lesson-material-upload-attempts.ts",
         "features/tutoring/scripts/reset-auto-published-frameworks.ts",
         "features/tutoring/server/access.ts",
         "features/tutoring/server/actions/intervention-actions.ts",
@@ -15986,7 +15986,7 @@
         "features/tutoring/server/framework-records.ts",
         "features/tutoring/server/framework-runtime-storage.ts",
         "features/tutoring/server/intervention-service.ts",
-        "features/tutoring/server/learning-session-storage.ts",
+        "features/tutoring/server/student-session-storage.ts",
         "features/tutoring/server/lesson-grounding-pack-service/rebuild-pack.ts",
         "features/tutoring/server/lesson-service.ts",
         "features/tutoring/server/materials-route-service/material-batch-finalizer.ts",
@@ -16006,7 +16006,7 @@
         "shared/ai/few-shot-library.ts",
         "shared/ai/guidance.ts",
         "shared/billing/logger.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/survey-creation-page-data.ts",
         "shared/http/page-data/survey-details-page-data.ts",
         "shared/http/page-data/survey-response-page-data.ts",
@@ -16398,9 +16398,9 @@
         "features/surveys/server/use-cases/get-survey-analytics.ts",
         "features/surveys/server/use-cases/submit-sample-turn-helpers.ts",
         "features/surveys/server/use-cases/submit-sample-turn.ts",
-        "features/tutoring/scripts/cleanup-failed-learning-materials.ts",
+        "features/tutoring/scripts/cleanup-failed-lesson-materials.ts",
         "features/tutoring/scripts/inspect-expert-frameworks.ts",
-        "features/tutoring/scripts/prune-learning-material-upload-attempts.ts",
+        "features/tutoring/scripts/prune-lesson-material-upload-attempts.ts",
         "features/tutoring/scripts/reset-auto-published-frameworks.ts",
         "features/tutoring/server/access.ts",
         "features/tutoring/server/actions/intervention-actions.ts",
@@ -16422,7 +16422,7 @@
         "features/tutoring/server/framework-records.ts",
         "features/tutoring/server/framework-runtime-storage.ts",
         "features/tutoring/server/intervention-service.ts",
-        "features/tutoring/server/learning-session-storage.ts",
+        "features/tutoring/server/student-session-storage.ts",
         "features/tutoring/server/lesson-grounding-pack-service/rebuild-pack.ts",
         "features/tutoring/server/lesson-service.ts",
         "features/tutoring/server/materials-route-service/material-batch-finalizer.ts",
@@ -16440,7 +16440,7 @@
         "features/tutoring/workers/tutoring-report.worker.ts",
         "shared/ai/guidance.ts",
         "shared/db/index.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/survey-creation-page-data.ts",
         "shared/http/page-data/survey-details-page-data.ts",
         "shared/http/page-data/survey-response-page-data.ts",
@@ -16694,7 +16694,7 @@
         "app/actions/admin.ts",
         "app/actions/expert-knowledge.ts",
         "app/api/learning/expert/annotations/route.ts",
-        "features/tutoring/server/learning-session-storage.ts",
+        "features/tutoring/server/student-session-storage.ts",
         "shared/db/schema.ts",
         "shared/db/schema/feedback.ts",
         "shared/db/schema/privacy.ts",
@@ -17125,7 +17125,7 @@
       ],
       "lineCount": 60,
       "imports": [
-        "@/shared/http/page-data/student-learning-page-data",
+        "@/shared/http/page-data/student-workspace-page-data",
         "@/shared/http/page-data/teacher-student-page-data",
         "@/shared/http/page-data/teacher-topic-page-data",
         "@/shared/http/page-data/teacher-classroom-page-data",
@@ -17191,7 +17191,7 @@
         "@/features/auth/public-server"
       ],
       "directDependents": [
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/teacher-classroom-page-data.ts",
         "shared/http/page-data/teacher-student-page-data.ts",
         "shared/http/page-data/teacher-topic-page-data.ts",
@@ -17201,7 +17201,7 @@
       "dependentCount": 5
     },
     {
-      "path": "shared/http/page-data/student-learning-page-data.ts",
+      "path": "shared/http/page-data/student-workspace-page-data.ts",
       "ownerArea": "shared/http",
       "fileRole": "shared-service",
       "boundary": "private module",
@@ -17632,7 +17632,7 @@
         "i18n/request.ts",
         "i18n/routing.ts",
         "shared/email/email-service.ts",
-        "shared/http/page-data/student-learning-page-data.ts",
+        "shared/http/page-data/student-workspace-page-data.ts",
         "shared/http/page-data/teacher-classroom-page-data.ts",
         "shared/http/page-data/teacher-topic-page-data.ts",
         "shared/http/page-data/workspace-shell-page-data.ts",
@@ -17842,8 +17842,8 @@
         "features/tutoring/server/materials-route-service/material-batch-finalizer.ts",
         "features/tutoring/server/materials-route-service/material-upload-attempt-processor.ts",
         "features/tutoring/server/tutoring-session-lifecycle.ts",
-        "features/tutoring/workers/learning-material-batch.worker.ts",
-        "features/tutoring/workers/learning-material.worker.ts",
+        "features/tutoring/workers/lesson-material-batch.worker.ts",
+        "features/tutoring/workers/lesson-material.worker.ts",
         "features/tutoring/workers/tutoring-report.worker.ts",
         "shared/email/email-service.ts",
         "shared/i18n/dynamic-translations.ts",
@@ -17962,8 +17962,8 @@
         "app/api/auth/token/route.ts",
         "app/api/learning/classrooms/[classroomId]/events/route.ts",
         "features/surveys/workers/survey-analytics.worker.ts",
-        "features/tutoring/workers/learning-material-batch.worker.ts",
-        "features/tutoring/workers/learning-material.worker.ts",
+        "features/tutoring/workers/lesson-material-batch.worker.ts",
+        "features/tutoring/workers/lesson-material.worker.ts",
         "features/tutoring/workers/tutoring-report.worker.ts",
         "shared/ai/prompt-caching.ts",
         "shared/infra/cache.ts",
@@ -17997,7 +17997,7 @@
         "app/api/media/learning/[materialId]/route.ts",
         "app/api/media/surveys/[surveyId]/[mediaId]/route.ts",
         "features/privacy/server/privacy-request-service.ts",
-        "features/tutoring/scripts/cleanup-failed-learning-materials.ts",
+        "features/tutoring/scripts/cleanup-failed-lesson-materials.ts",
         "features/tutoring/server/api/lesson-materials-route.ts",
         "features/tutoring/server/materials-route-service/material-processing-artifacts.ts",
         "features/tutoring/server/materials-route-service/material-upload-attempt-processor.ts"
@@ -18085,8 +18085,8 @@
         "@/shared/infra/redis",
         "@/features/surveys/workers/survey-analytics.worker",
         "@/features/tutoring/workers/tutoring-report.worker",
-        "@/features/tutoring/workers/learning-material.worker",
-        "@/features/tutoring/workers/learning-material-batch.worker",
+        "@/features/tutoring/workers/lesson-material.worker",
+        "@/features/tutoring/workers/lesson-material-batch.worker",
         "./email.worker",
         "./content-translation.worker"
       ],

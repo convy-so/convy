@@ -1,11 +1,11 @@
-import { and, eq } from "drizzle-orm";
+﻿import { and, eq } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 
 import { getDb } from "@/shared/db";
 import {
   classroomStudents,
   classrooms,
-  learningTopics,
+  lessons,
 } from "@/shared/db/schema";
 import { normalizeAppLocale } from "@/shared/i18n/config";
 import {
@@ -53,7 +53,7 @@ export async function getPersonalClassroomDirectory(userId: string) {
           id: true,
         },
       },
-      topics: {
+      lessons: {
         columns: {
           id: true,
         },
@@ -75,39 +75,39 @@ export async function getPersonalClassroomDirectory(userId: string) {
     accessLevel: "owner" as const,
     accessRequestStatus: null,
     studentCount: classroom.students.length,
-    topicCount: classroom.topics.length,
+    lessonCount: classroom.lessons.length,
   }));
 }
 
-export async function getTeacherTopicAccess(userId: string, topicId: string) {
-  const topic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, topicId),
+export async function getTeacherLessonAccess(userId: string, lessonId: string) {
+  const lesson = await getDb().query.lessons.findFirst({
+    where: eq(lessons.id, lessonId),
     with: {
       classroom: true,
       course: true,
     },
   });
 
-  if (!topic) return null;
+  if (!lesson) return null;
 
   const classroomAccess = await getTeacherClassroomAccess(
     userId,
-    topic.classroomId,
+    lesson.classroomId,
   );
 
   if (!classroomAccess) return null;
 
   return {
-    ...topic,
+    ...lesson,
     classroom: classroomAccess,
   };
 }
 
-export async function getStudentTopicAccess(userId: string, topicId: string) {
-  const topic = await getDb().query.learningTopics.findFirst({
+export async function getStudentLessonAccess(userId: string, lessonId: string) {
+  const lesson = await getDb().query.lessons.findFirst({
     where: and(
-      eq(learningTopics.id, topicId),
-      eq(learningTopics.status, LEARNING_STATUS.topicActive),
+      eq(lessons.id, lessonId),
+      eq(lessons.status, LEARNING_STATUS.lessonActive),
     ),
     with: {
       classroom: true,
@@ -115,11 +115,11 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
     },
   });
 
-  if (!topic) return null;
+  if (!lesson) return null;
 
   const classroomStudent = await getDb().query.classroomStudents.findFirst({
     where: and(
-      eq(classroomStudents.classroomId, topic.classroomId),
+      eq(classroomStudents.classroomId, lesson.classroomId),
       eq(classroomStudents.userId, userId),
     ),
     with: {
@@ -134,7 +134,7 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
     (await getUniversalStudentInterestProfile(userId));
 
   return {
-    topic,
+    lesson,
     classroomStudent: {
       ...classroomStudent,
       interestProfile: universalInterestProfile,
@@ -142,30 +142,30 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
   };
 }
 
-const cachedGetStudentTopicAccess = unstable_cache(
-  async (userId: string, topicId: string) => await getStudentTopicAccess(userId, topicId),
-  ["learning-student-topic-access"],
+const cachedGetStudentLessonAccess = unstable_cache(
+  async (userId: string, lessonId: string) => await getStudentLessonAccess(userId, lessonId),
+  ["student-lesson-access"],
   { revalidate: 60 },
 );
 
 const cachedGetStudentTutoringAccessState = unstable_cache(
-  async (userId: string, topicId: string) =>
-    await getStudentTutoringAccessStateImpl(userId, topicId),
-  ["learning-student-tutoring-access-state"],
+  async (userId: string, lessonId: string) =>
+    await getStudentTutoringAccessStateImpl(userId, lessonId),
+  ["student-tutoring-access-state"],
   { revalidate: 60 },
 );
 
-export async function getStudentTutoringAccess(userId: string, topicId: string) {
-  const result = await cachedGetStudentTutoringAccessState(userId, topicId);
+export async function getStudentTutoringAccess(userId: string, lessonId: string) {
+  const result = await cachedGetStudentTutoringAccessState(userId, lessonId);
   return result.access;
 }
 
-async function getStudentTutoringAccessStateImpl(userId: string, topicId: string) {
-  const access = await cachedGetStudentTopicAccess(userId, topicId);
+async function getStudentTutoringAccessStateImpl(userId: string, lessonId: string) {
+  const access = await cachedGetStudentLessonAccess(userId, lessonId);
   if (!access) {
     return {
       access: null,
-      reason: STUDENT_TUTORING_ACCESS_REASON.TOPIC_UNAVAILABLE,
+      reason: STUDENT_TUTORING_ACCESS_REASON.LESSON_UNAVAILABLE,
     };
   }
 
@@ -182,12 +182,12 @@ async function getStudentTutoringAccessStateImpl(userId: string, topicId: string
   };
 }
 
-export async function getStudentTutoringAccessState(userId: string, topicId: string) {
-  return await cachedGetStudentTutoringAccessState(userId, topicId);
+export async function getStudentTutoringAccessState(userId: string, lessonId: string) {
+  return await cachedGetStudentTutoringAccessState(userId, lessonId);
 }
 
-export const getTeacherSessionAccess = getTeacherTopicAccess;
-export const getStudentSessionAccess = getStudentTopicAccess;
+export const getTeacherSessionAccess = getTeacherLessonAccess;
+export const getStudentSessionAccess = getStudentLessonAccess;
 
 export async function getPrimaryStudentMembership(userId: string) {
   const memberships = await listStudentMemberships(userId);
@@ -208,3 +208,4 @@ export async function getUniversalStudentInterestProfile(userId: string) {
   const memberships = await listStudentMemberships(userId);
   return pickUniversalStudentInterestProfile(memberships);
 }
+

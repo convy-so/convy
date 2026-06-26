@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import {
@@ -123,7 +123,7 @@ export function ExpertFrameworkVersionStudio({
     try {
       setIsSavingDraft(true);
       const result = await fetchJson<{ success: true; data: FrameworkDetail }>(
-        `/api/learning/expert/frameworks/${framework.id}`,
+        `/api/expert/frameworks/${framework.id}`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -143,7 +143,7 @@ export function ExpertFrameworkVersionStudio({
   const handleActivate = async () => {
     try {
       setIsActivating(true);
-      await fetchJson(`/api/learning/expert/frameworks/${framework.id}/activate`, {
+      await fetchJson(`/api/expert/frameworks/${framework.id}/activate`, {
         method: "POST",
       });
       const nextDraft = normalizeDraftForSave(draftFramework);
@@ -161,7 +161,7 @@ export function ExpertFrameworkVersionStudio({
   const handleArchive = async () => {
     try {
       setIsArchiving(true);
-      await fetchJson(`/api/learning/expert/frameworks/${framework.id}/archive`, {
+      await fetchJson(`/api/expert/frameworks/${framework.id}/archive`, {
         method: "POST",
       });
       setStatus("archived");
@@ -176,7 +176,7 @@ export function ExpertFrameworkVersionStudio({
   const handleDelete = async () => {
     try {
       setIsDeleting(true);
-      await fetchJson(`/api/learning/expert/frameworks/${framework.id}`, {
+      await fetchJson(`/api/expert/frameworks/${framework.id}`, {
         method: "DELETE",
       });
       toast.success("Framework deleted");
@@ -311,3 +311,4 @@ export function ExpertFrameworkVersionStudio({
     </div>
   );
 }
+

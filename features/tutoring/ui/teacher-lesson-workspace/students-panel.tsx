@@ -1,13 +1,13 @@
-"use client";
+﻿"use client";
 
 import { ExternalLink, Users } from "lucide-react";
 
 import { Link } from "@/i18n/routing";
 
-import type { TopicStudent } from "./workspace-model";
+import type { LessonStudent } from "./workspace-model";
 
 export function TeacherLessonStudentsPanel(props: {
-  students: TopicStudent[];
+  students: LessonStudent[];
   openInviteModal: () => void;
 }) {
   const { students, openInviteModal } = props;
@@ -51,7 +51,7 @@ export function TeacherLessonStudentsPanel(props: {
                 </div>
 
                 <Link
-                  href={`/dashboard/learning/students/${student.id}`}
+                  href={`/dashboard/teaching/students/${student.id}`}
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
                 >
                   Profile
@@ -69,3 +69,4 @@ export function TeacherLessonStudentsPanel(props: {
     </section>
   );
 }
+

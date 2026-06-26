@@ -9,11 +9,11 @@ export {
 } from "./classroom/student-actions";
 
 export {
-  createLearningTopicAction,
+  createLessonAction,
   normalizeLearningOutcomesAction,
-  updateLearningTopicDetailsAction,
-  updateTopicStatusAction,
-} from "./classroom/topic-actions";
+  updateLessonDetailsAction,
+  updateLessonStatusAction,
+} from "./classroom/lesson-actions";
 
 export {
   createLearningInterventionAction,

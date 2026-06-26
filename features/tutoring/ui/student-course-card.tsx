@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { AlertCircle, ArrowRight, Clock, FileText, Sparkles } from "lucide-react";
 import { Link } from "@/i18n/routing";
@@ -13,7 +13,7 @@ export type StudentCourseCardMembership = {
     title: string;
     gradeLabel: string;
   };
-  topics: Array<{ id: string; courseTitle?: string | null }>;
+  lessons: Array<{ id: string; courseTitle?: string | null }>;
 };
 
 type Props = {
@@ -75,7 +75,7 @@ export function StudentCourseCard({
         <div className="mt-3 flex flex-wrap gap-2">
           <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-gray-600">
             <Clock className="h-3.5 w-3.5" aria-hidden />
-            {membership.topics.length} lesson{membership.topics.length === 1 ? "" : "s"}
+            {membership.lessons.length} lesson{membership.lessons.length === 1 ? "" : "s"}
           </div>
           <div className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-800">
             <Sparkles className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
@@ -105,7 +105,7 @@ export function StudentCourseCard({
         <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-4">
           <span className="flex items-center gap-1.5 text-sm font-medium text-gray-500">
             <Clock className="h-4 w-4" aria-hidden />
-            {membership.topics[0]?.courseTitle ?? getSubjectDisplayLabel(null)}
+            {membership.lessons[0]?.courseTitle ?? getSubjectDisplayLabel(null)}
           </span>
           <span
             className={cn(
@@ -131,3 +131,4 @@ export function StudentCourseCard({
 
   return <div className={shellClass}>{content}</div>;
 }
+

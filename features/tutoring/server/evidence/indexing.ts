@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
-import { learningEvidenceEmbeddings } from "@/shared/db/schema";
+import { lessonEvidenceEmbeddings } from "@/shared/db/schema";
 import {
   DEFAULT_CHUNKING_VERSION,
   EMBEDDING_VERSION,
@@ -13,11 +13,11 @@ import {
 import {
   buildMaterialEvidenceText,
   buildReportEvidenceText,
-  type ReplaceLearningEvidenceEmbeddingsParams,
+  type ReplaceLessonEvidenceEmbeddingsParams,
 } from "./evidence-domain";
 
-export async function replaceLearningEvidenceEmbeddings(
-  params: ReplaceLearningEvidenceEmbeddingsParams,
+export async function replaceLessonEvidenceEmbeddings(
+  params: ReplaceLessonEvidenceEmbeddingsParams,
 ) {
   const chunks = await prepareEmbeddingsForIndexing({
     content: params.content,
@@ -35,7 +35,7 @@ export async function replaceLearningEvidenceEmbeddings(
     ],
     attribution: {
       userId: params.studentUserId ?? undefined,
-      feature: `learning-evidence-indexing:${params.sourceType}`,
+      feature: `lesson-evidence-indexing:${params.sourceType}`,
     },
   });
 
@@ -45,23 +45,23 @@ export async function replaceLearningEvidenceEmbeddings(
 
   return await getDb().transaction(async (tx) => {
     await tx
-      .delete(learningEvidenceEmbeddings)
+      .delete(lessonEvidenceEmbeddings)
       .where(
         and(
-          eq(learningEvidenceEmbeddings.sourceType, params.sourceType),
-          eq(learningEvidenceEmbeddings.sourceId, params.sourceId),
+          eq(lessonEvidenceEmbeddings.sourceType, params.sourceType),
+          eq(lessonEvidenceEmbeddings.sourceId, params.sourceId),
           params.language
-            ? eq(learningEvidenceEmbeddings.language, params.language)
+            ? eq(lessonEvidenceEmbeddings.language, params.language)
             : undefined,
         ),
       );
 
     return await tx
-      .insert(learningEvidenceEmbeddings)
+      .insert(lessonEvidenceEmbeddings)
       .values(
         chunks.map((chunk) => ({
           id: nanoid(),
-          topicId: params.topicId ?? null,
+          lessonId: params.lessonId ?? null,
           classroomId: params.classroomId ?? null,
           classroomStudentId: params.classroomStudentId ?? null,
           studentUserId: params.studentUserId ?? null,
@@ -95,13 +95,13 @@ export async function replaceLearningEvidenceEmbeddings(
   });
 }
 
-export async function indexLearningInteractionEvidence(params: {
+export async function indexStudentInteractionEvidence(params: {
   interactionId: string;
   classroomStudentId: string;
   studentUserId?: string | null;
-  topicId?: string | null;
+  lessonId?: string | null;
   classroomId?: string | null;
-  topicTitle?: string | null;
+  lessonTitle?: string | null;
   language?: string | null;
   subjectKey?: string | null;
   gradeBand?: string | null;
@@ -113,17 +113,17 @@ export async function indexLearningInteractionEvidence(params: {
   metadata?: Record<string, unknown>;
   sourceUpdatedAt?: Date | null;
 }) {
-  return await replaceLearningEvidenceEmbeddings({
+  return await replaceLessonEvidenceEmbeddings({
     sourceType: "interaction",
     sourceId: params.interactionId,
     classroomStudentId: params.classroomStudentId,
     studentUserId: params.studentUserId ?? null,
-    topicId: params.topicId ?? null,
+    lessonId: params.lessonId ?? null,
     classroomId: params.classroomId ?? null,
     language: params.language ?? "en",
     subjectKey: params.subjectKey ?? null,
     gradeBand: params.gradeBand ?? null,
-    sourceTitle: params.topicTitle ?? "Learning interaction",
+    sourceTitle: params.lessonTitle ?? "Student interaction",
     interactionType: params.interactionType,
     phaseType: params.phaseType ?? null,
     conceptKey: params.conceptKey ?? null,
@@ -133,13 +133,13 @@ export async function indexLearningInteractionEvidence(params: {
   });
 }
 
-export async function indexLearningReportEvidence(params: {
+export async function indexStudentReportEvidence(params: {
   reportId: string;
   classroomStudentId: string;
   studentUserId?: string | null;
-  topicId: string;
+  lessonId: string;
   classroomId?: string | null;
-  topicTitle?: string | null;
+  lessonTitle?: string | null;
   language?: string | null;
   subjectKey?: string | null;
   gradeBand?: string | null;
@@ -147,30 +147,30 @@ export async function indexLearningReportEvidence(params: {
   report: Record<string, unknown>;
   sourceUpdatedAt?: Date | null;
 }) {
-  return await replaceLearningEvidenceEmbeddings({
+  return await replaceLessonEvidenceEmbeddings({
     sourceType: "report",
     sourceId: params.reportId,
     classroomStudentId: params.classroomStudentId,
     studentUserId: params.studentUserId ?? null,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     classroomId: params.classroomId ?? null,
     language: params.language ?? "en",
     subjectKey: params.subjectKey ?? null,
     gradeBand: params.gradeBand ?? null,
-    sourceTitle: params.topicTitle ?? "Progress report",
+    sourceTitle: params.lessonTitle ?? "Progress report",
     sourceUpdatedAt: params.sourceUpdatedAt ?? null,
     metadata: { masteryPercent: params.masteryPercent },
     content: buildReportEvidenceText({
-      topic: params.topicTitle ? { title: params.topicTitle } : null,
+      lesson: params.lessonTitle ? { title: params.lessonTitle } : null,
       masteryPercent: params.masteryPercent,
       report: params.report,
     }),
   });
 }
 
-export async function indexLearningMaterialEvidence(params: {
+export async function indexLessonMaterialEvidence(params: {
   materialId: string;
-  topicId: string;
+  lessonId: string;
   classroomId?: string | null;
   language?: string | null;
   subjectKey?: string | null;
@@ -180,15 +180,15 @@ export async function indexLearningMaterialEvidence(params: {
   sourceDocument: Record<string, unknown>;
   groundingMap: Record<string, unknown>;
 }) {
-  return await replaceLearningEvidenceEmbeddings({
+  return await replaceLessonEvidenceEmbeddings({
     sourceType: "material",
     sourceId: params.materialId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     classroomId: params.classroomId ?? null,
     language: params.language ?? "en",
     subjectKey: params.subjectKey ?? null,
     gradeBand: params.gradeBand ?? null,
-    sourceTitle: params.sourceTitle ?? "Learning material",
+    sourceTitle: params.sourceTitle ?? "Lesson material",
     sourceUpdatedAt: params.sourceUpdatedAt ?? null,
     metadata: {
       extractor:
@@ -205,3 +205,4 @@ export async function indexLearningMaterialEvidence(params: {
     }),
   });
 }
+

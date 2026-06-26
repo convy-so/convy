@@ -1,27 +1,27 @@
-import { eq } from "drizzle-orm";
+﻿import { eq } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
 import {
   classroomStudents,
-  learningInteractions,
-  learningSessions,
-  learningTopics,
+  studentInteractions,
+  studentSessions,
+  lessons,
 } from "@/shared/db/schema";
 import { getFrameworkRecord } from "@/features/tutoring/server/framework-records";
 
-export async function getExpertAccessibleTopic(topicId: string) {
-  const topic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, topicId),
+export async function getExpertAccessibleLesson(lessonId: string) {
+  const lesson = await getDb().query.lessons.findFirst({
+    where: eq(lessons.id, lessonId),
     with: {
       classroom: true,
     },
   });
 
-  if (!topic) {
+  if (!lesson) {
     return null;
   }
 
-  return topic;
+  return lesson;
 }
 
 export async function getExpertAccessibleFramework(frameworkId: string) {
@@ -50,10 +50,10 @@ export async function getExpertAccessibleClassroomStudent(classroomStudentId: st
 }
 
 export async function getExpertAccessibleLearningSession(sessionId: string) {
-  const session = await getDb().query.learningSessions.findFirst({
-    where: eq(learningSessions.id, sessionId),
+  const session = await getDb().query.studentSessions.findFirst({
+    where: eq(studentSessions.id, sessionId),
     with: {
-      topic: {
+      lesson: {
         with: {
           classroom: true,
         },
@@ -61,7 +61,7 @@ export async function getExpertAccessibleLearningSession(sessionId: string) {
     },
   });
 
-  if (!session || !session.topic) {
+  if (!session || !session.lesson) {
     return null;
   }
 
@@ -69,12 +69,12 @@ export async function getExpertAccessibleLearningSession(sessionId: string) {
 }
 
 export async function getExpertAccessibleLearningInteraction(interactionId: string) {
-  const interaction = await getDb().query.learningInteractions.findFirst({
-    where: eq(learningInteractions.id, interactionId),
+  const interaction = await getDb().query.studentInteractions.findFirst({
+    where: eq(studentInteractions.id, interactionId),
     with: {
       session: {
         with: {
-          topic: {
+          lesson: {
             with: {
               classroom: true,
             },
@@ -84,7 +84,7 @@ export async function getExpertAccessibleLearningInteraction(interactionId: stri
     },
   });
 
-  if (!interaction || !interaction.session || !interaction.session.topic) {
+  if (!interaction || !interaction.session || !interaction.session.lesson) {
     return null;
   }
 
@@ -92,16 +92,16 @@ export async function getExpertAccessibleLearningInteraction(interactionId: stri
 }
 
 export async function resolveExpertReviewAnchor(params: {
-  topicId?: string | null;
+  lessonId?: string | null;
   classroomStudentId?: string | null;
   sessionId?: string | null;
   interactionId?: string | null;
 }) {
-  if (params.topicId) {
-    const topic = await getExpertAccessibleTopic(params.topicId);
-    if (!topic) return null;
+  if (params.lessonId) {
+    const lesson = await getExpertAccessibleLesson(params.lessonId);
+    if (!lesson) return null;
     return {
-      topicId: topic.id,
+      lessonId: lesson.id,
       classroomStudentId: params.classroomStudentId ?? null,
       sessionId: params.sessionId ?? null,
       interactionId: params.interactionId ?? null,
@@ -114,7 +114,7 @@ export async function resolveExpertReviewAnchor(params: {
     );
     if (!classroomStudent) return null;
     return {
-      topicId: params.topicId ?? null,
+      lessonId: params.lessonId ?? null,
       classroomStudentId: classroomStudent.id,
       sessionId: params.sessionId ?? null,
       interactionId: params.interactionId ?? null,
@@ -125,7 +125,7 @@ export async function resolveExpertReviewAnchor(params: {
     const session = await getExpertAccessibleLearningSession(params.sessionId);
     if (!session) return null;
     return {
-      topicId: params.topicId ?? session.topicId ?? null,
+      lessonId: params.lessonId ?? session.lessonId ?? null,
       classroomStudentId: params.classroomStudentId ?? session.classroomStudentId ?? null,
       sessionId: session.id,
       interactionId: params.interactionId ?? null,
@@ -138,7 +138,7 @@ export async function resolveExpertReviewAnchor(params: {
     );
     if (!interaction) return null;
     return {
-      topicId: params.topicId ?? interaction.session?.topicId ?? null,
+      lessonId: params.lessonId ?? interaction.session?.lessonId ?? null,
       classroomStudentId:
         params.classroomStudentId ?? interaction.classroomStudentId ?? null,
       sessionId: params.sessionId ?? interaction.sessionId ?? null,
@@ -148,3 +148,4 @@ export async function resolveExpertReviewAnchor(params: {
 
   return null;
 }
+

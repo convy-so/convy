@@ -1,8 +1,8 @@
-import {
+﻿import {
   learningTeachingPlaybookSchema,
   patternConfidenceLabelSchema,
   type LearningTeachingPlaybook,
-  type StudentLearningPatternProfile,
+  type StudentPatternProfile,
 } from "@/features/tutoring/server/pattern-types";
 import { LEARNING_SUBJECT_DEFAULTS } from "@/shared/learning/constants";
 
@@ -72,10 +72,10 @@ export function renderTeachingPlaybookContext(
 }
 
 export function buildTeachingPlaybook(params: {
-  globalProfile: StudentLearningPatternProfile | null;
-  subjectProfile: StudentLearningPatternProfile | null;
-  topicLocalGaps: string[];
-  topicLocalUsedExamples: string[];
+  globalProfile: StudentPatternProfile | null;
+  subjectProfile: StudentPatternProfile | null;
+  lessonLocalGaps: string[];
+  lessonLocalUsedExamples: string[];
 }) {
   const globalConfidence = params.globalProfile?.patternConfidence ?? 0;
   const subjectConfidence = params.subjectProfile?.patternConfidence ?? 0;
@@ -96,8 +96,8 @@ export function buildTeachingPlaybook(params: {
     params.subjectProfile
       ? `subject:${params.subjectProfile.subjectKey ?? LEARNING_SUBJECT_DEFAULTS.key}`
       : null,
-    params.topicLocalGaps.length > 0 || params.topicLocalUsedExamples.length > 0
-      ? "topic-local"
+    params.lessonLocalGaps.length > 0 || params.lessonLocalUsedExamples.length > 0
+      ? "lesson-local"
       : null,
   ]);
 
@@ -168,8 +168,8 @@ export function buildTeachingPlaybook(params: {
     chosenPrimary?.confidenceMindsetPattern.responseWhenWrong === "guarded"
       ? "Normalize mistakes before correction and keep corrections gentle."
       : null,
-    params.topicLocalGaps.length > 0
-      ? `Revisit these unresolved gaps before moving fast: ${params.topicLocalGaps.join("; ")}`
+    params.lessonLocalGaps.length > 0
+      ? `Revisit these unresolved gaps before moving fast: ${params.lessonLocalGaps.join("; ")}`
       : null,
   ]);
 
@@ -198,7 +198,7 @@ export function buildTeachingPlaybook(params: {
   const usedExampleReferences = uniqueStrings([
     ...(params.subjectProfile?.interestResonance.usedExamples ?? []),
     ...(params.globalProfile?.interestResonance.usedExamples ?? []),
-    ...params.topicLocalUsedExamples,
+    ...params.lessonLocalUsedExamples,
   ]).slice(-12);
 
   const updatedAtCandidates = [
@@ -221,3 +221,4 @@ export function buildTeachingPlaybook(params: {
     updatedAt: updatedAtCandidates[0] ?? isoNow(),
   });
 }
+

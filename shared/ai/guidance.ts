@@ -27,7 +27,7 @@ export type ExpertGuidanceArtifact = {
 
 type GuidanceSelectors = {
   classroomId?: string | null;
-  topicId?: string | null;
+  lessonId?: string | null;
   subjectKey?: string | null;
   gradeBand?: string | null;
   programId?: string | null;
@@ -66,9 +66,9 @@ function scorePackScope(params: {
     return classroomId && classroomId === selectors.classroomId ? 7 : -1;
   }
 
-  if (scope === "topic") {
-    const topicId = getMetadataString(metadata, "topicId");
-    return topicId && topicId === selectors.topicId ? 9 : -1;
+  if (scope === "lesson") {
+    const lessonId = getMetadataString(metadata, "lessonId");
+    return lessonId && lessonId === selectors.lessonId ? 9 : -1;
   }
 
   if (scope === "subject") {

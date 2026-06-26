@@ -1,11 +1,11 @@
-import { and, desc, eq } from "drizzle-orm";
+﻿import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
 import {
   classroomStudents,
   studentInterestProfiles,
-  studentProgressReports,
+  studentLessonReports,
 } from "@/shared/db/schema";
 import type {
   StudentInterestProfile,
@@ -17,7 +17,7 @@ import {
 } from "@/shared/learning/constants";
 
 export async function createStudentProgressReport(params: {
-  topicId: string;
+  lessonId: string;
   classroomStudentId: string;
   generatedFromSessionId?: string | null;
   masteryPercent: number;
@@ -25,10 +25,10 @@ export async function createStudentProgressReport(params: {
   report: TeacherProgressReport;
 }) {
   const [report] = await getDb()
-    .insert(studentProgressReports)
+    .insert(studentLessonReports)
     .values({
       id: nanoid(),
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       classroomStudentId: params.classroomStudentId,
       generatedFromSessionId: params.generatedFromSessionId ?? null,
       masteryPercent: params.masteryPercent,
@@ -44,15 +44,15 @@ export async function createStudentProgressReport(params: {
 }
 
 export async function getLatestStudentProgressReport(params: {
-  topicId: string;
+  lessonId: string;
   classroomStudentId: string;
 }) {
-  return await getDb().query.studentProgressReports.findFirst({
+  return await getDb().query.studentLessonReports.findFirst({
     where: and(
-      eq(studentProgressReports.topicId, params.topicId),
-      eq(studentProgressReports.classroomStudentId, params.classroomStudentId),
+      eq(studentLessonReports.lessonId, params.lessonId),
+      eq(studentLessonReports.classroomStudentId, params.classroomStudentId),
     ),
-    orderBy: [desc(studentProgressReports.createdAt)],
+    orderBy: [desc(studentLessonReports.createdAt)],
   });
 }
 
@@ -146,3 +146,4 @@ export async function markStudentOnboardingCompleteForUser(userId: string) {
     memberships.map((membership) => markStudentOnboardingComplete(membership.id)),
   );
 }
+

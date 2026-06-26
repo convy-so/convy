@@ -1,9 +1,9 @@
-import type { Dispatch, SetStateAction } from "react";
+﻿import type { Dispatch, SetStateAction } from "react";
 
-export type TopicView = "overview" | "reports" | "students";
-export type TopicStatus = "draft" | "active" | "paused" | "archived";
+export type LessonView = "overview" | "reports" | "students";
+export type LessonStatus = "draft" | "active" | "paused" | "archived";
 
-export type TopicReport = {
+export type LessonReport = {
   id: string;
   updatedAt: string | Date;
   masteryPercent: number;
@@ -17,7 +17,7 @@ export type TopicReport = {
   };
 };
 
-export type TopicMaterial = {
+export type LessonMaterial = {
   id: string;
   title: string;
   materialKind: string;
@@ -43,7 +43,7 @@ export type MaterialUploadAttempt = {
   createdAt?: string | Date;
 };
 
-export type TopicStudent = {
+export type LessonStudent = {
   id: string;
   fullName: string;
   email: string;
@@ -51,7 +51,7 @@ export type TopicStudent = {
 
 export type TeacherLessonWorkspaceProps = {
   selectedDirectoryClassroom: { id: string; title: string };
-  selectedTopic: {
+  selectedLesson: {
     id: string;
     title: string;
     description?: string | null;
@@ -64,13 +64,13 @@ export type TeacherLessonWorkspaceProps = {
       description: string;
     }> | null;
   };
-  reports: TopicReport[];
-  materials: TopicMaterial[];
-  students: TopicStudent[];
-  activeTopicView: TopicView;
-  setActiveTopicView: Dispatch<SetStateAction<TopicView>>;
-  updateTopicStatusMutation: {
-    mutate: (payload: { topicId: string; status: TopicStatus }) => void;
+  reports: LessonReport[];
+  materials: LessonMaterial[];
+  students: LessonStudent[];
+  activeLessonView: LessonView;
+  setActiveLessonView: Dispatch<SetStateAction<LessonView>>;
+  updateLessonStatusMutation: {
+    mutate: (payload: { lessonId: string; status: LessonStatus }) => void;
     isPending: boolean;
   };
   materialTitle: string;
@@ -86,7 +86,7 @@ export type TeacherLessonWorkspaceProps = {
   uploadMaterialMutation: {
     mutate: (
       payload: {
-        topicId: string;
+        lessonId: string;
         files: File[];
         title?: string;
         description?: string;
@@ -97,3 +97,4 @@ export type TeacherLessonWorkspaceProps = {
   };
   setIsInviteModalOpen: Dispatch<SetStateAction<boolean>>;
 };
+

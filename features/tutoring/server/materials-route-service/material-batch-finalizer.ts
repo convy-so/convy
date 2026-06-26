@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 
-import { rebuildTopicGroundingPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
+import { rebuildLessonGroundingPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
 import { LEARNING_STATUS } from "@/shared/learning/constants";
 import { getDb } from "@/shared/db";
-import { topicMaterialUploadAttempts } from "@/shared/db/schema";
-import { type LearningMaterialBatchFinalizeJobData } from "@/shared/infra/queue";
+import { lessonMaterialUploadAttempts } from "@/shared/db/schema";
+import { type LessonMaterialBatchFinalizeJobData } from "@/shared/infra/queue";
 
 import {
   getActiveBatchAttempts,
@@ -30,7 +30,7 @@ function isFileTerminalAttempt(attempt: {
 }
 
 function buildLatestBatchLeafState(
-  attempts: Array<typeof topicMaterialUploadAttempts.$inferSelect>,
+  attempts: Array<typeof lessonMaterialUploadAttempts.$inferSelect>,
 ) {
   const activeAttempts = getActiveBatchAttempts(attempts);
   const failedAttempts = activeAttempts.filter(
@@ -50,17 +50,17 @@ function buildLatestBatchLeafState(
 }
 
 export async function processLearningMaterialBatchFinalizer(
-  data: LearningMaterialBatchFinalizeJobData,
+  data: LessonMaterialBatchFinalizeJobData,
 ) {
   const startedAt = Date.now();
-  console.info("[learning-material-batch-worker] finalize start", {
+  console.info("[lesson-material-batch-worker] finalize start", {
     batchId: data.batchId,
-    topicId: data.topicId,
+    lessonId: data.lessonId,
     classroomId: data.classroomId,
   });
 
-  const attempts = await getDb().query.topicMaterialUploadAttempts.findMany({
-    where: eq(topicMaterialUploadAttempts.batchId, data.batchId),
+  const attempts = await getDb().query.lessonMaterialUploadAttempts.findMany({
+    where: eq(lessonMaterialUploadAttempts.batchId, data.batchId),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
@@ -68,18 +68,18 @@ export async function processLearningMaterialBatchFinalizer(
     buildLatestBatchLeafState(attempts);
 
   if (activeAttempts.length === 0) {
-    console.info("[learning-material-batch-worker] finalize empty", {
+    console.info("[lesson-material-batch-worker] finalize empty", {
       batchId: data.batchId,
-      topicId: data.topicId,
+      lessonId: data.lessonId,
       durationMs: Date.now() - startedAt,
     });
     return { success: true, status: "empty" as const };
   }
 
   if (incompleteAttempts.length > 0) {
-    console.info("[learning-material-batch-worker] finalize waiting for incomplete attempts", {
+    console.info("[lesson-material-batch-worker] finalize waiting for incomplete attempts", {
       batchId: data.batchId,
-      topicId: data.topicId,
+      lessonId: data.lessonId,
       pendingCount: incompleteAttempts.length,
       activeCount: activeAttempts.length,
       durationMs: Date.now() - startedAt,
@@ -97,7 +97,7 @@ export async function processLearningMaterialBatchFinalizer(
         updateLearningMaterialUploadAttempt({
           attemptId: attempt.id,
           classroomId: data.classroomId,
-          topicId: attempt.topicId,
+          lessonId: attempt.lessonId,
           batchId: attempt.batchId,
           status: LEARNING_STATUS.uploadSucceeded,
           stage: LEARNING_STATUS.uploadStagePackBuild,
@@ -113,9 +113,9 @@ export async function processLearningMaterialBatchFinalizer(
       ),
     );
 
-    console.info("[learning-material-batch-worker] finalize completed with failed attempts", {
+    console.info("[lesson-material-batch-worker] finalize completed with failed attempts", {
       batchId: data.batchId,
-      topicId: data.topicId,
+      lessonId: data.lessonId,
       failedCount: failedAttempts.length,
       successfulCount: successfulAttempts.length,
       durationMs: Date.now() - startedAt,
@@ -128,14 +128,14 @@ export async function processLearningMaterialBatchFinalizer(
     };
   }
 
-  await rebuildTopicGroundingPack(data.topicId);
+  await rebuildLessonGroundingPack(data.lessonId);
 
   await Promise.all(
     successfulAttempts.map((attempt) =>
       updateLearningMaterialUploadAttempt({
         attemptId: attempt.id,
         classroomId: data.classroomId,
-        topicId: attempt.topicId,
+        lessonId: attempt.lessonId,
         batchId: attempt.batchId,
         status: LEARNING_STATUS.uploadSucceeded,
         stage: LEARNING_STATUS.uploadStagePackBuild,
@@ -151,9 +151,9 @@ export async function processLearningMaterialBatchFinalizer(
     ),
   );
 
-  console.info("[learning-material-batch-worker] finalize succeeded", {
+  console.info("[lesson-material-batch-worker] finalize succeeded", {
     batchId: data.batchId,
-    topicId: data.topicId,
+    lessonId: data.lessonId,
     materialCount: successfulAttempts.length,
     durationMs: Date.now() - startedAt,
   });
@@ -166,11 +166,11 @@ export async function processLearningMaterialBatchFinalizer(
 }
 
 export async function markLearningMaterialBatchFinalizerFailed(
-  data: LearningMaterialBatchFinalizeJobData,
+  data: LessonMaterialBatchFinalizeJobData,
   error: unknown,
 ) {
-  const attempts = await getDb().query.topicMaterialUploadAttempts.findMany({
-    where: eq(topicMaterialUploadAttempts.batchId, data.batchId),
+  const attempts = await getDb().query.lessonMaterialUploadAttempts.findMany({
+    where: eq(lessonMaterialUploadAttempts.batchId, data.batchId),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
   const { successfulAttempts } = buildLatestBatchLeafState(attempts);
@@ -181,7 +181,7 @@ export async function markLearningMaterialBatchFinalizerFailed(
       updateLearningMaterialUploadAttempt({
         attemptId: attempt.id,
         classroomId: data.classroomId,
-        topicId: attempt.topicId,
+        lessonId: attempt.lessonId,
         batchId: attempt.batchId,
         status: LEARNING_STATUS.uploadFailed,
         stage: LEARNING_STATUS.uploadStagePackBuild,
@@ -197,3 +197,4 @@ export async function markLearningMaterialBatchFinalizerFailed(
     ),
   );
 }
+

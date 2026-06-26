@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   Award,
   ChevronLeft,
@@ -16,7 +16,7 @@ import { getSubjectDisplayLabel } from "@/features/tutoring/server/subject-packa
 import { getDb } from "@/shared/db";
 import {
   classroomStudents,
-  studentProgressReports,
+  studentLessonReports,
 } from "@/shared/db/schema/learning";
 import { cn } from "@/shared/ui/tailwind-class-utils";
 
@@ -67,11 +67,11 @@ export async function StudentProgressPageContent({
   const studentId = selectedProfile?.id;
 
   const progressReports = studentId
-    ? await getDb().query.studentProgressReports.findMany({
-        where: eq(studentProgressReports.classroomStudentId, studentId),
-        orderBy: [desc(studentProgressReports.createdAt)],
+    ? await getDb().query.studentLessonReports.findMany({
+        where: eq(studentLessonReports.classroomStudentId, studentId),
+        orderBy: [desc(studentLessonReports.createdAt)],
         with: {
-          topic: {
+          lesson: {
             with: {
               course: true,
             },
@@ -269,16 +269,16 @@ export async function StudentProgressPageContent({
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 space-y-1">
                         <span className="text-xs font-medium text-gray-500">
-                          {report.topic?.course?.title ||
+                          {report.lesson?.course?.title ||
                             getSubjectDisplayLabel(null)}
                         </span>
                         <h3 className="text-lg font-semibold text-gray-900 transition-colors group-hover:text-gray-700">
-                          {report.topic?.title || "Topic check-in"}
+                          {report.lesson?.title || "Lesson check-in"}
                         </h3>
                         <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
                           <Target className="h-3.5 w-3.5 shrink-0" aria-hidden />
                           <span>Assessment</span>
-                          <span className="text-gray-300">·</span>
+                          <span className="text-gray-300">Â·</span>
                           <span>
                             {new Date(report.createdAt).toLocaleDateString()}
                           </span>
@@ -320,7 +320,7 @@ export async function StudentProgressPageContent({
                             className="h-3.5 w-3.5 shrink-0"
                             aria-hidden
                           />
-                          Good topics to review next
+                          Good lessons to review next
                         </h4>
                         <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
                           {report.report.identifiedGaps.map((gap, index) => (
@@ -350,7 +350,7 @@ export async function StudentProgressPageContent({
                   No scores yet
                 </h3>
                 <p className="mx-auto mt-2 max-w-sm text-sm text-gray-600">
-                  Complete a tutoring chat or assigned check-in. Your results
+                  Complete a lesson or assigned check-in. Your results
                   will show up here with a short explanation.
                 </p>
               </div>
@@ -361,3 +361,4 @@ export async function StudentProgressPageContent({
     </div>
   );
 }
+

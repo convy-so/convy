@@ -1,6 +1,6 @@
-import type {
+﻿import type {
   ContentScopeSnapshot,
-  TopicGroundingPack,
+  LessonGroundingPack,
 } from "@/features/tutoring/public-server";
 import { requireValue } from "@/shared/utils/collections";
 
@@ -68,7 +68,7 @@ function buildUnit(
 }
 
 export function buildGroundingUnitsFromPack(
-  pack: TopicGroundingPack | null | undefined,
+  pack: LessonGroundingPack | null | undefined,
 ): GroundingUnit[] {
   if (!pack) return [];
 
@@ -76,7 +76,7 @@ export function buildGroundingUnitsFromPack(
   const digest = buildUnit(
     "digest",
     "digest",
-    "Topic digest",
+    "Lesson digest",
     pack.digest,
     40,
     tokenize(pack.digest),
@@ -273,7 +273,7 @@ export function selectGroundingUnitsForPrompt(input: {
   budgetTokens?: number;
   maxUnits?: number;
 }) {
-  const packUnits = buildGroundingUnitsFromPack(input.contentScope.topicGroundingPack);
+  const packUnits = buildGroundingUnitsFromPack(input.contentScope.lessonGroundingPack);
   const fallbackUnits =
     packUnits.length > 0
       ? packUnits
@@ -292,7 +292,7 @@ export function selectGroundingUnitsForPrompt(input: {
     recentSummary: input.recentSummary,
     fallbackKeywords: tokenize(
       [
-        input.contentScope.topicTitle,
+        input.contentScope.lessonTitle,
         input.contentScope.teacherSummary,
         ...input.contentScope.learningOutcomes.map((item) => item.title),
       ].join(" "),
@@ -331,3 +331,4 @@ export function selectGroundingUnitsForPrompt(input: {
 
   return arrangeForPrompt(selected);
 }
+

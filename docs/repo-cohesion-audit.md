@@ -46,5 +46,5 @@ This matrix is the lightweight artifact for the cohesion refactor program. Every
 - `features/tutoring/server/api/lesson-tutoring-session-route.ts` - 355 lines - keep - Batch B - dense dependency hub
 - `shared/ai/index.ts` - 351 lines - keep - Batch A - dense dependency hub, generic naming
 - `features/tutoring/server/api/lesson-materials-route.ts` - 347 lines - keep - Batch B - dense dependency hub
-- `shared/http/page-data/student-learning-page-data.ts` - 333 lines - keep - Batch A - dense dependency hub
+- `shared/http/page-data/student-workspace-page-data.ts` - 333 lines - keep - Batch A - dense dependency hub
 - `features/surveys/server/analytics/dashboard-analytics.ts` - 329 lines - keep - Batch C - dense dependency hub

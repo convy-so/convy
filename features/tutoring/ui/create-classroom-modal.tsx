@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -181,7 +181,7 @@ export function CreateClassroomModal({
                             ))}
                         </select>
                         <p className="text-[11px] font-medium leading-relaxed text-gray-500">
-                            New topic tutors and student onboarding default to this language unless you override it later.
+                            New lesson tutors and student onboarding default to this language unless you override it later.
                         </p>
                     </div>
 
@@ -231,3 +231,4 @@ export function CreateClassroomModal({
         document.body
     );
 }
+

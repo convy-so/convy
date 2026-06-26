@@ -15,11 +15,11 @@ import {
 import { captureOnboardingPatternMemory } from "@/features/tutoring/server/pattern-memory-service";
 import { generateTeacherOnboardingSummary } from "@/features/tutoring/server/reporting";
 import {
-  appendLearningMessage,
-  completeLearningSession,
-  createLearningSession,
-  getActiveLearningSession,
-  listLearningMessages,
+  appendStudentMessage,
+  completeStudentSession,
+  createStudentSession,
+  getActiveStudentSession,
+  listStudentSessionMessages,
   markStudentOnboardingComplete,
 } from "@/features/tutoring/public-server";
 import {
@@ -49,26 +49,26 @@ export async function getOnboardingState(userId: string) {
     };
   }
 
-  let activeSession = await getActiveLearningSession({
+  let activeSession = await getActiveStudentSession({
     classroomStudentId: membership.id,
-    topicId: null,
+    lessonId: null,
     sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
   });
 
   if (!activeSession) {
-    activeSession = await createLearningSession({
+    activeSession = await createStudentSession({
       classroomStudentId: membership.id,
-      topicId: null,
+      lessonId: null,
       sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
     });
-    await appendLearningMessage({
+    await appendStudentMessage({
       sessionId: activeSession.id,
       role: "assistant",
       content: buildOnboardingGreeting(membership.fullName),
     });
   }
 
-  const messages = await listLearningMessages(activeSession.id);
+  const messages = await listStudentSessionMessages(activeSession.id);
   return {
     membership,
     completed: false as const,
@@ -79,14 +79,14 @@ export async function getOnboardingState(userId: string) {
 
 export async function ensureOnboardingSession(classroomStudentId: string) {
   return (
-    (await getActiveLearningSession({
+    (await getActiveStudentSession({
       classroomStudentId,
-      topicId: null,
+      lessonId: null,
       sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
     })) ??
-    (await createLearningSession({
+    (await createStudentSession({
       classroomStudentId,
-      topicId: null,
+      lessonId: null,
       sessionType: LEARNING_STATUS.sessionTypeInterestOnboarding,
     }))
   );
@@ -100,13 +100,13 @@ export async function prepareOnboardingTurn(params: {
   if (!membership) return { membership: null };
 
   const activeSession = await ensureOnboardingSession(membership.id);
-  await appendLearningMessage({
+  await appendStudentMessage({
     sessionId: activeSession.id,
     role: "user",
     content: params.latestUserText,
   });
 
-  const transcript = await listLearningMessages(activeSession.id);
+  const transcript = await listStudentSessionMessages(activeSession.id);
   const universalInterestProfile =
     await getUniversalStudentInterestProfile(params.userId);
 
@@ -150,7 +150,7 @@ export async function finalizeOnboardingTurn(params: {
     ],
   });
 
-  await appendLearningMessage({
+  await appendStudentMessage({
     sessionId: params.activeSessionId,
     role: "assistant",
     content: params.assistantResponse,
@@ -220,9 +220,10 @@ export async function finalizeCompletedOnboarding(params: {
     updatedAt: new Date(),
   });
 
-  await completeLearningSession({
+  await completeStudentSession({
     sessionId: params.activeSessionId,
     summary: "Onboarding complete. Interest profile captured for future tutoring.",
     expectedStateVersion: params.expectedStateVersion,
   });
 }
+

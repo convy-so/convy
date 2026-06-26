@@ -8,8 +8,8 @@ export function buildSurveyMediaAccessPath(input: {
   return `/api/media/surveys/${encodeURIComponent(input.surveyId)}/${encodeURIComponent(input.mediaId)}`;
 }
 
-export function buildLearningMaterialAccessPath(materialId: string) {
-  return `/api/media/learning/${encodeURIComponent(materialId)}`;
+export function buildLessonMaterialAccessPath(materialId: string) {
+  return `/api/media/lessons/${encodeURIComponent(materialId)}`;
 }
 
 export function resolveSurveyMediaAccess(input: {

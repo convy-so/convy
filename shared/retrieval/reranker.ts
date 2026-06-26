@@ -33,7 +33,7 @@ function getInstructionForFeature(feature?: string): string {
     return "Prioritize documents that provide strong insight into respondent sentiment, qualitative analysis, and direct structural relevance to the survey query.";
   }
 
-  if (feature.includes("learning-topic") || feature.includes("learning-material")) {
+  if (feature.includes("lesson-material") || feature.includes("lesson-evidence")) {
     return "Prioritize educational materials that directly explain the queried concepts, focusing on structural relevance, conceptual clarity, and pedagogical utility.";
   }
 

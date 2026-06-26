@@ -4,7 +4,7 @@ import { apiError } from "@/shared/http/api-error";
 import { getDb } from "@/shared/db";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { resolveTeacherClassroomAccess } from "@/features/tutoring/server/teacher-route-access";
-import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
+import { handleTutoringRouteError } from "@/features/tutoring/server/route-errors";
 import { normalizeAppLocale } from "@/shared/i18n/config";
 
 export async function GET(
@@ -25,7 +25,7 @@ export async function GET(
 
     const { classroom } = accessResult;
 
-    const lessons = await getDb().query.learningTopics.findMany({
+    const lessons = await getDb().query.lessons.findMany({
       where: (table, { eq }) => eq(table.classroomId, classroom.id),
       orderBy: (table, { desc }) => [desc(table.createdAt)],
     });
@@ -38,6 +38,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return handleLearningRouteError(error, "Failed to load lessons", "/api/learning/classrooms/[classroomId]/lessons");
+    return handleTutoringRouteError(error, "Failed to load lessons", "/api/classrooms/[classroomId]/lessons");
   }
 }
+

@@ -5,7 +5,7 @@ import type {
   ActiveExpertFramework,
   ExpertFrameworkCapabilityGuidance,
   LearningOutcomeDefinition,
-  LearningSessionState,
+  StudentSessionState,
   StudentInterestProfile,
   TeacherProgressReport,
 } from "@/features/tutoring/public-server";
@@ -80,7 +80,7 @@ export function buildPromptFrame(input: {
   antiRules?: string[];
   scopePolicy?: {
     objective: string;
-    activeTopic?: string | null;
+    activeLesson?: string | null;
     currentPhase?: string | null;
     allowedDetours?: string[];
   } | null;
@@ -149,7 +149,7 @@ export function renderLearningOutcomes(
     : "- none";
 }
 
-export function renderCompactSessionState(state: LearningSessionState) {
+export function renderCompactSessionState(state: StudentSessionState) {
   return [
     `Turn count: ${state.turnCount}`,
     `Framework: ${state.frameworkId ?? "none"}`,
@@ -290,12 +290,12 @@ export function renderTeacherEvidenceBlocks(input: {
     metadata?: Record<string, unknown> | null;
   }>;
   uniqueReports: Array<{
-    topicTitle: string | null;
+    lessonTitle: string | null;
     masteryPercent: number | null;
     report: unknown;
   }>;
   uniqueInteractions: Array<{
-    topicTitle: string | null;
+    lessonTitle: string | null;
     role: string;
     interactionType: string;
     content: string;
@@ -308,11 +308,11 @@ export function renderTeacherEvidenceBlocks(input: {
           const label = `${item.sourceType}:${item.sourceId}`;
           const score =
             typeof item.score === "number" ? ` relevance=${item.score.toFixed(2)}` : "";
-          const topic =
-            typeof item.metadata?.topicTitle === "string"
-              ? ` topic=${normalizeLine(item.metadata.topicTitle)}`
+          const lesson =
+            typeof item.metadata?.lessonTitle === "string"
+              ? ` lesson=${normalizeLine(item.metadata.lessonTitle)}`
               : "";
-          return `${index + 1}. ${label}${score}${topic}\n${normalizeLine(item.content)}`;
+          return `${index + 1}. ${label}${score}${lesson}\n${normalizeLine(item.content)}`;
         })
         .join("\n\n")
     : "none";
@@ -326,7 +326,7 @@ export function renderTeacherEvidenceBlocks(input: {
               ? (report.report as Record<string, unknown>)
               : {};
           return [
-            `${index + 1}. Topic: ${normalizeLine(report.topicTitle ?? "Unknown topic")}`,
+            `${index + 1}. Lesson: ${normalizeLine(report.lessonTitle ?? "Unknown lesson")}`,
             `Mastery: ${report.masteryPercent ?? "unknown"}`,
             `Student summary: ${
               normalizeLine(readOptionalRecordString(payload, "studentSummary")) || "none"
@@ -346,7 +346,7 @@ export function renderTeacherEvidenceBlocks(input: {
         .slice(0, 4)
         .map(
           (item, index) =>
-            `${index + 1}. ${normalizeLine(item.topicTitle ?? "Unknown topic")} | ${item.role} | ${item.interactionType}\n${normalizeLine(item.content)}`,
+            `${index + 1}. ${normalizeLine(item.lessonTitle ?? "Unknown lesson")} | ${item.role} | ${item.interactionType}\n${normalizeLine(item.content)}`,
         )
         .join("\n\n")
     : "none";
@@ -370,7 +370,7 @@ export function renderTranscript(transcript: TranscriptMessage[], limit?: number
     : "none";
 }
 
-export function renderReportState(state: LearningSessionState, playbook?: Record<string, unknown> | null) {
+export function renderReportState(state: StudentSessionState, playbook?: Record<string, unknown> | null) {
   const playbookLines =
     playbook && typeof playbook === "object"
       ? Object.entries(playbook)
@@ -396,3 +396,4 @@ export function renderPreviousReport(report: TeacherProgressReport | null | unde
     `Recommended teacher actions:\n${renderBullets(report.recommendedTeacherActions)}`,
   ].join("\n");
 }
+

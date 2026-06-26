@@ -20,17 +20,17 @@ import {
 import { uniqueStrings } from "./text-processing";
 
 async function attemptBuildCoverageReview(params: {
-  topicTitle: string;
-  topicDescription?: string | null;
+  lessonTitle: string;
+  lessonDescription?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
   materialGroundingMaps: MaterialGroundingMap[];
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
   fileName?: string;
 }) {
   const prompt = buildMaterialCoverageReviewPrompt({
-    topicTitle: params.topicTitle,
-    topicDescription: params.topicDescription,
+    lessonTitle: params.lessonTitle,
+    lessonDescription: params.lessonDescription,
     learningOutcomes: params.learningOutcomes,
     materialGroundingMapsJson: JSON.stringify(
       params.materialGroundingMaps.map((map) => ({
@@ -76,7 +76,7 @@ async function attemptBuildCoverageReview(params: {
     output: Output.object({
       schema: materialCoverageReviewSchema,
       name: "MaterialCoverageReview",
-      description: "Teacher-facing review of how uploaded material supports the topic outcomes.",
+      description: "Teacher-facing analysis of how uploaded material supports the lesson outcomes.",
     }),
     maxOutputTokens: MATERIAL_COVERAGE_REVIEW_OUTPUT_TOKENS,
     maxRetries: MATERIAL_REVIEW_MAX_RETRIES,
@@ -85,10 +85,10 @@ async function attemptBuildCoverageReview(params: {
     providerOptions: GOOGLE_ANALYSIS_PROVIDER_OPTIONS,
     experimental_telemetry: {
       isEnabled: true,
-      functionId: "learning_material_coverage_review",
+      functionId: "lesson_material_coverage_analysis",
       metadata: {
         traceId: params.traceId ?? "",
-        topicId: params.topicId ?? "",
+        lessonId: params.lessonId ?? "",
         filename: params.fileName ?? "",
       },
     },
@@ -108,10 +108,10 @@ function buildCoverageReviewFallback(params: {
 
   return materialCoverageReviewSchema.parse({
     summary:
-      "Coverage review fallback generated because the AI review step did not complete cleanly.",
+      "Coverage analysis fallback generated because the AI analysis step did not complete cleanly.",
     groundingSummary:
       map?.overview ||
-      "Uploaded material was grounded successfully, but outcome coverage needs manual review.",
+      "Uploaded material was grounded successfully, but outcome coverage needs a manual check.",
     supportedOutcomes: [],
     partialOutcomes: [],
     unsupportedOutcomes,
@@ -128,17 +128,17 @@ function buildCoverageReviewFallback(params: {
 }
 
 export async function buildMaterialCoverageReview(params: {
-  topicTitle: string;
-  topicDescription?: string | null;
+  lessonTitle: string;
+  lessonDescription?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
   materialGroundingMaps: MaterialGroundingMap[];
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
   fileName?: string;
 }) {
   if (params.materialGroundingMaps.length === 0) {
     return materialCoverageReviewSchema.parse({
-      summary: "No grounded materials were available for review.",
+      summary: "No grounded materials were available for analysis.",
       groundingSummary: "",
       supportedOutcomes: [],
       partialOutcomes: [],
@@ -153,9 +153,9 @@ export async function buildMaterialCoverageReview(params: {
   }
 
   try {
-    console.info("[learning-material-upload] coverage review attempt", {
+    console.info("[lesson-material-upload] coverage analysis attempt", {
       traceId: params.traceId ?? null,
-      topicId: params.topicId ?? null,
+      lessonId: params.lessonId ?? null,
       fileName: params.fileName ?? null,
       model: getModelId(materialAnalysisModel),
       groundingMapCount: params.materialGroundingMaps.length,
@@ -164,19 +164,19 @@ export async function buildMaterialCoverageReview(params: {
 
     return await attemptBuildCoverageReview(params);
   } catch (error) {
-    console.warn("[learning-material-upload] coverage review attempt failed", {
+    console.warn("[lesson-material-upload] coverage analysis attempt failed", {
       traceId: params.traceId ?? null,
-      topicId: params.topicId ?? null,
+      lessonId: params.lessonId ?? null,
       fileName: params.fileName ?? null,
       quota: isAiQuotaError(error),
       ...serializeAiError(error),
     });
 
     logLearningMaterialTrace({
-      event: "learning_material_coverage_review_failed",
+      event: "lesson_material_coverage_analysis_failed",
       input: {
         traceId: params.traceId ?? "",
-        topicId: params.topicId ?? "",
+        lessonId: params.lessonId ?? "",
         filename: params.fileName ?? "",
       },
       metadata: {
@@ -189,3 +189,4 @@ export async function buildMaterialCoverageReview(params: {
     return buildCoverageReviewFallback(params);
   }
 }
+

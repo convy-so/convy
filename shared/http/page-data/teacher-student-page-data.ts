@@ -1,11 +1,11 @@
-import { and, eq, inArray } from "drizzle-orm";
+﻿import { and, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
 import {
   classroomStudents,
-  learningInteractions,
-  learningSessions,
-  studentProgressReports,
+  studentInteractions,
+  studentSessions,
+  studentLessonReports,
 } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import {
@@ -45,21 +45,21 @@ export async function getClassroomStudentOverviewData(
   }
 
   const [reports, tutoringSessions] = await Promise.all([
-    getDb().query.studentProgressReports.findMany({
-      where: eq(studentProgressReports.classroomStudentId, membership.id),
+    getDb().query.studentLessonReports.findMany({
+      where: eq(studentLessonReports.classroomStudentId, membership.id),
       with: {
-        topic: true,
+        lesson: true,
       },
       orderBy: (table, { desc }) => [desc(table.updatedAt)],
       limit: 12,
     }),
-    getDb().query.learningSessions.findMany({
+    getDb().query.studentSessions.findMany({
       where: and(
-        eq(learningSessions.classroomStudentId, membership.id),
-        eq(learningSessions.sessionType, "tutoring"),
+        eq(studentSessions.classroomStudentId, membership.id),
+        eq(studentSessions.sessionType, "tutoring"),
       ),
       with: {
-        topic: true,
+        lesson: true,
       },
       orderBy: (table, { desc }) => [desc(table.updatedAt)],
       limit: 20,
@@ -68,17 +68,17 @@ export async function getClassroomStudentOverviewData(
   const tutoringSessionIds = tutoringSessions.map((sessionRow) => sessionRow.id);
   const conversationTurns =
     tutoringSessionIds.length > 0
-      ? await getDb().query.learningInteractions.findMany({
+      ? await getDb().query.studentInteractions.findMany({
           where: and(
-            eq(learningInteractions.classroomStudentId, membership.id),
-            inArray(learningInteractions.sessionId, tutoringSessionIds),
-            inArray(learningInteractions.interactionType, [
+            eq(studentInteractions.classroomStudentId, membership.id),
+            inArray(studentInteractions.sessionId, tutoringSessionIds),
+            inArray(studentInteractions.interactionType, [
               "student_message",
               "tutor_message",
             ]),
           ),
           with: {
-            topic: true,
+            lesson: true,
           },
           orderBy: (table, { asc }) => [asc(table.createdAt)],
         })
@@ -121,8 +121,8 @@ export async function getClassroomStudentOverviewData(
       },
       recentReports: reports.map((report) => ({
         id: report.id,
-        topicId: report.topicId,
-        topicTitle: report.topic?.title ?? "Topic",
+        lessonId: report.lessonId,
+        lessonTitle: report.lesson?.title ?? "Lesson",
         masteryPercent: report.masteryPercent,
         sourceLocale: report.sourceLocale,
         createdAt: report.createdAt,
@@ -131,8 +131,8 @@ export async function getClassroomStudentOverviewData(
       })),
       tutoringSessions: tutoringSessions.map((sessionRow) => ({
         id: sessionRow.id,
-        topicId: sessionRow.topicId,
-        topicTitle: sessionRow.topic?.title ?? null,
+        lessonId: sessionRow.lessonId,
+        lessonTitle: sessionRow.lesson?.title ?? null,
         sessionStatus: sessionRow.sessionStatus,
         sessionLocale: sessionRow.sessionLocale,
         summary: sessionRow.summary ?? null,
@@ -145,8 +145,8 @@ export async function getClassroomStudentOverviewData(
           ? [
               {
                 id: interaction.id,
-                topicId: interaction.topicId,
-                topicTitle: interaction.topic?.title ?? null,
+                lessonId: interaction.lessonId,
+                lessonTitle: interaction.lesson?.title ?? null,
                 sessionId: interaction.sessionId,
                 interactionType: interaction.interactionType,
                 role: interaction.role,
@@ -242,13 +242,13 @@ export async function getClassroomStudentReportDetailData(params: {
     throw new Error(accessResult.error === "NOT_FOUND" ? "Student not found" : "Unauthorized");
   }
 
-  const report = await getDb().query.studentProgressReports.findFirst({
+  const report = await getDb().query.studentLessonReports.findFirst({
     where: and(
-      eq(studentProgressReports.id, params.reportId),
-      eq(studentProgressReports.classroomStudentId, params.classroomStudentId),
+      eq(studentLessonReports.id, params.reportId),
+      eq(studentLessonReports.classroomStudentId, params.classroomStudentId),
     ),
     with: {
-      topic: {
+      lesson: {
         with: {
           course: true,
           classroom: true,
@@ -275,12 +275,12 @@ export async function getClassroomStudentReportDetailData(params: {
       createdAt: report.createdAt,
       updatedAt: report.updatedAt,
       sessionId: report.generatedFromSessionId,
-      topic: {
-        id: report.topicId,
-        title: report.topic?.title ?? "Topic",
-        courseId: report.topic?.courseId ?? "",
-        courseTitle: report.topic?.course?.title ?? "Course",
-        status: report.topic?.status ?? "draft",
+      lesson: {
+        id: report.lessonId,
+        title: report.lesson?.title ?? "Lesson",
+        courseId: report.lesson?.courseId ?? "",
+        courseTitle: report.lesson?.course?.title ?? "Course",
+        status: report.lesson?.status ?? "draft",
       },
       student: {
         id: report.classroomStudent.id,
@@ -297,3 +297,4 @@ export async function getClassroomStudentReportDetailData(params: {
     },
   };
 }
+

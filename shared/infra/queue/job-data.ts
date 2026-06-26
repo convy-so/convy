@@ -33,21 +33,21 @@ export interface ImageUploadJobData {
 
 export interface TutoringReportJobData {
   sessionId: string;
-  topicId: string;
+  lessonId: string;
   classroomId: string;
   studentUserId: string;
   classroomStudentId: string;
   studentName: string;
-  topicTitle: string;
+  lessonTitle: string;
   courseId?: string | null;
   courseTitle?: string | null;
   sourceLocale?: string | null;
   previousReport?: Record<string, unknown> | null;
 }
 
-export interface LearningMaterialProcessingJobData {
+export interface LessonMaterialProcessingJobData {
   attemptId: string;
-  topicId: string;
+  lessonId: string;
   classroomId: string;
   userId: string;
   storagePath: string;
@@ -58,9 +58,9 @@ export interface LearningMaterialProcessingJobData {
   description?: string | null;
 }
 
-export interface LearningMaterialBatchFinalizeJobData {
+export interface LessonMaterialBatchFinalizeJobData {
   batchId: string;
-  topicId: string;
+  lessonId: string;
   classroomId: string;
 }
 
@@ -86,13 +86,14 @@ declare global {
   var emailQueue: Queue<EmailJobData> | undefined;
   var imageUploadQueue: Queue<ImageUploadJobData> | undefined;
   var tutoringReportQueue: Queue<TutoringReportJobData> | undefined;
-  var learningMaterialProcessingQueue:
-    | Queue<LearningMaterialProcessingJobData>
+  var lessonMaterialProcessingQueue:
+    | Queue<LessonMaterialProcessingJobData>
     | undefined;
-  var learningMaterialBatchFinalizeQueue:
-    | Queue<LearningMaterialBatchFinalizeJobData>
+  var lessonMaterialBatchFinalizeQueue:
+    | Queue<LessonMaterialBatchFinalizeJobData>
     | undefined;
   var contentTranslationQueue: Queue<ContentTranslationJobData> | undefined;
   var experimentEvaluationQueue: Queue<unknown> | undefined;
   var notificationQueue: Queue<NotificationJobData> | undefined;
 }
+

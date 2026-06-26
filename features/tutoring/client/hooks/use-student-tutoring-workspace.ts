@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -17,14 +17,14 @@ import {
   ApiClientError,
   fetchMyPatterns,
   fetchTutoringSession,
-  type LearningMeData,
+  type StudentMeData,
 } from "@/features/tutoring/public-client";
 import {
   isAppLocale,
   type AppLocale,
 } from "@/shared/i18n/config";
 import { queryKeys } from "@/shared/http/query-keys";
-import type { getStudentLearningWorkspaceInitialData } from "@/shared/http/page-data";
+import type { getStudentWorkspaceInitialData } from "@/shared/http/page-data";
 import {
   logTutoringDebug,
   logTutoringWarn,
@@ -36,7 +36,7 @@ import {
   toUIMessages,
 } from "@/shared/chat/chat-ui-messages";
 
-type StudentLearningMeData = Extract<LearningMeData, { role: "student" }>;
+type StudentStudentMeData = Extract<StudentMeData, { role: "student" }>;
 export type TutoringChatDraftMessage = CreateUIMessage<UIMessage>;
 export type TutoringTextWithFilesMessage = {
   text: string;
@@ -61,7 +61,7 @@ export type TutoringToolResultPayload =
       errorText: string;
     };
 
-function retryTransientLearningApiFailure(failureCount: number, error: Error) {
+function retryTransientTutoringApiFailure(failureCount: number, error: Error) {
   return (
     error instanceof ApiClientError &&
     error.code === "SERVICE_UNAVAILABLE" &&
@@ -103,18 +103,18 @@ function buildChatLogPreview(message: TutoringOutgoingMessage) {
 export function useStudentTutoringWorkspace({
   classroomId,
   lessonId,
-  learningMe,
+  studentMe,
   initialPatterns,
   initialTutoringSession,
 }: {
   classroomId: string;
   lessonId: string;
-  learningMe: StudentLearningMeData;
+  studentMe: StudentStudentMeData;
   initialPatterns?: Awaited<
-    ReturnType<typeof getStudentLearningWorkspaceInitialData>
+    ReturnType<typeof getStudentWorkspaceInitialData>
   >["initialPatterns"];
   initialTutoringSession?: Awaited<
-    ReturnType<typeof getStudentLearningWorkspaceInitialData>
+    ReturnType<typeof getStudentWorkspaceInitialData>
   >["initialTutoringSession"];
 }) {
   const locale = useLocale();
@@ -124,11 +124,11 @@ export function useStudentTutoringWorkspace({
   );
   const [outOfSessionReply, setOutOfSessionReply] = useState<string | null>(null);
 
-  const memberships = learningMe.student;
+  const memberships = studentMe.student;
   const selectedMembership =
     memberships.find((membership) => membership.classroom.id === classroomId) ?? null;
   const selectedLesson =
-    selectedMembership?.topics.find((topic) => topic.id === lessonId) ?? null;
+    selectedMembership?.lessons.find((lesson) => lesson.id === lessonId) ?? null;
 
   const patternsQuery = useQuery<Awaited<ReturnType<typeof fetchMyPatterns>>>({
     queryKey: queryKeys.learning.myPatterns,
@@ -154,7 +154,7 @@ export function useStudentTutoringWorkspace({
           >)
         : undefined,
     staleTime: 30_000,
-    retry: retryTransientLearningApiFailure,
+    retry: retryTransientTutoringApiFailure,
   });
 
   const initialTutoringMessages = useMemo(
@@ -168,7 +168,7 @@ export function useStudentTutoringWorkspace({
   const tutoringTransport = useMemo(
     () =>
       new DefaultChatTransport({
-        api: `/api/learning/tutoring-sessions/${tutoringSessionQuery.data?.data.sessionId ?? "pending"}/chat`,
+        api: `/api/tutoring/sessions/${tutoringSessionQuery.data?.data.sessionId ?? "pending"}/chat`,
         body: {
           sessionId: tutoringSessionQuery.data?.data.sessionId,
           language: selectedStudyLanguage,
@@ -185,7 +185,7 @@ export function useStudentTutoringWorkspace({
     addToolResult: addTutoringToolResultRaw,
     error: tutoringChatError,
   } = useChat({
-    id: `learning-tutoring-${lessonId}-${selectedStudyLanguage}-${tutoringSessionQuery.data?.data.sessionId ?? "pending"}`,
+    id: `student-tutoring-${lessonId}-${selectedStudyLanguage}-${tutoringSessionQuery.data?.data.sessionId ?? "pending"}`,
     messages: initialTutoringMessages,
     transport: tutoringTransport,
     onError: (error) => {
@@ -227,7 +227,7 @@ export function useStudentTutoringWorkspace({
 
   const outOfSessionMutation = useMutation({
     mutationFn: async (input: {
-      topicId: string;
+      lessonId: string;
       message: string;
       language?: string;
     }) => {
@@ -312,7 +312,7 @@ export function useStudentTutoringWorkspace({
         status: "blocked" as const,
         title: "Complete profile setup first",
         message:
-          "Your tutor needs your profile setup before it can personalise explanations and examples for this lesson.",
+          "Complete your profile setup before Convy personalises explanations and examples for this lesson.",
         ctaHref: "/student/profile/edit",
         ctaLabel: "Open profile setup",
       };
@@ -321,9 +321,9 @@ export function useStudentTutoringWorkspace({
     if (tutoringSessionQuery.isPending) {
       return {
         status: "loading" as const,
-        title: "Preparing your tutor",
+        title: "Preparing your lesson",
         message:
-          "Convy is loading this lesson, restoring your tutoring session, and preparing your study context.",
+          "Convy is loading this lesson, restoring your progress, and preparing your study context.",
       };
     }
 
@@ -331,7 +331,7 @@ export function useStudentTutoringWorkspace({
       const error = tutoringSessionQuery.error;
       return {
         status: "error" as const,
-        title: "Could not start this tutoring session",
+        title: "Could not open this lesson",
         message:
           error instanceof Error
             ? error.message
@@ -342,10 +342,10 @@ export function useStudentTutoringWorkspace({
 
     return {
       status: "ready" as const,
-      title: "Tutor ready",
+      title: "Lesson ready",
       message: sessionCompleted
-        ? "This tutoring session is complete."
-        : "Your tutoring session is ready.",
+        ? "This lesson session is complete."
+        : "Your lesson is ready.",
     };
   }, [
     selectedLesson,
@@ -399,3 +399,4 @@ export function useStudentTutoringWorkspace({
       tutoringInitializationState.status === "ready" && !sessionCompleted,
   };
 }
+

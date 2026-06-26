@@ -1,4 +1,4 @@
-export {
+﻿export {
   buildUploadAttemptFailure,
   inferMaterialKind,
   isMaterialAnalysisFailed,
@@ -10,7 +10,7 @@ export {
 export {
   getActiveBatchAttempts,
   getLatestMaterialBatchGateState,
-  getTopicActivationMaterialGate,
+  getLessonActivationMaterialGate,
   type MaterialBatchGateState,
 } from "./material-batch-gates";
 export {
@@ -25,4 +25,5 @@ export {
   markLearningMaterialBatchFinalizerFailed,
   processLearningMaterialBatchFinalizer,
 } from "./material-batch-finalizer";
-export { getTeacherTopicAccess as getTeacherTopicOrNull } from "@/features/tutoring/server/access";
+export { getTeacherLessonAccess as getTeacherLessonOrNull } from "@/features/tutoring/server/access";
+

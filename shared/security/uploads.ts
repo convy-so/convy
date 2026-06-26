@@ -40,17 +40,17 @@ export function assertFileSize(file: FileLike, maxBytes: number, label: string) 
 }
 
 export function assertLearningMaterialFile(file: FileLike, detectedMimeType?: string | null) {
-  assertFileSize(file, MAX_LEARNING_MATERIAL_BYTES, "Learning material");
+  assertFileSize(file, MAX_LEARNING_MATERIAL_BYTES, "Lesson material");
 
   const mimeType = (detectedMimeType || file.type || "").toLowerCase();
   const extension = getFileExtension(file.name);
 
   if (!extension || !LEARNING_MATERIAL_EXTENSION_ALLOWLIST.has(extension)) {
-    throw new Error("Unsupported learning material file extension");
+    throw new Error("Unsupported lesson material file extension");
   }
 
   if (!LEARNING_MATERIAL_MIME_ALLOWLIST.has(mimeType)) {
-    throw new Error("Unsupported learning material format");
+    throw new Error("Unsupported lesson material format");
   }
 }
 

@@ -1,4 +1,4 @@
-import {
+﻿import {
   buildPromptFrame,
   renderInterestProfile,
   renderLearningOutcomes,
@@ -11,24 +11,24 @@ import {
 } from "@/shared/learning/constants";
 
 export function buildOutOfSessionClassificationPrompt(input: {
-  topicTitle: string;
-  topicDescription?: string | null;
+  lessonTitle: string;
+  lessonDescription?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
   question: string;
 }) {
   return [
     buildPromptFrame({
-      role: "Classify whether a student's out-of-session question is in scope for the active course topic.",
-      goal: `Protect scope discipline around ${input.topicTitle}.`,
+      role: "Classify whether a student's out-of-session question is in scope for the active course lesson.",
+      goal: `Protect scope discipline around ${input.lessonTitle}.`,
       constraints: [
-        `Use ${OUT_OF_SESSION_CLASSIFICATION.IN_SCOPE} when the question is clearly about the active topic.`,
+        `Use ${OUT_OF_SESSION_CLASSIFICATION.IN_SCOPE} when the question is clearly about the active lesson.`,
         `Use ${OUT_OF_SESSION_CLASSIFICATION.BORDERLINE} when it is adjacent but still teachable with a brief bridge.`,
-        `Use ${OUT_OF_SESSION_CLASSIFICATION.OFF_SCOPE} when it is meaningfully outside the topic.`,
+        `Use ${OUT_OF_SESSION_CLASSIFICATION.OFF_SCOPE} when it is meaningfully outside the lesson.`,
       ],
       outputContract: ["Return only the structured classification object."],
     }),
-    renderTaggedSection("topic", input.topicTitle),
-    renderTaggedSection("description", input.topicDescription ?? "none"),
+    renderTaggedSection("lesson", input.lessonTitle),
+    renderTaggedSection("description", input.lessonDescription ?? "none"),
     renderTaggedSection("learning_outcomes", renderLearningOutcomes(input.learningOutcomes)),
     renderTaggedSection("question", input.question),
   ]
@@ -38,7 +38,7 @@ export function buildOutOfSessionClassificationPrompt(input: {
 
 export function buildOutOfSessionReplyPrompt(input: {
   classification: (typeof OUT_OF_SESSION_CLASSIFICATION_VALUES)[number];
-  topicTitle: string;
+  lessonTitle: string;
   learningOutcomes: Array<{ title: string; description: string }>;
   gradeBand: string;
   studentProfile: StudentInterestProfile | null;
@@ -49,11 +49,11 @@ export function buildOutOfSessionReplyPrompt(input: {
   return [
     buildPromptFrame({
       role: `Answer the student's out-of-session question in ${input.language}.`,
-      goal: `Help the student while protecting scope around ${input.topicTitle}.`,
+      goal: `Help the student while protecting scope around ${input.lessonTitle}.`,
       constraints: [
         "Stay inside the retrieved course context for facts.",
-        "If classification is off_scope, redirect back toward the current topic.",
-        "If classification is borderline, answer briefly and reconnect to the topic.",
+        "If classification is off_scope, redirect back toward the current lesson.",
+        "If classification is borderline, answer briefly and reconnect to the lesson.",
         "Keep the explanation concise and teachable.",
       ],
       antiRules: [
@@ -64,7 +64,7 @@ export function buildOutOfSessionReplyPrompt(input: {
     }),
     renderTaggedSection(
       "request",
-      `Classification: ${input.classification}\nTopic: ${input.topicTitle}\nGrade band: ${input.gradeBand}\nQuestion: ${input.question}`,
+      `Classification: ${input.classification}\nLesson: ${input.lessonTitle}\nGrade band: ${input.gradeBand}\nQuestion: ${input.question}`,
     ),
     renderTaggedSection("learning_outcomes", renderLearningOutcomes(input.learningOutcomes)),
     renderTaggedSection("student_profile", renderInterestProfile(input.studentProfile)),
@@ -73,3 +73,4 @@ export function buildOutOfSessionReplyPrompt(input: {
     .filter(Boolean)
     .join("\n\n");
 }
+

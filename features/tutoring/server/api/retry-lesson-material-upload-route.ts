@@ -4,17 +4,17 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/shared/http/api-error";
 
 import { getDb } from "@/shared/db";
-import { topicMaterialUploadAttempts } from "@/shared/db/schema";
+import { lessonMaterialUploadAttempts } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
 import { LEARNING_STATUS } from "@/shared/learning/constants";
 import {
   buildUploadAttemptFailure,
   createLearningMaterialUploadAttempt,
-  getTeacherTopicOrNull,
+  getTeacherLessonOrNull,
   updateLearningMaterialUploadAttempt,
 } from "@/features/tutoring/server/materials-route-service";
-import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
-import { enqueueLearningMaterialProcessing } from "@/shared/infra/queue";
+import { handleTutoringRouteError } from "@/features/tutoring/server/route-errors";
+import { enqueueLessonMaterialProcessing } from "@/shared/infra/queue";
 import { serializeUploadAttempt } from "@/features/tutoring/server/api/lesson-material-upload-response";
 
 type RetryFailurePoint = "queue_enqueue" | "attempt_queue_update";
@@ -29,18 +29,18 @@ function annotateRetryError(failurePoint: RetryFailurePoint, error: unknown) {
 
 export async function POST(
   _request: Request,
-  { params }: { params: Promise<{ topicId: string; attemptId: string }> },
+  { params }: { params: Promise<{ lessonId: string; attemptId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
-    const { topicId, attemptId } = await params;
-    const topic = await getTeacherTopicOrNull(session.user.id, topicId);
-    if (!topic) return apiError("UNAUTHORIZED", "Unauthorized");
+    const { lessonId, attemptId } = await params;
+    const lesson = await getTeacherLessonOrNull(session.user.id, lessonId);
+    if (!lesson) return apiError("UNAUTHORIZED", "Unauthorized");
 
-    const sourceAttempt = await getDb().query.topicMaterialUploadAttempts.findFirst({
+    const sourceAttempt = await getDb().query.lessonMaterialUploadAttempts.findFirst({
       where: and(
-        eq(topicMaterialUploadAttempts.id, attemptId),
-        eq(topicMaterialUploadAttempts.topicId, topicId),
+        eq(lessonMaterialUploadAttempts.id, attemptId),
+        eq(lessonMaterialUploadAttempts.lessonId, lessonId),
       ),
     });
 
@@ -67,7 +67,7 @@ export async function POST(
       id: retryAttemptId,
       previousAttemptId: sourceAttempt.id,
       batchId: sourceAttempt.batchId,
-      topicId,
+      lessonId,
       uploadedByUserId: session.user.id,
       fileName: sourceAttempt.fileName,
       title: sourceAttempt.title ?? null,
@@ -83,17 +83,17 @@ export async function POST(
 
     let failurePoint: RetryFailurePoint = "queue_enqueue";
     try {
-      console.info("[learning-material-upload-retry] enqueue start", {
-        topicId,
+      console.info("[lesson-material-upload-retry] enqueue start", {
+        lessonId,
         sourceAttemptId: sourceAttempt.id,
         retryAttemptId,
         batchId: sourceAttempt.batchId,
         storagePath: sourceAttempt.storagePath,
       });
-      const processingJob = await enqueueLearningMaterialProcessing({
+      const processingJob = await enqueueLessonMaterialProcessing({
         attemptId: retryAttemptId,
-        topicId,
-        classroomId: topic.classroomId,
+        lessonId,
+        classroomId: lesson.classroomId,
         userId: session.user.id,
         storagePath: sourceAttempt.storagePath,
         fileName: sourceAttempt.fileName,
@@ -102,8 +102,8 @@ export async function POST(
         title: sourceAttempt.title ?? null,
         description: sourceAttempt.description ?? null,
       });
-      console.info("[learning-material-upload-retry] enqueue complete", {
-        topicId,
+      console.info("[lesson-material-upload-retry] enqueue complete", {
+        lessonId,
         sourceAttemptId: sourceAttempt.id,
         retryAttemptId,
         batchId: sourceAttempt.batchId,
@@ -114,8 +114,8 @@ export async function POST(
       retryAttempt =
         (await updateLearningMaterialUploadAttempt({
             attemptId: retryAttemptId,
-            classroomId: topic.classroomId,
-            topicId,
+            classroomId: lesson.classroomId,
+            lessonId,
             batchId: sourceAttempt.batchId,
             status: LEARNING_STATUS.uploadQueued,
             stage: LEARNING_STATUS.uploadStageExtraction,
@@ -134,8 +134,8 @@ export async function POST(
         LEARNING_STATUS.uploadStageExtraction,
         annotatedError,
       );
-      console.error("[learning-material-upload-retry] failed", {
-        topicId,
+      console.error("[lesson-material-upload-retry] failed", {
+        lessonId,
         sourceAttemptId: sourceAttempt.id,
         retryAttemptId,
         batchId: sourceAttempt.batchId,
@@ -145,8 +145,8 @@ export async function POST(
       retryAttempt =
         (await updateLearningMaterialUploadAttempt({
           attemptId: retryAttemptId,
-          classroomId: topic.classroomId,
-          topicId,
+          classroomId: lesson.classroomId,
+          lessonId,
           batchId: sourceAttempt.batchId,
           status: LEARNING_STATUS.uploadFailed,
           stage: LEARNING_STATUS.uploadStageExtraction,
@@ -167,10 +167,11 @@ export async function POST(
       },
     });
   } catch (error) {
-    return handleLearningRouteError(
+    return handleTutoringRouteError(
       error,
       "Failed to retry material upload",
-      "/api/learning/lessons/[lessonId]/material-upload-attempts/[attemptId]/retry",
+      "/api/lessons/[lessonId]/material-upload-attempts/[attemptId]/retry",
     );
   }
 }
+

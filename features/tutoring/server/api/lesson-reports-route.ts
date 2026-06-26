@@ -3,27 +3,27 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/shared/http/api-error";
 
 import { getDb } from "@/shared/db";
-import { studentProgressReports } from "@/shared/db/schema";
+import { studentLessonReports } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
-import { getTeacherTopicAccess } from "@/features/tutoring/server/access";
-import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
-import { buildClassroomTopicReportSummary } from "@/features/tutoring/server/reporting";
+import { getTeacherLessonAccess } from "@/features/tutoring/server/access";
+import { handleTutoringRouteError } from "@/features/tutoring/server/route-errors";
+import { buildClassroomLessonReportSummary } from "@/features/tutoring/server/reporting";
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ topicId: string }> },
+  { params }: { params: Promise<{ lessonId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
-    const { topicId } = await params;
-    const topic = await getTeacherTopicAccess(session.user.id, topicId);
+    const { lessonId } = await params;
+    const lesson = await getTeacherLessonAccess(session.user.id, lessonId);
 
-    if (!topic) {
+    if (!lesson) {
       return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
-    const reports = await getDb().query.studentProgressReports.findMany({
-      where: eq(studentProgressReports.topicId, topicId),
+    const reports = await getDb().query.studentLessonReports.findMany({
+      where: eq(studentLessonReports.lessonId, lessonId),
       with: {
         classroomStudent: true,
       },
@@ -49,10 +49,11 @@ export async function GET(
       success: true,
       data: {
         reports: serializedReports,
-        summary: buildClassroomTopicReportSummary(serializedReports),
+        summary: buildClassroomLessonReportSummary(serializedReports),
       },
     });
   } catch (error) {
-    return handleLearningRouteError(error, "Failed to load reports", "/api/learning/lessons/[lessonId]/reports");
+    return handleTutoringRouteError(error, "Failed to load reports", "/api/lessons/[lessonId]/reports");
   }
 }
+

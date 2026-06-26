@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import { env } from "@/shared/config/server-env";
 
 /**
@@ -21,7 +21,7 @@ const supabase = createClient(
 export const SURVEY_IMAGES_BUCKET = "survey-images";
 export const SURVEY_AUDIO_BUCKET = "survey-audio";
 export const SURVEY_VIDEO_BUCKET = "survey-video";
-export const LEARNING_MATERIALS_BUCKET = "learning-materials";
+export const LESSON_MATERIALS_BUCKET = "learning-materials";
 
 function getUploadByteLength(file: Buffer | Blob) {
   return Buffer.isBuffer(file) ? file.byteLength : file.size;
@@ -126,49 +126,49 @@ export async function uploadSurveyMedia(
   };
 }
 
-export async function uploadLearningMaterial(
+export async function uploadLessonMaterial(
   file: Buffer | Blob,
-  topicId: string,
+  lessonId: string,
   assetId: string,
   contentType: string,
   originalFilename: string,
 ): Promise<{ path: string; bucket: string }> {
   const safeName = originalFilename.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const filePath = `${topicId}/${assetId}-${safeName}`;
+  const filePath = `${lessonId}/${assetId}-${safeName}`;
 
-  console.info("[learning-material-storage] upload start", {
-    bucket: LEARNING_MATERIALS_BUCKET,
+  console.info("[lesson-material-storage] upload start", {
+    bucket: LESSON_MATERIALS_BUCKET,
     path: filePath,
-    topicId,
+    lessonId,
     assetId,
     contentType,
     sizeBytes: getUploadByteLength(file),
   });
 
   const { data, error } = await supabase.storage
-    .from(LEARNING_MATERIALS_BUCKET)
+    .from(LESSON_MATERIALS_BUCKET)
     .upload(filePath, file, {
       contentType,
       upsert: true,
     });
 
   if (error) {
-    console.error("[learning-material-storage] upload failed", {
-      bucket: LEARNING_MATERIALS_BUCKET,
+    console.error("[lesson-material-storage] upload failed", {
+      bucket: LESSON_MATERIALS_BUCKET,
       path: filePath,
-      topicId,
+      lessonId,
       assetId,
       contentType,
       sizeBytes: getUploadByteLength(file),
       error: getSupabaseStorageErrorDetails(error),
     });
-    throw new Error(`Failed to upload learning material: ${error.message}`);
+    throw new Error(`Failed to upload lesson material: ${error.message}`);
   }
 
-  console.info("[learning-material-storage] upload complete", {
-    bucket: LEARNING_MATERIALS_BUCKET,
+  console.info("[lesson-material-storage] upload complete", {
+    bucket: LESSON_MATERIALS_BUCKET,
     path: data.path,
-    topicId,
+    lessonId,
     assetId,
     contentType,
     sizeBytes: getUploadByteLength(file),
@@ -176,7 +176,7 @@ export async function uploadLearningMaterial(
 
   return {
     path: data.path,
-    bucket: LEARNING_MATERIALS_BUCKET,
+    bucket: LESSON_MATERIALS_BUCKET,
   };
 }
 
@@ -203,43 +203,43 @@ export async function createSignedSurveyMediaUrl(
   return data.signedUrl;
 }
 
-export async function createSignedLearningMaterialUrl(
+export async function createSignedLessonMaterialUrl(
   path: string,
   expiresInSeconds: number = 60,
 ): Promise<string> {
   const { data, error } = await supabase.storage
-    .from(LEARNING_MATERIALS_BUCKET)
+    .from(LESSON_MATERIALS_BUCKET)
     .createSignedUrl(path, expiresInSeconds);
 
   if (error || !data?.signedUrl) {
-    throw new Error(`Failed to create signed learning material URL: ${error?.message ?? "Missing signed URL"}`);
+    throw new Error(`Failed to create signed lesson material URL: ${error?.message ?? "Missing signed URL"}`);
   }
 
   return data.signedUrl;
 }
 
-export async function downloadLearningMaterial(path: string): Promise<Buffer> {
-  console.info("[learning-material-storage] download start", {
-    bucket: LEARNING_MATERIALS_BUCKET,
+export async function downloadLessonMaterial(path: string): Promise<Buffer> {
+  console.info("[lesson-material-storage] download start", {
+    bucket: LESSON_MATERIALS_BUCKET,
     path,
   });
 
   const { data, error } = await supabase.storage
-    .from(LEARNING_MATERIALS_BUCKET)
+    .from(LESSON_MATERIALS_BUCKET)
     .download(path);
 
   if (error || !data) {
-    console.error("[learning-material-storage] download failed", {
-      bucket: LEARNING_MATERIALS_BUCKET,
+    console.error("[lesson-material-storage] download failed", {
+      bucket: LESSON_MATERIALS_BUCKET,
       path,
       error: error ? getSupabaseStorageErrorDetails(error) : null,
     });
-    throw new Error(`Failed to download learning material: ${error?.message ?? "Missing file"}`);
+    throw new Error(`Failed to download lesson material: ${error?.message ?? "Missing file"}`);
   }
 
   const buffer = Buffer.from(await data.arrayBuffer());
-  console.info("[learning-material-storage] download complete", {
-    bucket: LEARNING_MATERIALS_BUCKET,
+  console.info("[lesson-material-storage] download complete", {
+    bucket: LESSON_MATERIALS_BUCKET,
     path,
     sizeBytes: buffer.byteLength,
   });
@@ -284,13 +284,13 @@ export async function deleteSurveyMedia(
   }
 }
 
-export async function deleteLearningMaterial(path: string): Promise<void> {
+export async function deleteLessonMaterial(path: string): Promise<void> {
   const { error } = await supabase.storage
-    .from(LEARNING_MATERIALS_BUCKET)
+    .from(LESSON_MATERIALS_BUCKET)
     .remove([path]);
 
   if (error) {
-    throw new Error(`Failed to delete learning material: ${error.message}`);
+    throw new Error(`Failed to delete lesson material: ${error.message}`);
   }
 }
 
@@ -371,4 +371,5 @@ export function validateImageFile(
 
   return { valid: true };
 }
+
 

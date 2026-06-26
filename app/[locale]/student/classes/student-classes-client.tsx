@@ -1,26 +1,26 @@
-"use client";
+﻿"use client";
 
-import { useStudentLearningWorkspace } from "@/features/tutoring/client/hooks/use-student-learning-workspace";
+import { useStudentClassesWorkspace } from "@/features/tutoring/client/hooks/use-student-classes-workspace";
 import { StudentInvitationCard } from "@/features/tutoring/ui/student-invitation-card";
 import { StudentCourseCard } from "@/features/tutoring/ui/student-course-card";
 import { Sparkles, CheckCircle2, GraduationCap } from "lucide-react";
-import type { LearningMeData } from "@/features/tutoring/public-client";
-import type { getStudentLearningWorkspaceInitialData } from "@/shared/http/page-data";
+import type { StudentMeData } from "@/features/tutoring/public-client";
+import type { getStudentWorkspaceInitialData } from "@/shared/http/page-data";
 
-type StudentLearningMeData = Extract<LearningMeData, { role: "student" }>;
+type StudentStudentMeData = Extract<StudentMeData, { role: "student" }>;
 
 export function StudentClassesClient({
-  initialLearningMe,
+  initialStudentMe,
   initialPatterns,
 }: {
-  initialLearningMe: StudentLearningMeData;
+  initialStudentMe: StudentStudentMeData;
   initialPatterns?: Awaited<
-    ReturnType<typeof getStudentLearningWorkspaceInitialData>
+    ReturnType<typeof getStudentWorkspaceInitialData>
   >["initialPatterns"];
 }) {
   const { memberships, invitations, acceptInvitationMutation, rejectInvitationMutation } =
-    useStudentLearningWorkspace({
-      learningMe: initialLearningMe,
+    useStudentClassesWorkspace({
+      studentMe: initialStudentMe,
       initialPatterns,
     });
 
@@ -81,3 +81,5 @@ export function StudentClassesClient({
     </div>
   );
 }
+
+

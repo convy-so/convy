@@ -1,34 +1,34 @@
-import type { TopicSourceBoundary } from "@/features/tutoring/public-server";
+﻿import type { LessonSourceBoundary } from "@/features/tutoring/public-server";
 import { contentScopeSnapshotSchema, type ContentScopeSnapshot } from "@/features/tutoring/public-server";
 import { buildContentScopeFromPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
-import { getCachedTopicWithMaterials } from "@/features/tutoring/public-server";
+import { getCachedLessonWithMaterials } from "@/features/tutoring/public-server";
 import { LEARNING_STATUS } from "@/shared/learning/constants";
 
 export class ContentScopeService {
   /**
-   * Builds session grounding from the compiled topic pack (no per-turn embedding search).
+   * Builds session grounding from the compiled lesson pack (no per-turn embedding search).
    */
   async buildScopeFromPack(params: {
-    topicId: string;
-    sourceBoundary: TopicSourceBoundary;
+    lessonId: string;
+    sourceBoundary: LessonSourceBoundary;
     contentLocale?: string | null;
   }): Promise<ContentScopeSnapshot> {
-    const topic = await getCachedTopicWithMaterials(params.topicId);
-    if (!topic) {
-      throw new Error("Topic not found.");
+    const lesson = await getCachedLessonWithMaterials(params.lessonId);
+    if (!lesson) {
+      throw new Error("Lesson not found.");
     }
 
-    const materialIds = topic.materials
+    const materialIds = lesson.materials
       .filter((material) => material.indexingStatus === LEARNING_STATUS.materialCompleted)
       .map((material) => material.id);
 
     const snapshot = buildContentScopeFromPack({
-      topicId: topic.id,
-      topicTitle: topic.title,
-      contentLocale: params.contentLocale ?? topic.contentLocale,
+      lessonId: lesson.id,
+      lessonTitle: lesson.title,
+      contentLocale: params.contentLocale ?? lesson.contentLocale,
       sourceBoundary: params.sourceBoundary,
-      learningOutcomes: topic.learningOutcomes ?? [],
-      pack: topic.topicGroundingPack ?? null,
+      learningOutcomes: lesson.learningOutcomes ?? [],
+      pack: lesson.lessonGroundingPack ?? null,
       materialIds,
     });
 
@@ -37,3 +37,4 @@ export class ContentScopeService {
 }
 
 export const contentScopeService = new ContentScopeService();
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,10 +20,10 @@ import { cn } from "@/shared/ui/tailwind-class-utils";
 type ReviewQueueItem = {
   key: string;
   sessionId: string | null;
-  topicId: string | null;
+  lessonId: string | null;
   classroomStudentId: string | null;
   studentName: string | null;
-  topicTitle: string | null;
+  lessonTitle: string | null;
   subjectKey: string | null;
   subjectLabel: string | null;
   priority: "low" | "medium" | "high";
@@ -82,7 +82,7 @@ export function ExpertQaReview() {
     queryKey: ["expertLearningReviewQueue"],
     queryFn: async () =>
       (await fetchJson<{ success: true; data: ReviewQueueItem[] }>(
-        "/api/learning/expert/review-queue",
+        "/api/expert/review-queue",
       )).data,
   });
 
@@ -96,7 +96,7 @@ export function ExpertQaReview() {
       if (!selectedQueueItem?.sessionId) return [];
       return (
         await fetchJson<{ success: true; data: TranscriptMessage[] }>(
-          `/api/learning/expert/sessions/${selectedQueueItem.sessionId}/transcript`,
+          `/api/expert/sessions/${selectedQueueItem.sessionId}/transcript`,
         )
       ).data;
     },
@@ -104,18 +104,18 @@ export function ExpertQaReview() {
   });
 
   const reviewHistoryQuery = useQuery({
-    queryKey: ["expertReviewHistory", selectedQueueItem?.topicId, selectedQueueItem?.sessionId],
+    queryKey: ["expertReviewHistory", selectedQueueItem?.lessonId, selectedQueueItem?.sessionId],
     queryFn: async () => {
       const search = new URLSearchParams();
-      if (selectedQueueItem?.topicId) search.set("topicId", selectedQueueItem.topicId);
+      if (selectedQueueItem?.lessonId) search.set("lessonId", selectedQueueItem.lessonId);
       if (selectedQueueItem?.sessionId) search.set("sessionId", selectedQueueItem.sessionId);
       return (
         await fetchJson<{ success: true; data: ReviewHistoryItem[] }>(
-          `/api/learning/expert/annotations?${search.toString()}`,
+          `/api/expert/annotations?${search.toString()}`,
         )
       ).data;
     },
-    enabled: Boolean(selectedQueueItem?.topicId || selectedQueueItem?.sessionId),
+    enabled: Boolean(selectedQueueItem?.lessonId || selectedQueueItem?.sessionId),
   });
 
   // Auto-scroll transcript to bottom when loaded
@@ -133,10 +133,10 @@ export function ExpertQaReview() {
       if (!selectedQueueItem) {
         throw new Error("Pick a queue item first.");
       }
-      return await fetchJson<{ success: true }>("/api/learning/expert/annotations", {
+      return await fetchJson<{ success: true }>("/api/expert/annotations", {
         method: "POST",
         body: JSON.stringify({
-          topicId: selectedQueueItem.topicId,
+          lessonId: selectedQueueItem.lessonId,
           sessionId: selectedQueueItem.sessionId,
           classroomStudentId: selectedQueueItem.classroomStudentId,
           reviewType: annotationType,
@@ -237,7 +237,7 @@ export function ExpertQaReview() {
                   </span>
                 </div>
                 <div className={cn("mt-1 text-xs font-medium", selectedQueueItem?.key === item.key ? "text-slate-300" : "text-slate-600")}>
-                  {item.topicTitle ?? "Unknown topic"}
+                  {item.lessonTitle ?? "Unknown lesson"}
                 </div>
                 <div className="flex items-center gap-1.5 mt-2">
                   {item.reasons.map((r) => (
@@ -269,7 +269,7 @@ export function ExpertQaReview() {
                   {selectedQueueItem.studentName}
                 </h2>
                 <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
-                  <span className="font-medium">{selectedQueueItem.topicTitle}</span>
+                  <span className="font-medium">{selectedQueueItem.lessonTitle}</span>
                   <span>&bull;</span>
                   <span>{selectedQueueItem.subjectLabel}</span>
                 </div>
@@ -475,7 +475,7 @@ export function ExpertQaReview() {
                       Review History
                     </h4>
                     <span className="text-xs font-semibold uppercase text-slate-400">
-                      session/topic
+                      session/lesson
                     </span>
                   </div>
                   <div className="mt-4 space-y-3">
@@ -527,3 +527,4 @@ export function ExpertQaReview() {
     </section>
   );
 }
+

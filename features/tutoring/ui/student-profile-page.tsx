@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import { Brain, Compass, Sparkles, User2 } from "lucide-react";
 
 import {
-  type LearningMeData,
+  type StudentMeData,
 } from "@/features/tutoring/public-client";
 import { GlassPanel } from "@/shared/ui/glass-panel";
 import { MetricTile } from "@/features/tutoring/ui/metric-tile";
@@ -55,11 +55,11 @@ function getStringValue(record: Record<string, unknown> | null | undefined, key:
 type PatternSummaryResult = Awaited<ReturnType<typeof getMyPatternSummaries>>;
 
 export function StudentProfilePage({
-  initialLearningMe,
+  initialStudentMe,
   initialPatterns,
   initialOnboardingState,
 }: {
-  initialLearningMe: LearningMeData;
+  initialStudentMe: StudentMeData;
   initialPatterns: PatternSummaryResult;
   initialOnboardingState?: Awaited<ReturnType<typeof getOnboardingStateData>>;
 }) {
@@ -67,10 +67,10 @@ export function StudentProfilePage({
 
   const memberships = useMemo(
     () =>
-      initialLearningMe.role === "student"
-        ? initialLearningMe.student
+      initialStudentMe.role === "student"
+        ? initialStudentMe.student
         : [],
-    [initialLearningMe],
+    [initialStudentMe],
   );
   const profile =
     initialOnboardingState?.completed ? initialOnboardingState.profile ?? null : null;
@@ -326,3 +326,4 @@ export function StudentProfilePage({
     </div>
   );
 }
+

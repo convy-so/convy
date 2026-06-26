@@ -1,14 +1,14 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 
 import { Output, generateText } from "ai";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
-import { learningTopics } from "@/shared/db/schema";
+import { lessons } from "@/shared/db/schema";
 import { analysisModel } from "@/shared/ai";
 
-export const topicReadinessSchema = z.object({
+export const lessonReadinessSchema = z.object({
   ready: z.boolean(),
   summary: z.string(),
   clarifyingQuestions: z.array(z.string()).default([]),
@@ -16,7 +16,7 @@ export const topicReadinessSchema = z.object({
   strengths: z.array(z.string()).default([]),
 });
 
-export type TopicReadiness = z.infer<typeof topicReadinessSchema>;
+export type LessonReadiness = z.infer<typeof lessonReadinessSchema>;
 
 export function isReadinessQuotaError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -31,7 +31,7 @@ export function isReadinessQuotaError(error: unknown) {
   );
 }
 
-export function buildReadinessUnavailableFallback(): TopicReadiness {
+export function buildReadinessUnavailableFallback(): LessonReadiness {
   return {
     ready: false,
     summary:
@@ -44,7 +44,7 @@ export function buildReadinessUnavailableFallback(): TopicReadiness {
   };
 }
 
-function buildReadinessSourceHash(topic: {
+function buildReadinessSourceHash(lesson: {
   title: string;
   description?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
@@ -60,13 +60,13 @@ function buildReadinessSourceHash(topic: {
     .createHash("sha256")
     .update(
       JSON.stringify({
-        title: topic.title,
-        description: topic.description ?? "",
-        learningOutcomes: topic.learningOutcomes.map((outcome) => ({
+        title: lesson.title,
+        description: lesson.description ?? "",
+        learningOutcomes: lesson.learningOutcomes.map((outcome) => ({
           title: outcome.title,
           description: outcome.description,
         })),
-        materials: topic.materials.map((material) => ({
+        materials: lesson.materials.map((material) => ({
           id: material.id,
           title: material.title,
           updatedAt:
@@ -81,7 +81,7 @@ function buildReadinessSourceHash(topic: {
     .digest("hex");
 }
 
-export async function getOrGenerateTopicReadiness(topic: {
+export async function getOrGenerateLessonReadiness(lesson: {
   id: string;
   title: string;
   description?: string | null;
@@ -97,29 +97,29 @@ export async function getOrGenerateTopicReadiness(topic: {
   readinessSourceHash?: string | null;
   readinessGeneratedAt?: Date | string | null;
 }) {
-  const sourceHash = buildReadinessSourceHash(topic);
+  const sourceHash = buildReadinessSourceHash(lesson);
   const persisted =
-    topic.readinessAnalysis &&
-    topic.readinessSourceHash === sourceHash &&
-    topicReadinessSchema.safeParse(topic.readinessAnalysis).success
-      ? topicReadinessSchema.parse(topic.readinessAnalysis)
+    lesson.readinessAnalysis &&
+    lesson.readinessSourceHash === sourceHash &&
+    lessonReadinessSchema.safeParse(lesson.readinessAnalysis).success
+      ? lessonReadinessSchema.parse(lesson.readinessAnalysis)
       : null;
 
   if (persisted) {
     return {
       data: persisted,
       generatedAt:
-        topic.readinessGeneratedAt instanceof Date
-          ? topic.readinessGeneratedAt.toISOString()
-          : topic.readinessGeneratedAt
-            ? String(topic.readinessGeneratedAt)
+        lesson.readinessGeneratedAt instanceof Date
+          ? lesson.readinessGeneratedAt.toISOString()
+          : lesson.readinessGeneratedAt
+            ? String(lesson.readinessGeneratedAt)
             : null,
       sourceHash,
       cacheStatus: "persisted" as const,
     };
   }
 
-  const materialAnalyses = topic.materials.map((material) => ({
+  const materialAnalyses = lesson.materials.map((material) => ({
     title: material.title,
     analysis: material.analysis ?? {},
     extractedTextSample: material.extractedText?.slice(0, 4000) ?? "",
@@ -128,14 +128,14 @@ export async function getOrGenerateTopicReadiness(topic: {
   const { output } = await generateText({
     model: analysisModel,
     output: Output.object({
-      schema: topicReadinessSchema,
+      schema: lessonReadinessSchema,
     }),
-    prompt: `You are helping a teacher decide whether a topic is ready for a grounded AI tutor.
+    prompt: `You are helping a teacher decide whether a lesson is ready for a grounded AI tutor.
 
-Topic: ${topic.title}
-Description: ${topic.description ?? ""}
+Lesson: ${lesson.title}
+Description: ${lesson.description ?? ""}
 Learning outcomes:
-${topic.learningOutcomes.map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`).join("\n")}
+${lesson.learningOutcomes.map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`).join("\n")}
 
 Uploaded materials and analyses:
 ${JSON.stringify(materialAnalyses)}
@@ -148,13 +148,13 @@ Rules:
 
   const generatedAt = new Date();
   await getDb()
-    .update(learningTopics)
+    .update(lessons)
     .set({
       readinessAnalysis: output,
       readinessSourceHash: sourceHash,
       readinessGeneratedAt: generatedAt,
     })
-    .where(eq(learningTopics.id, topic.id));
+    .where(eq(lessons.id, lesson.id));
 
   return {
     data: output,
@@ -163,3 +163,4 @@ Rules:
     cacheStatus: "generated" as const,
   };
 }
+

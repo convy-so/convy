@@ -1,8 +1,8 @@
-import { generateStructuredOutput } from "@/shared/ai/model-generation";
+﻿import { generateStructuredOutput } from "@/shared/ai/model-generation";
 import { getDb } from "@/shared/db";
 import { buildTeacherEvidenceAnswerPrompt } from "@/features/tutoring/server/prompts/evidence";
 
-import { searchStudentLearningEvidenceContext } from "./retrieval";
+import { searchStudentEvidenceContext } from "./retrieval";
 import { teacherEvidenceAnswerSchema } from "./evidence-domain";
 
 export async function answerTeacherStudentQuestion(params: {
@@ -13,19 +13,19 @@ export async function answerTeacherStudentQuestion(params: {
   language: string;
 }) {
   const [reports, interactions, retrievedEvidence] = await Promise.all([
-    getDb().query.studentProgressReports.findMany({
+    getDb().query.studentLessonReports.findMany({
       where: (table, { eq }) => eq(table.classroomStudentId, params.classroomStudentId),
       orderBy: (table, { desc }) => [desc(table.createdAt)],
       limit: 4,
-      with: { topic: true },
+      with: { lesson: true },
     }),
-    getDb().query.learningInteractions.findMany({
+    getDb().query.studentInteractions.findMany({
       where: (table, { eq }) => eq(table.classroomStudentId, params.classroomStudentId),
       orderBy: (table, { desc }) => [desc(table.createdAt)],
       limit: 8,
-      with: { topic: true },
+      with: { lesson: true },
     }),
-    searchStudentLearningEvidenceContext({
+    searchStudentEvidenceContext({
       classroomStudentId: params.classroomStudentId,
       query: params.question,
       language: params.language,
@@ -53,12 +53,12 @@ export async function answerTeacherStudentQuestion(params: {
         metadata: item.metadata,
       })),
       uniqueReports: uniqueReports.map((report) => ({
-        topicTitle: report.topic?.title ?? null,
+        lessonTitle: report.lesson?.title ?? null,
         masteryPercent: report.masteryPercent,
         report: report.report,
       })),
       uniqueInteractions: uniqueInteractions.map((interaction) => ({
-        topicTitle: interaction.topic?.title ?? null,
+        lessonTitle: interaction.lesson?.title ?? null,
         role: interaction.role,
         interactionType: interaction.interactionType,
         content: interaction.content,
@@ -66,3 +66,4 @@ export async function answerTeacherStudentQuestion(params: {
     }),
   });
 }
+

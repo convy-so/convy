@@ -1,15 +1,15 @@
-import { Suspense } from "react";
+﻿import { Suspense } from "react";
 import { Loader2, GraduationCap, AlertCircle } from "lucide-react";
-import { getLearningMeData, getMyPatternSummaries } from "@/shared/http/page-data";
+import { getStudentMeData, getMyPatternSummaries } from "@/shared/http/page-data";
 import { StudentClassesClient } from "./student-classes-client";
 
 export default async function StudentClassesPage() {
-  const [learningMe, patterns] = await Promise.all([
-    getLearningMeData(),
+  const [studentMe, patterns] = await Promise.all([
+    getStudentMeData(),
     getMyPatternSummaries(),
   ]);
 
-  if (learningMe.role !== "student") {
+  if (studentMe.role !== "student") {
     return (
       <div className="mx-auto max-w-7xl px-4 py-12">
         <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-sm">
@@ -45,8 +45,9 @@ export default async function StudentClassesPage() {
           <Loader2 className="w-8 h-8 animate-spin text-slate-200" />
         </div>
       }>
-        <StudentClassesClient initialLearningMe={learningMe} initialPatterns={patterns} />
+        <StudentClassesClient initialStudentMe={studentMe} initialPatterns={patterns} />
       </Suspense>
     </div>
   );
 }
+

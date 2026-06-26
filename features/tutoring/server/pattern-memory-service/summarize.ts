@@ -4,7 +4,7 @@ import {
   defaultLearningPatternProfile,
   getPatternConfidenceLabel,
 } from "@/features/tutoring/server/patterns";
-import type { StudentLearningPatternProfile } from "@/features/tutoring/server/pattern-types";
+import type { StudentPatternProfile } from "@/features/tutoring/server/pattern-types";
 import { createTutoringTimer, measureTutoringStep } from "@/features/tutoring/public-server";
 import { LEARNING_SUBJECT_DEFAULTS } from "@/shared/learning/constants";
 
@@ -31,7 +31,7 @@ function buildProfileFromMemories(params: {
   subjectKey?: string | null;
   subjectLabel?: string | null;
   memories: Mem0Memory[];
-}): StudentLearningPatternProfile {
+}): StudentPatternProfile {
   const sorted = [...params.memories].sort((left, right) =>
     getMemoryTimestamp(right).localeCompare(getMemoryTimestamp(left)),
   );
@@ -71,7 +71,7 @@ function buildProfileFromMemories(params: {
 const cachedSummarizeStudentPatternMemory = unstable_cache(
   async (studentUserId: string) =>
     await summarizeStudentPatternMemoryImpl({ studentUserId }),
-  ["learning-student-pattern-memory"],
+  ["student-pattern-memory"],
   { revalidate: 60 },
 );
 
@@ -128,7 +128,7 @@ async function summarizeStudentPatternMemoryImpl(params: {
     subjectGroups.set(subjectKey, current);
   }
 
-  const profiles: StudentLearningPatternProfile[] = [];
+  const profiles: StudentPatternProfile[] = [];
 
   if (globalMemories.length > 0) {
     profiles.push(

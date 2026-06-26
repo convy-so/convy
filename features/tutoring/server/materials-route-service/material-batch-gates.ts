@@ -1,4 +1,4 @@
-import { topicSourceBoundarySchema } from "@/features/tutoring/public-server";
+﻿import { lessonSourceBoundarySchema } from "@/features/tutoring/public-server";
 import {
   LEARNING_STATUS,
   MATERIAL_BATCH_GATE_STATUS,
@@ -127,10 +127,10 @@ function sameIdSet(left: string[], right: string[]) {
   return leftSorted.every((value, index) => value === rightSorted[index]);
 }
 
-export function getTopicActivationMaterialGate(params: {
-  topic: {
+export function getLessonActivationMaterialGate(params: {
+  lesson: {
     sourceBoundary?: unknown;
-    topicGroundingPack?: { materialIds?: string[] | null } | null;
+    lessonGroundingPack?: { materialIds?: string[] | null } | null;
   };
   materials: Array<{
     id: string;
@@ -150,7 +150,7 @@ export function getTopicActivationMaterialGate(params: {
 }) {
   const batch = getLatestMaterialBatchGateState(params.attempts);
   const activeBatchAttempts = getActiveBatchAttempts(params.attempts);
-  const boundary = topicSourceBoundarySchema.parse(params.topic.sourceBoundary ?? {});
+  const boundary = lessonSourceBoundarySchema.parse(params.lesson.sourceBoundary ?? {});
   const completedMaterialIds = params.materials
     .filter(
       (material) =>
@@ -163,7 +163,7 @@ export function getTopicActivationMaterialGate(params: {
     boundary.allowedMaterialIds.length > 0
       ? completedMaterialIds.filter((id) => boundary.allowedMaterialIds.includes(id))
       : completedMaterialIds;
-  const packMaterialIds = (params.topic.topicGroundingPack?.materialIds ?? []).filter(Boolean);
+  const packMaterialIds = (params.lesson.lessonGroundingPack?.materialIds ?? []).filter(Boolean);
   const packMatchesCurrentMaterials = sameIdSet(packMaterialIds, expectedPackMaterialIds);
   const onlyPackBuildFailures =
     activeBatchAttempts.length > 0 &&
@@ -185,7 +185,7 @@ export function getTopicActivationMaterialGate(params: {
     if (
       onlyPackBuildFailures &&
       expectedPackMaterialIds.length > 0 &&
-      params.topic.topicGroundingPack &&
+      params.lesson.lessonGroundingPack &&
       packMatchesCurrentMaterials
     ) {
       return {
@@ -211,7 +211,7 @@ export function getTopicActivationMaterialGate(params: {
     };
   }
 
-  if (!params.topic.topicGroundingPack || !packMatchesCurrentMaterials) {
+  if (!params.lesson.lessonGroundingPack || !packMatchesCurrentMaterials) {
     return {
       ready: false,
       reason:
@@ -224,3 +224,4 @@ export function getTopicActivationMaterialGate(params: {
     reason: "",
   };
 }
+

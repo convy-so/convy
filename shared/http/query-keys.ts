@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Centralized query key factory for React Query
  * Provides type-safe, consistent query keys across the application
  */
@@ -27,7 +27,7 @@ export const queryKeys = {
 
   // Learning
   learning: {
-    me: ["learningMe"] as const,
+    me: ["studentMe"] as const,
     myPatterns: ["learningMyPatterns"] as const,
     classrooms: ["learningClassrooms"] as const,
     classroomRequests: (classroomId: string) =>
@@ -39,31 +39,32 @@ export const queryKeys = {
     interventions: (
       classroomId: string,
       classroomStudentId?: string | null,
-      topicId?: string | null,
+      lessonId?: string | null,
     ) =>
       [
-        "learningInterventions",
+        "lessonInterventions",
         classroomId,
         classroomStudentId ?? null,
-        topicId ?? null,
+        lessonId ?? null,
       ] as const,
     students: (classroomId: string) => ["learningStudents", classroomId] as const,
-    topics: (classroomId: string) => ["learningTopics", classroomId] as const,
-    materials: (topicId: string) => ["learningMaterials", topicId] as const,
-    materialUploadAttempts: (topicId: string) =>
-      ["learningMaterialUploadAttempts", topicId] as const,
-    activationState: (topicId: string) =>
-      ["learningActivationState", topicId] as const,
-    reports: (topicId: string) => ["learningReports", topicId] as const,
-    questions: (topicId: string) => ["learningQuestions", topicId] as const,
+    lessons: (classroomId: string) => ["lessons", classroomId] as const,
+    materials: (lessonId: string) => ["learningMaterials", lessonId] as const,
+    materialUploadAttempts: (lessonId: string) =>
+      ["learningMaterialUploadAttempts", lessonId] as const,
+    activationState: (lessonId: string) =>
+      ["learningActivationState", lessonId] as const,
+    reports: (lessonId: string) => ["learningReports", lessonId] as const,
+    questions: (lessonId: string) => ["learningQuestions", lessonId] as const,
     classroomStudentPatterns: (classroomStudentId: string) =>
       ["learningClassroomStudentPatterns", classroomStudentId] as const,
     classroomStudentOverview: (classroomStudentId: string) =>
       ["learningClassroomStudentOverview", classroomStudentId] as const,
-    topicOverview: (topicId: string) =>
-      ["learningTopicOverview", topicId] as const,
+    lessonOverview: (lessonId: string) =>
+      ["lessonOverview", lessonId] as const,
     onboarding: ["learningOnboarding"] as const,
-    tutoring: (topicId: string, language?: string | null) =>
-      ["learningTutoring", topicId, language ?? null] as const,
+    tutoring: (lessonId: string, language?: string | null) =>
+      ["learningTutoring", lessonId, language ?? null] as const,
   },
 } as const;
+

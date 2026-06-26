@@ -1,9 +1,10 @@
-export {
-  createLearningTopicAction as createLessonAction,
-  createLearningTopicAction,
+﻿export {
+  createLessonAction as createLessonAction,
+  createLessonAction,
   normalizeLearningOutcomesAction,
-  updateLearningTopicDetailsAction as updateLessonDetailsAction,
-  updateLearningTopicDetailsAction,
-  updateTopicStatusAction as updateLessonStatusAction,
-  updateTopicStatusAction,
+  updateLessonDetailsAction as updateLessonDetailsAction,
+  updateLessonDetailsAction,
+  updateLessonStatusAction as updateLessonStatusAction,
+  updateLessonStatusAction,
 } from "@/features/tutoring/server/actions/lesson-actions";
+

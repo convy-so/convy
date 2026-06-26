@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import {
@@ -151,7 +151,7 @@ export function TeacherStudentDetailPage({
             <div className="flex items-center gap-2">
               {navigation.previousStudent ? (
                 <Link
-                  href={`/dashboard/learning/students/${navigation.previousStudent.id}`}
+                  href={`/dashboard/teaching/students/${navigation.previousStudent.id}`}
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -160,7 +160,7 @@ export function TeacherStudentDetailPage({
               ) : null}
               {navigation.nextStudent ? (
                 <Link
-                  href={`/dashboard/learning/students/${navigation.nextStudent.id}`}
+                  href={`/dashboard/teaching/students/${navigation.nextStudent.id}`}
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
                 >
                   Next student
@@ -464,7 +464,7 @@ export function TeacherStudentDetailPage({
             </p>
           </div>
           <div className="hidden grid-cols-[minmax(0,1.4fr)_120px_130px_140px_44px] gap-4 border-b border-slate-100 px-6 py-3 text-xs font-medium uppercase tracking-[0.14em] text-slate-400 md:grid">
-            <div>Topic and summary</div>
+            <div>Lesson and summary</div>
             <div>Mastery</div>
             <div>Updated</div>
             <div>Gap focus</div>
@@ -478,13 +478,13 @@ export function TeacherStudentDetailPage({
                 return (
                   <Link
                     key={report.id}
-                    href={`/dashboard/learning/students/${student.id}/reports/${report.id}`}
+                    href={`/dashboard/teaching/students/${student.id}/reports/${report.id}`}
                     className="block px-6 py-5 transition hover:bg-slate-50"
                   >
                     <div className="space-y-4 md:hidden">
                       <div>
                         <div className="text-base font-semibold text-slate-950">
-                          {report.topicTitle}
+                          {report.lessonTitle}
                         </div>
                         <div className="mt-1 text-sm text-slate-500">
                           {formatDate(report.updatedAt)}
@@ -504,7 +504,7 @@ export function TeacherStudentDetailPage({
                     <div className="hidden grid-cols-[minmax(0,1.4fr)_120px_130px_140px_44px] items-start gap-4 md:grid">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-slate-950">
-                          {report.topicTitle}
+                          {report.lessonTitle}
                         </div>
                         <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
                           {report.report.studentSummary}
@@ -568,7 +568,7 @@ export function TeacherStudentDetailPage({
                         }`}
                       >
                         <div className="text-sm font-semibold text-slate-950">
-                          {sessionRow.topicTitle ?? "Tutoring session"}
+                          {sessionRow.lessonTitle ?? "Tutoring session"}
                         </div>
                         <div className="mt-1 text-sm text-slate-500">
                           {formatDate(sessionRow.createdAt)}
@@ -589,19 +589,19 @@ export function TeacherStudentDetailPage({
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <div className="text-lg font-semibold text-slate-950">
-                            {selectedConversationSession.topicTitle ?? "Tutoring session"}
+                            {selectedConversationSession.lessonTitle ?? "Tutoring session"}
                           </div>
                           <div className="mt-1 text-sm text-slate-500">
                             {formatDate(selectedConversationSession.createdAt)} &bull;{" "}
                             {formatStatusLabel(selectedConversationSession.sessionStatus)}
                           </div>
                         </div>
-                        {selectedConversationSession.topicId ? (
+                        {selectedConversationSession.lessonId ? (
                           <Link
-                            href={`/dashboard/learning/sessions/${selectedConversationSession.topicId}`}
+                            href={`/dashboard/teaching/lessons/${selectedConversationSession.lessonId}`}
                             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
                           >
-                            Open topic
+                            Open lesson
                             <ChevronRight className="h-4 w-4" />
                           </Link>
                         ) : null}
@@ -676,3 +676,4 @@ export function TeacherStudentDetailPage({
     </div>
   );
 }
+

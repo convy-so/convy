@@ -25,7 +25,7 @@ import {
   classifyOutOfSessionQuestion,
   generateOutOfSessionReply,
 } from "@/features/tutoring/server/out-of-session";
-import { logLearningInteraction } from "@/features/tutoring/public-server";
+import { logStudentInteraction } from "@/features/tutoring/public-server";
 import { finalizeTutoringSession } from "@/features/tutoring/server/tutoring-session-lifecycle";
 import {
   resolveStudentTutoringContext,
@@ -33,7 +33,7 @@ import {
 } from "@/features/tutoring/server/tutoring-route-orchestrator";
 import { resolveTeacherStudentAccess } from "@/features/tutoring/server/teacher-route-access";
 import type { GradeBand } from "@/features/tutoring/public-server";
-import { learningSessionStateSchema } from "@/features/tutoring/public-server";
+import { studentSessionStateSchema } from "@/features/tutoring/public-server";
 import { normalizeAppLocale } from "@/shared/i18n/config";
 import {
   LEARNING_DEFAULTS,
@@ -48,13 +48,13 @@ import { requireValue } from "@/shared/utils/collections";
 import { revalidateLearningUi } from "./action-access";
 
 const completeTutoringSessionSchema = z.object({
-  topicId: z.string().min(1),
+  lessonId: z.string().min(1),
   sessionId: z.string().min(1),
   language: z.string().optional(),
 });
 
 const outOfSessionQuestionSchema = z.object({
-  topicId: z.string().min(1),
+  lessonId: z.string().min(1),
   message: z.string().trim().min(1),
   language: z.string().optional(),
 });
@@ -127,7 +127,7 @@ export async function completeTutoringSessionAction(
     const body = validateInput(input, completeTutoringSessionSchema);
     const { access } = await resolveStudentTutoringContext({
       userId: auth.user.id,
-      topicId: body.topicId,
+      lessonId: body.lessonId,
     });
 
     if (!access) {
@@ -136,7 +136,7 @@ export async function completeTutoringSessionAction(
 
     const tutoringSession = await resolveStudentTutoringSessionById({
       sessionId: body.sessionId,
-      topicId: body.topicId,
+      lessonId: body.lessonId,
       classroomStudentId: access.classroomStudent.id,
     });
 
@@ -156,20 +156,20 @@ export async function completeTutoringSessionAction(
       };
     }
 
-    const state = learningSessionStateSchema.parse(tutoringSession.state ?? {});
+    const state = studentSessionStateSchema.parse(tutoringSession.state ?? {});
     const studyLanguage = normalizeAppLocale(
       body.language ?? auth.user.uiLocale ?? auth.user.preferredLanguage ?? "en",
     );
 
     await finalizeTutoringSession({
       sessionId: tutoringSession.id,
-      topicId: body.topicId,
-      classroomId: access.topic.classroomId,
+      lessonId: body.lessonId,
+      classroomId: access.lesson.classroomId,
       classroomStudentId: access.classroomStudent.id,
       studentUserId: auth.user.id,
       studentName: access.classroomStudent.fullName,
-      topicTitle: access.topic.title,
-      sourceLocale: access.topic.contentLocale ?? studyLanguage,
+      lessonTitle: access.lesson.title,
+      sourceLocale: access.lesson.contentLocale ?? studyLanguage,
       summary: tutoringSession.summary ?? null,
       expectedStateVersion:
         tutoringSession.stateVersion ?? LEARNING_NUMERIC_DEFAULTS.initialVersion,
@@ -202,53 +202,53 @@ export async function askOutOfSessionQuestionAction(
   return withErrorHandling(async () => {
     const session = await getVerifiedSession();
     const body = validateInput(input, outOfSessionQuestionSchema);
-    const access = await getStudentTutoringAccess(session.user.id, body.topicId);
+    const access = await getStudentTutoringAccess(session.user.id, body.lessonId);
 
     if (!access) {
       throw new ActionError("Unauthorized", "UNAUTHORIZED");
     }
 
     const classification = await classifyOutOfSessionQuestion({
-      topicTitle: access.topic.title,
-      topicDescription: access.topic.description,
-      learningOutcomes: access.topic.learningOutcomes,
+      lessonTitle: access.lesson.title,
+      lessonDescription: access.lesson.description,
+      learningOutcomes: access.lesson.learningOutcomes,
       question: body.message,
     });
 
     const contentScope = await contentScopeService.buildScopeFromPack({
-      topicId: body.topicId,
-      sourceBoundary: access.topic.sourceBoundary ?? {
+      lessonId: body.lessonId,
+      sourceBoundary: access.lesson.sourceBoundary ?? {
         teacherSummary: "",
         scopeNotes: [],
         notationNotes: [],
         rigorNotes: [],
         allowedMaterialIds: [],
       },
-      contentLocale: normalizeAppLocale(access.topic.contentLocale),
+      contentLocale: normalizeAppLocale(access.lesson.contentLocale),
     });
 
     const response = await generateOutOfSessionReply({
       classification: classification.classification,
-      topicTitle: access.topic.title,
-      learningOutcomes: access.topic.learningOutcomes,
-      gradeBand: access.topic.classroom.gradeBand as GradeBand,
+      lessonTitle: access.lesson.title,
+      learningOutcomes: access.lesson.learningOutcomes,
+      gradeBand: access.lesson.classroom.gradeBand as GradeBand,
       studentProfile: access.classroomStudent.interestProfile.profile,
       question: body.message,
       retrievedContext: renderGroundingUnits(
         selectGroundingUnitsForPrompt({
           contentScope,
           query: body.message,
-          recentSummary: access.topic.title,
+          recentSummary: access.lesson.title,
           budgetTokens: LEARNING_LIMITS.outOfSessionGroundingBudgetTokens,
           maxUnits: LEARNING_LIMITS.outOfSessionGroundingMaxUnits,
         }),
       ),
-      language: normalizeAppLocale(body.language ?? access.topic.contentLocale),
+      language: normalizeAppLocale(body.language ?? access.lesson.contentLocale),
     });
 
-    await logLearningInteraction({
+    await logStudentInteraction({
       classroomStudentId: access.classroomStudent.id,
-      topicId: body.topicId,
+      lessonId: body.lessonId,
       role: "user",
       interactionType: "out_of_session_question",
       content: body.message,
@@ -258,9 +258,9 @@ export async function askOutOfSessionQuestionAction(
       },
     });
 
-    await logLearningInteraction({
+    await logStudentInteraction({
       classroomStudentId: access.classroomStudent.id,
-      topicId: body.topicId,
+      lessonId: body.lessonId,
       role: "assistant",
       interactionType: "agent_answer",
       content: response,
@@ -414,3 +414,4 @@ export async function saveTeacherStudentChatSessionAction(
     return { success: true, data: createdSession };
   }, "saveTeacherStudentChatSessionAction");
 }
+

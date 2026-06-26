@@ -50,7 +50,7 @@ Important correction:
 These are not smells and should not be targeted blindly.
 
 - Query key tuples in [shared/http/query-keys.ts](/C:/Users/pc/convy/shared/http/query-keys.ts:1) use `as const` correctly. This preserves tuple literals for React Query keys.
-- Discriminant-style action/page-data returns such as `success: true as const` or `completed: false as const` in [shared/http/page-data/student-learning-page-data.ts](/C:/Users/pc/convy/shared/http/page-data/student-learning-page-data.ts:1) are justified. They create stable tagged unions.
+- Discriminant-style action/page-data returns such as `success: true as const` or `completed: false as const` in [shared/http/page-data/student-workspace-page-data.ts](/C:/Users/pc/convy/shared/http/page-data/student-workspace-page-data.ts:1) are justified. They create stable tagged unions.
 - Runtime coercion of raw SQL rows in [app/actions/admin.ts](/C:/Users/pc/convy/app/actions/admin.ts:1) is a good boundary pattern. `Record<string, unknown>` is used there because `execute()` returns untyped row bags.
 - Narrowing helpers around unknown profile data in [features/tutoring/ui/student-profile-page.tsx](/C:/Users/pc/convy/features/tutoring/ui/student-profile-page.tsx:1) are healthy examples of using the type system instead of escaping it.
 - Catch clauses generally use `error instanceof Error ? error.message : String(error)`, which is the correct `unknown`-style handling pattern.

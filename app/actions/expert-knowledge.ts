@@ -19,10 +19,10 @@ import {
   validateInput,
 } from "@/shared/http/action-result";
 import { InferSelectModel } from "drizzle-orm";
-import { learningTopics } from "@/shared/db/schema/learning";
+import { lessons } from "@/shared/db/schema/learning";
 
-export type ExpertCrystallizationWithTopic = InferSelectModel<typeof expertCrystallizations> & {
-  topic: InferSelectModel<typeof learningTopics> | null;
+export type ExpertCrystallizationWithLesson = InferSelectModel<typeof expertCrystallizations> & {
+  lesson: InferSelectModel<typeof lessons> | null;
 };
 
 const approveCrystallizationSchema = z.object({
@@ -33,7 +33,7 @@ const approveCrystallizationSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function listDraftCrystallizations(): Promise<ActionResult<ExpertCrystallizationWithTopic[]>> {
+export async function listDraftCrystallizations(): Promise<ActionResult<ExpertCrystallizationWithLesson[]>> {
   return withErrorHandling(async () => {
     const session = await getVerifiedSession();
     if (!session || !isExpert(session.user)) {
@@ -44,7 +44,7 @@ export async function listDraftCrystallizations(): Promise<ActionResult<ExpertCr
       where: eq(expertCrystallizations.status, "draft"),
       orderBy: [desc(expertCrystallizations.createdAt)],
       with: {
-        topic: true,
+        lesson: true,
       },
     });
     return { success: true, data };

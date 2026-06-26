@@ -1,4 +1,4 @@
-import { requireVerifiedSession } from "@/features/auth/public-server";
+﻿import { requireVerifiedSession } from "@/features/auth/public-server";
 import { redirect } from "next/navigation";
 import { DashboardSidebar } from "@/shared/ui/workspace/dashboard-sidebar";
 import { DashboardHeader } from "@/shared/ui/workspace/dashboard-header";
@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
 import {
-    getLearningMeDataForSession,
+    getStudentMeDataForSession,
     getNotificationsForSession,
 } from "@/shared/http/page-data";
 import { AuthProvider } from "@/features/auth/public-ui";
@@ -61,8 +61,8 @@ async function StudentLayoutContent({
     }
 
     const messages = await getMessages();
-    const [learningMe, notifications] = await Promise.all([
-        getLearningMeDataForSession(session),
+    const [studentMe, notifications] = await Promise.all([
+        getStudentMeDataForSession(session),
         getNotificationsForSession(session),
     ]);
 
@@ -70,7 +70,7 @@ async function StudentLayoutContent({
         <NextIntlClientProvider messages={messages} locale={locale}>
             <AuthProvider initialSession={session}>
                 <div className="flex min-h-screen bg-[#f7f7f7]">
-                    <DashboardSidebar initialLearningMe={learningMe} viewerAccess={viewerAccess} />
+                    <DashboardSidebar initialStudentMe={studentMe} viewerAccess={viewerAccess} />
                     <div className="flex-1 flex flex-col lg:pl-72 transition-all duration-300">
                         <DashboardHeader initialNotifications={notifications} viewerAccess={viewerAccess} />
 
@@ -89,3 +89,4 @@ async function StudentLayoutContent({
         </NextIntlClientProvider>
     );
 }
+

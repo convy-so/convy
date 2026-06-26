@@ -18,7 +18,7 @@ import {
 import type {
   ActiveExpertFramework,
   ContentScopeSnapshot,
-  LearningSessionState,
+  StudentSessionState,
   StudentInterestProfile,
 } from "@/features/tutoring/public-server";
 import type {
@@ -32,13 +32,13 @@ type RecentTurn = {
 };
 
 function buildStudentTurnStaticPrompt(params: {
-  topicTitle: string;
+  lessonTitle: string;
   studyLanguage: string;
 }) {
   return [
     buildPromptFrame({
       role: `You are Convy's tutor. Reply in ${params.studyLanguage}.`,
-      goal: `Help the student make real progress in ${params.topicTitle} without leaving the approved lesson scope.`,
+      goal: `Help the student make real progress in ${params.lessonTitle} without leaving the approved lesson scope.`,
       constraints: [
         "Facts, notation, formulas, and scope boundaries must come from grounded course context only.",
         "Pedagogy may be adapted using the expert framework, recent session state, and memory, but those layers must not add new facts.",
@@ -59,8 +59,8 @@ function buildStudentTurnStaticPrompt(params: {
         "Use canonical notation from the grounded context when notation matters.",
       ],
       scopePolicy: {
-        objective: `Help the student learn ${params.topicTitle} using teacher-approved materials.`,
-        activeTopic: params.topicTitle,
+        objective: `Help the student learn ${params.lessonTitle} using teacher-approved materials.`,
+        activeLesson: params.lessonTitle,
         currentPhase: "active tutoring session",
         allowedDetours: [
           "brief clarification of the current concept",
@@ -82,13 +82,13 @@ export function buildStudentTurnPromptRuntime(params: {
   interestProfile: StudentInterestProfile | null;
   teachingPlaybook: LearningTeachingPlaybook | null;
   memoryState: PatternMemoryState;
-  state: LearningSessionState;
+  state: StudentSessionState;
   recentMessages: RecentTurn[];
   latestUserText: string;
   studyLanguage: string;
 }) {
   const staticSystemPrompt = buildStudentTurnStaticPrompt({
-    topicTitle: params.contentScope.topicTitle,
+    lessonTitle: params.contentScope.lessonTitle,
     studyLanguage: params.studyLanguage,
   });
 
@@ -110,7 +110,7 @@ export function buildStudentTurnPromptRuntime(params: {
         versionId: `state:${params.state.turnCount}:${params.contentScope.groundingPackVersion}`,
         tokenBudget: 650,
         content: [
-          `Topic: ${params.contentScope.topicTitle}`,
+          `Lesson: ${params.contentScope.lessonTitle}`,
           `Teacher summary: ${params.contentScope.teacherSummary || "none"}`,
           `Learning outcomes:\n${renderLearningOutcomes(params.contentScope.learningOutcomes)}`,
           `Scope notes:\n${params.contentScope.scopeNotes.length ? params.contentScope.scopeNotes.map((value) => `- ${value}`).join("\n") : "- none"}`,
@@ -167,7 +167,7 @@ export function buildStudentTurnPromptRuntime(params: {
     },
   );
   const promptCache = buildPromptCacheConfig({
-    namespace: "learning-tutor-chat",
+    namespace: "tutoring-session-chat",
     staticSystemPrompt,
   });
 
@@ -186,7 +186,7 @@ export function buildStudentTurnSystemPrompt(params: {
   interestProfile: StudentInterestProfile | null;
   teachingPlaybook: LearningTeachingPlaybook | null;
   memoryState: PatternMemoryState;
-  state: LearningSessionState;
+  state: StudentSessionState;
   recentMessages: RecentTurn[];
   latestUserText: string;
   studyLanguage: string;
@@ -196,3 +196,4 @@ export function buildStudentTurnSystemPrompt(params: {
     .filter(Boolean)
     .join("\n\n");
 }
+

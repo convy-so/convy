@@ -1,4 +1,4 @@
-import { nanoid } from "nanoid";
+﻿import { nanoid } from "nanoid";
 import { z } from "zod";
 
 import {
@@ -7,28 +7,28 @@ import {
 import {
   type GroundingCitation,
   type MaterialGroundingMap,
-  topicGroundingFormulaSchema,
-  topicGroundingPackSchema,
-  topicGroundingSectionSchema,
-  type TopicGroundingPack,
-  type TopicSourceBoundary,
+  lessonGroundingFormulaSchema,
+  lessonGroundingPackSchema,
+  lessonGroundingSectionSchema,
+  type LessonGroundingPack,
+  type LessonSourceBoundary,
 } from "@/features/tutoring/public-server";
 
-export const topicGroundingPackExtractSchema = topicGroundingPackSchema
+export const lessonGroundingPackExtractSchema = lessonGroundingPackSchema
   .omit({
     version: true,
     builtAt: true,
     materialIds: true,
-    topicTitle: true,
+    lessonTitle: true,
   })
   .extend({
     formulas: z.array(
-      topicGroundingFormulaSchema.omit({ id: true }).extend({
+      lessonGroundingFormulaSchema.omit({ id: true }).extend({
         id: z.string().optional(),
       }),
     ),
     sections: z.array(
-      topicGroundingSectionSchema.omit({ id: true }).extend({
+      lessonGroundingSectionSchema.omit({ id: true }).extend({
         id: z.string().optional(),
       }),
     ),
@@ -60,10 +60,10 @@ function uniqueCitations(citations: GroundingCitation[]) {
 }
 
 export function mergePackWithBoundary(
-  pack: TopicGroundingPack,
-  boundary: TopicSourceBoundary,
-): TopicGroundingPack {
-  return topicGroundingPackSchema.parse({
+  pack: LessonGroundingPack,
+  boundary: LessonSourceBoundary,
+): LessonGroundingPack {
+  return lessonGroundingPackSchema.parse({
     ...pack,
     notationRules: uniqueStrings([...pack.notationRules, ...boundary.notationNotes]),
     rigorRules: uniqueStrings([...pack.rigorRules, ...boundary.rigorNotes]),
@@ -101,7 +101,7 @@ export function buildCompiledGroundingText(
   return parts.join("").trim();
 }
 
-export function packToRetrievedContextLines(pack: TopicGroundingPack): string[] {
+export function packToRetrievedContextLines(pack: LessonGroundingPack): string[] {
   const lines: string[] = [];
 
   if (pack.digest.trim()) {
@@ -126,10 +126,10 @@ export function packToRetrievedContextLines(pack: TopicGroundingPack): string[] 
   return lines;
 }
 
-export function buildDeterministicTopicGroundingPack(params: {
-  topicTitle: string;
-  topicDescription?: string | null;
-  boundary: TopicSourceBoundary;
+export function buildDeterministicLessonGroundingPack(params: {
+  lessonTitle: string;
+  lessonDescription?: string | null;
+  boundary: LessonSourceBoundary;
   materialIds: string[];
   nextVersion: number;
   materials: Array<{
@@ -226,18 +226,18 @@ export function buildDeterministicTopicGroundingPack(params: {
 
   const digest = uniqueStrings([
     params.boundary.teacherSummary,
-    params.topicDescription ?? "",
+    params.lessonDescription ?? "",
     ...digestParts,
   ])
     .join(" ")
     .slice(0, 2_000);
 
   return mergePackWithBoundary(
-    topicGroundingPackSchema.parse({
+    lessonGroundingPackSchema.parse({
       version: params.nextVersion,
       builtAt: new Date().toISOString(),
       materialIds: params.materialIds,
-      topicTitle: params.topicTitle,
+      lessonTitle: params.lessonTitle,
       digest,
       inScopeConcepts: Array.from(conceptMap.values()),
       explicitlyOutOfScope: uniqueStrings(explicitlyOutOfScope),
@@ -257,3 +257,4 @@ export function buildDeterministicTopicGroundingPack(params: {
     params.boundary,
   );
 }
+

@@ -5,22 +5,22 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/shared/http/api-error";
 
 import { getDb } from "@/shared/db";
-import { topicMaterials } from "@/shared/db/schema";
+import { lessonMaterials } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
-import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
-import { uploadLearningMaterial } from "@/shared/infra/supabase-storage";
+import { handleTutoringRouteError } from "@/features/tutoring/server/route-errors";
+import { uploadLessonMaterial } from "@/shared/infra/supabase-storage";
 import { LEARNING_STATUS } from "@/shared/learning/constants";
 import {
   buildUploadAttemptFailure,
   createLearningMaterialUploadAttempt,
-  getTeacherTopicOrNull,
+  getTeacherLessonOrNull,
   isMaterialAnalysisFailed,
   type LearningMaterialUploadAttemptStage,
   normalizeDetectedLearningMaterialMime,
   updateLearningMaterialUploadAttempt,
 } from "@/features/tutoring/server/materials-route-service";
 import { assertLearningMaterialFile } from "@/shared/security/uploads";
-import { enqueueLearningMaterialProcessing } from "@/shared/infra/queue";
+import { enqueueLessonMaterialProcessing } from "@/shared/infra/queue";
 import { publishClassroomRealtimeEvent } from "@/shared/infra/realtime";
 import { serializeUploadAttempt } from "@/features/tutoring/server/api/lesson-material-upload-response";
 
@@ -59,19 +59,19 @@ function annotateLearningMaterialUploadError(
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ topicId: string }> },
+  { params }: { params: Promise<{ lessonId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
-    const { topicId } = await params;
-    const topic = await getTeacherTopicOrNull(session.user.id, topicId);
-    if (!topic) return apiError("UNAUTHORIZED", "Unauthorized");
+    const { lessonId } = await params;
+    const lesson = await getTeacherLessonOrNull(session.user.id, lessonId);
+    if (!lesson) return apiError("UNAUTHORIZED", "Unauthorized");
 
-    const materials = await getDb().query.topicMaterials.findMany({
+    const materials = await getDb().query.lessonMaterials.findMany({
       where: and(
-        eq(topicMaterials.topicId, topicId),
-        ne(topicMaterials.extractionStatus, LEARNING_STATUS.materialFailed),
-        ne(topicMaterials.indexingStatus, LEARNING_STATUS.materialFailed),
+        eq(lessonMaterials.lessonId, lessonId),
+        ne(lessonMaterials.extractionStatus, LEARNING_STATUS.materialFailed),
+        ne(lessonMaterials.indexingStatus, LEARNING_STATUS.materialFailed),
       ),
       orderBy: (table, { desc }) => [desc(table.createdAt)],
     });
@@ -86,28 +86,28 @@ export async function GET(
         })),
     });
   } catch (error) {
-    return handleLearningRouteError(error, "Failed to load materials", "/api/learning/lessons/[lessonId]/materials");
+    return handleTutoringRouteError(error, "Failed to load materials", "/api/lessons/[lessonId]/materials");
   }
 }
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ topicId: string }> },
+  { params }: { params: Promise<{ lessonId: string }> },
 ) {
   const startedAt = Date.now();
-  let topicIdForLog = "unknown";
+  let lessonIdForLog = "unknown";
 
   try {
     const session = await getVerifiedSession();
-    const { topicId } = await params;
-    topicIdForLog = topicId;
-    console.info("[learning-material-upload] start", {
-      topicId,
+    const { lessonId } = await params;
+    lessonIdForLog = lessonId;
+    console.info("[lesson-material-upload] start", {
+      lessonId,
       userId: session.user.id,
     });
 
-    const topic = await getTeacherTopicOrNull(session.user.id, topicId);
-    if (!topic) return apiError("UNAUTHORIZED", "Unauthorized");
+    const lesson = await getTeacherLessonOrNull(session.user.id, lessonId);
+    if (!lesson) return apiError("UNAUTHORIZED", "Unauthorized");
 
     const formData = await request.formData();
     const files = [
@@ -130,8 +130,8 @@ export async function POST(
       let failurePoint: LearningMaterialUploadFailurePoint = "attempt_create";
       let failureStage: LearningMaterialUploadAttemptStage =
         LEARNING_STATUS.uploadStageUpload;
-      console.info("[learning-material-upload] attempt create start", {
-        topicId,
+      console.info("[lesson-material-upload] attempt create start", {
+        lessonId,
         batchId,
         attemptId,
         fileName: file.name,
@@ -141,7 +141,7 @@ export async function POST(
       let attempt = await createLearningMaterialUploadAttempt({
         id: attemptId,
         batchId,
-        topicId,
+        lessonId,
         uploadedByUserId: session.user.id,
         fileName: file.name,
         title,
@@ -152,8 +152,8 @@ export async function POST(
         stage: LEARNING_STATUS.uploadStageUpload,
         processingStartedAt: new Date(),
       });
-      console.info("[learning-material-upload] attempt create complete", {
-        topicId,
+      console.info("[lesson-material-upload] attempt create complete", {
+        lessonId,
         batchId,
         attemptId,
         status: attempt?.status ?? null,
@@ -161,8 +161,8 @@ export async function POST(
       });
 
       try {
-        console.info("[learning-material-upload] file received", {
-          topicId,
+        console.info("[lesson-material-upload] file received", {
+          lessonId,
           batchId,
           attemptId,
           fileName: file.name,
@@ -184,8 +184,8 @@ export async function POST(
           detectedMime: detected?.mime,
         });
         assertLearningMaterialFile({ name: file.name, size: file.size, type: mimeType });
-        console.info("[learning-material-upload] file validated", {
-          topicId,
+        console.info("[lesson-material-upload] file validated", {
+          lessonId,
           batchId,
           attemptId,
           fileName: file.name,
@@ -196,17 +196,17 @@ export async function POST(
         });
 
         failurePoint = "storage_upload";
-        const uploaded = await uploadLearningMaterial(
+        const uploaded = await uploadLessonMaterial(
           buffer,
-          topicId,
+          lessonId,
           attemptId,
           mimeType,
           file.name,
         );
         uploadedBucket = uploaded.bucket;
         uploadedPath = uploaded.path;
-        console.info("[learning-material-upload] storage upload complete", {
-          topicId,
+        console.info("[lesson-material-upload] storage upload complete", {
+          lessonId,
           batchId,
           attemptId,
           bucket: uploaded.bucket,
@@ -217,8 +217,8 @@ export async function POST(
         attempt =
           (await updateLearningMaterialUploadAttempt({
             attemptId,
-            classroomId: topic.classroomId,
-            topicId,
+            classroomId: lesson.classroomId,
+            lessonId,
             batchId,
             mimeType,
             sizeBytes: file.size,
@@ -235,10 +235,10 @@ export async function POST(
 
         failureStage = LEARNING_STATUS.uploadStageExtraction;
         failurePoint = "queue_enqueue";
-        const processingJob = await enqueueLearningMaterialProcessing({
+        const processingJob = await enqueueLessonMaterialProcessing({
           attemptId,
-          topicId,
-          classroomId: topic.classroomId,
+          lessonId,
+          classroomId: lesson.classroomId,
           userId: session.user.id,
           storagePath: uploaded.path,
           fileName: file.name,
@@ -247,20 +247,20 @@ export async function POST(
           title: title || null,
           description: description || null,
         });
-        console.info("[learning-material-upload] processing job enqueued", {
-          topicId,
+        console.info("[lesson-material-upload] processing job enqueued", {
+          lessonId,
           batchId,
           attemptId,
           jobId: processingJob?.id ?? null,
-          queueName: processingJob?.queueName ?? "learning-material-processing",
+          queueName: processingJob?.queueName ?? "lesson-material-processing",
         });
 
         failurePoint = "attempt_queue_update";
         attempt =
           (await updateLearningMaterialUploadAttempt({
             attemptId,
-            classroomId: topic.classroomId,
-            topicId,
+            classroomId: lesson.classroomId,
+            lessonId,
             batchId,
             status: LEARNING_STATUS.uploadQueued,
             stage: LEARNING_STATUS.uploadStageExtraction,
@@ -285,8 +285,8 @@ export async function POST(
           error,
         );
         const failure = buildUploadAttemptFailure(failureStage, annotatedError);
-        console.error("[learning-material-upload] file failed", {
-          topicId,
+        console.error("[lesson-material-upload] file failed", {
+          lessonId,
           batchId,
           attemptId,
           fileName: file.name,
@@ -299,8 +299,8 @@ export async function POST(
         attempt =
           (await updateLearningMaterialUploadAttempt({
             attemptId,
-            classroomId: topic.classroomId,
-            topicId,
+            classroomId: lesson.classroomId,
+            lessonId,
             batchId,
             status: LEARNING_STATUS.uploadFailed,
             stage: failureStage,
@@ -320,15 +320,15 @@ export async function POST(
       }
     }
 
-    await publishClassroomRealtimeEvent(topic.classroomId, {
-      type: "learning_material_upload_updated",
-      topicId,
+    await publishClassroomRealtimeEvent(lesson.classroomId, {
+      type: "lesson_material_upload_updated",
+      lessonId,
       batchId,
       attemptIds: attempts.map((attempt) => attempt.id),
     });
 
-    console.info("[learning-material-upload] batch queued", {
-      topicId,
+    console.info("[lesson-material-upload] batch queued", {
+      lessonId,
       batchId,
       attemptCount: attempts.length,
       durationMs: Date.now() - startedAt,
@@ -342,12 +342,13 @@ export async function POST(
       },
     });
   } catch (error) {
-    console.error("[learning-material-upload] failed", {
-      topicId: topicIdForLog,
+    console.error("[lesson-material-upload] failed", {
+      lessonId: lessonIdForLog,
       durationMs: Date.now() - startedAt,
       error,
     });
 
-    return handleLearningRouteError(error, "Failed to upload material", "/api/learning/lessons/[lessonId]/materials");
+    return handleTutoringRouteError(error, "Failed to upload material", "/api/lessons/[lessonId]/materials");
   }
 }
+

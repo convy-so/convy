@@ -16,12 +16,12 @@ import {
   surveySessions,
   surveyTurns,
   surveys,
-  topicMaterials,
+  lessonMaterials,
   users,
   voiceSessions,
 } from "@/shared/db/schema";
 import { deleteLearningPatternMemoriesForUser, isMem0Configured } from "@/features/tutoring/public-server";
-import { deleteLearningMaterial, clearSurveyMedia } from "@/shared/infra/supabase-storage";
+import { clearSurveyMedia, deleteLessonMaterial } from "@/shared/infra/supabase-storage";
 import { PRIVACY_DEFAULTS } from "@/shared/privacy/constants";
 import { requireValue } from "@/shared/utils/collections";
 
@@ -125,8 +125,8 @@ export async function exportUserPrivacyData(userId: string) {
     getDb().query.surveys.findMany({
       where: eq(surveys.userId, userId),
     }),
-    getDb().query.topicMaterials.findMany({
-      where: eq(topicMaterials.uploadedByUserId, userId),
+    getDb().query.lessonMaterials.findMany({
+      where: eq(lessonMaterials.uploadedByUserId, userId),
     }),
     getDb().query.classroomStudents.findMany({
       where: eq(classroomStudents.userId, userId),
@@ -210,8 +210,8 @@ export async function deleteUserPrivacyData(userId: string) {
   const ownedSurveys = await getDb().query.surveys.findMany({
     where: eq(surveys.userId, userId),
   });
-  const materials = await getDb().query.topicMaterials.findMany({
-    where: eq(topicMaterials.uploadedByUserId, userId),
+  const materials = await getDb().query.lessonMaterials.findMany({
+    where: eq(lessonMaterials.uploadedByUserId, userId),
   });
 
   for (const survey of ownedSurveys) {
@@ -220,7 +220,7 @@ export async function deleteUserPrivacyData(userId: string) {
 
   for (const material of materials) {
     if (material.storagePath) {
-      await deleteLearningMaterial(material.storagePath).catch(() => undefined);
+      await deleteLessonMaterial(material.storagePath).catch(() => undefined);
     }
   }
 

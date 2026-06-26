@@ -1,10 +1,10 @@
-import {
+﻿import {
   buildPromptFrame,
   renderTaggedSection,
 } from "@/features/tutoring/server/prompt-serializers";
 
 export function buildAssessmentPreviewPrompt(input: {
-  topicTitle: string;
+  lessonTitle: string;
   currentStageLabel?: string | null;
   retrievedContext: string;
   questionType?: string;
@@ -12,7 +12,7 @@ export function buildAssessmentPreviewPrompt(input: {
 }) {
   return [
     buildPromptFrame({
-      role: `Generate a pedagogically strong assessment question for ${input.topicTitle}.`,
+      role: `Generate a pedagogically strong assessment question for ${input.lessonTitle}.`,
       goal: "Create an assessment preview that exposes genuine understanding inside the approved course scope.",
       constraints: [
         "Stay inside the grounded course context.",
@@ -30,3 +30,4 @@ export function buildAssessmentPreviewPrompt(input: {
     .filter(Boolean)
     .join("\n\n");
 }
+

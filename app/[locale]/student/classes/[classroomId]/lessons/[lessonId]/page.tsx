@@ -1,8 +1,8 @@
-import { headers } from "next/headers";
+﻿import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getVerifiedSession } from "@/features/auth/public-server";
-import { getStudentLearningWorkspaceInitialData } from "@/shared/http/page-data";
+import { getStudentWorkspaceInitialData } from "@/shared/http/page-data";
 import { LiveSessionClient } from "../live-session-client";
 
 interface LessonTutoringPageProps {
@@ -21,16 +21,16 @@ export default async function LessonTutoringPage({
   }
 
   const {
-    learningMe,
+    studentMe,
     initialPatterns,
     initialTutoringSession,
-  } = await getStudentLearningWorkspaceInitialData({
+  } = await getStudentWorkspaceInitialData({
     classroomId,
     lessonId,
     language: locale,
   });
 
-  if (learningMe.role !== "student") {
+  if (studentMe.role !== "student") {
     redirect(`/${locale}/student/classes`);
   }
 
@@ -38,9 +38,10 @@ export default async function LessonTutoringPage({
     <LiveSessionClient
       classroomId={classroomId}
       lessonId={lessonId}
-      learningMe={learningMe}
+      studentMe={studentMe}
       initialPatterns={initialPatterns}
       initialTutoringSession={initialTutoringSession}
     />
   );
 }
+

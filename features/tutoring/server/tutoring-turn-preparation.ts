@@ -1,5 +1,5 @@
-import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/shared/chat/chat-ui-messages";
-import { getLatestAssistantLearningMessage } from "@/features/tutoring/public-server";
+﻿import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/shared/chat/chat-ui-messages";
+import { getLatestAssistantStudentMessage } from "@/features/tutoring/public-server";
 import { tutorRuntimeService } from "@/features/tutoring/server/tutor-runtime-service";
 import { sanitizeUserInput } from "@/shared/ai/sanitization";
 import {
@@ -44,7 +44,7 @@ function collectPriorQuizIds(messages: UIMessage[]) {
 export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   const timer = createTutoringTimer();
   logTutoringDebug("turn:prepare:start", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     studyLanguage: params.studyLanguage,
     messageCount: params.messages.length,
@@ -53,13 +53,13 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   const previousAssistant = await measureTutoringStep(
     "turn:prepare:previous-assistant",
     {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
     },
-    () => getLatestAssistantLearningMessage(params.tutorSessionId),
+    () => getLatestAssistantStudentMessage(params.tutorSessionId),
   );
   logTutoringDebug("turn:prepare:previous-assistant", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     previousAssistant: previousAssistant
       ? summarizeTutoringText(previousAssistant.content, 180)
@@ -70,7 +70,7 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   const sanitizedMessages = await measureTutoringStep(
     "turn:prepare:sanitize",
     {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
       messageCount: params.messages.length,
     },
@@ -92,17 +92,17 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   const prepared = await measureTutoringStep(
     "turn:prepare:runtime",
     {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
       studyLanguage: params.studyLanguage,
     },
     () =>
       tutorRuntimeService.prepareTurn({
-        topicId: params.topicId,
-        topicTitle: params.access.topic.title,
-        subjectKey: params.access.topic.courseId,
-        subjectLabel: params.access.topic.course.title,
-        sourceBoundary: params.access.topic.sourceBoundary,
+        lessonId: params.lessonId,
+        lessonTitle: params.access.lesson.title,
+        subjectKey: params.access.lesson.courseId,
+        subjectLabel: params.access.lesson.course.title,
+        sourceBoundary: params.access.lesson.sourceBoundary,
         studentUserId: params.access.classroomStudent.userId,
         studyLanguage: params.studyLanguage,
         state: params.state,
@@ -112,13 +112,13 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
       }),
   );
   logTutoringDebug("turn:prepare:sanitized-messages", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     messages: summarizeTutoringMessages(sanitizedMessages.slice(-4)),
     durationMs: timer.elapsedMs(),
   });
   logTutoringDebug("turn:prepare:runtime", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     groundingUnitCount: prepared.groundingUnits.length,
     contextBundleVersionId: prepared.contextBundle.versionId,
@@ -130,20 +130,20 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
   const tools = await measureTutoringStep(
     "turn:prepare:tools",
     {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
       priorQuizCount: priorQuizIds.length,
     },
     () =>
       createTutorTools({
-        topicTitle: params.access.topic.title,
-        studentContext: "Student learning " + params.access.topic.title,
+        lessonTitle: params.access.lesson.title,
+        studentContext: "Student learning " + params.access.lesson.title,
         priorQuizIds,
         capabilityGuidance: prepared.activeFramework.framework.capabilityGuidance,
       }),
   );
   logTutoringDebug("turn:prepare:tools", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     toolNames: Object.keys(tools),
     priorQuizIds,
@@ -156,3 +156,4 @@ export async function prepareTutoringTurn(params: PrepareTutoringTurnParams) {
 
   return { previousAssistant, prepared, tools, sanitizedMessages };
 }
+

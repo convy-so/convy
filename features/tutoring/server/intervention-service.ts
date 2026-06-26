@@ -1,8 +1,8 @@
-import { and, eq } from "drizzle-orm";
+﻿import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
-import { learningInterventions } from "@/shared/db/schema";
+import { lessonInterventions } from "@/shared/db/schema";
 import {
   LEARNING_INTERVENTION_STATUS_VALUES,
   LEARNING_INTERVENTION_TYPE_VALUES,
@@ -14,7 +14,7 @@ export type InterventionRecord = {
   id: string;
   classroomId: string;
   classroomStudentId: string;
-  topicId: string | null;
+  lessonId: string | null;
   interventionType: (typeof LEARNING_INTERVENTION_TYPE_VALUES)[number];
   priority: (typeof LEARNING_PRIORITY_VALUES)[number];
   status: (typeof LEARNING_INTERVENTION_STATUS_VALUES)[number];
@@ -32,25 +32,25 @@ export type InterventionRecord = {
 };
 
 export async function getInterventionById(interventionId: string) {
-  return await getDb().query.learningInterventions.findFirst({
-    where: eq(learningInterventions.id, interventionId),
+  return await getDb().query.lessonInterventions.findFirst({
+    where: eq(lessonInterventions.id, interventionId),
   });
 }
 
 /**
- * List interventions for a classroom, optionally filtered by topic or student
+ * List interventions for a classroom, optionally filtered by lesson or student
  */
 export async function listInterventions(params: {
   classroomId: string;
-  topicId?: string;
+  lessonId?: string;
   classroomStudentId?: string;
 }): Promise<InterventionRecord[]> {
-  const records = await getDb().query.learningInterventions.findMany({
+  const records = await getDb().query.lessonInterventions.findMany({
     where: (table, operators) => {
       const conditions = [operators.eq(table.classroomId, params.classroomId)];
 
-      if (params.topicId) {
-        conditions.push(operators.eq(table.topicId, params.topicId));
+      if (params.lessonId) {
+        conditions.push(operators.eq(table.lessonId, params.lessonId));
       }
 
       if (params.classroomStudentId) {
@@ -67,7 +67,7 @@ export async function listInterventions(params: {
     orderBy: (table, { desc }) => [desc(table.updatedAt)],
   });
 
-  return records.map(formatLearningIntervention);
+  return records.map(formatLessonIntervention);
 }
 
 /**
@@ -77,7 +77,7 @@ export async function createIntervention(params: {
   classroomId: string;
   classroomStudentId: string;
   createdByUserId: string;
-  topicId?: string;
+  lessonId?: string;
   interventionType: (typeof LEARNING_INTERVENTION_TYPE_VALUES)[number];
   priority: (typeof LEARNING_PRIORITY_VALUES)[number];
   title: string;
@@ -88,13 +88,13 @@ export async function createIntervention(params: {
   const now = new Date();
 
   const [record] = await getDb()
-    .insert(learningInterventions)
+    .insert(lessonInterventions)
     .values({
       id,
       classroomId: params.classroomId,
       classroomStudentId: params.classroomStudentId,
       createdByUserId: params.createdByUserId,
-      topicId: params.topicId || null,
+      lessonId: params.lessonId || null,
       interventionType: params.interventionType,
       priority: params.priority,
       status: LEARNING_STATUS.interventionPlanned,
@@ -124,7 +124,7 @@ export async function updateIntervention(params: {
     params.status === LEARNING_STATUS.interventionCompleted ? now : undefined;
 
   const [record] = await getDb()
-    .update(learningInterventions)
+    .update(lessonInterventions)
     .set({
       status: params.status,
       notes: params.notes !== undefined ? params.notes : undefined,
@@ -134,8 +134,8 @@ export async function updateIntervention(params: {
     })
     .where(
       and(
-        eq(learningInterventions.id, params.interventionId),
-        eq(learningInterventions.classroomId, params.classroomId),
+        eq(lessonInterventions.id, params.interventionId),
+        eq(lessonInterventions.classroomId, params.classroomId),
       ),
     )
     .returning();
@@ -146,11 +146,11 @@ export async function updateIntervention(params: {
 /**
  * Format database record to service record
  */
-function formatLearningIntervention(record: {
+function formatLessonIntervention(record: {
   id: string;
   classroomId: string;
   classroomStudentId: string;
-  topicId: string | null;
+  lessonId: string | null;
   interventionType: string;
   priority: string;
   status: string;
@@ -170,7 +170,7 @@ function formatLearningIntervention(record: {
     id: record.id,
     classroomId: record.classroomId,
     classroomStudentId: record.classroomStudentId,
-    topicId: record.topicId,
+    lessonId: record.lessonId,
     interventionType: record.interventionType as InterventionRecord["interventionType"],
     priority: record.priority as InterventionRecord["priority"],
     status: record.status as InterventionRecord["status"],
@@ -187,3 +187,4 @@ function formatLearningIntervention(record: {
     },
   };
 }
+
