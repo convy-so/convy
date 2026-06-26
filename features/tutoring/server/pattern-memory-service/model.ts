@@ -5,7 +5,7 @@ import {
 } from "@/features/tutoring/public-server";
 import type {
   LearningTeachingPlaybook,
-  StudentLearningPatternProfile,
+  StudentPatternProfile,
 } from "@/features/tutoring/server/pattern-types";
 import { createLogger, serializeError } from "@/shared/infra/logger";
 
@@ -15,7 +15,7 @@ export type PatternMemoryState = {
 };
 
 export type PatternSummaryResult = {
-  profiles: StudentLearningPatternProfile[];
+  profiles: StudentPatternProfile[];
   memoryState: PatternMemoryState;
 };
 

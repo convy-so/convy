@@ -29,12 +29,12 @@ import {
 } from "./text-processing";
 
 export async function groundMaterialSegment(params: {
-  topicTitle: string;
+  lessonTitle: string;
   materialTitle: string;
   materialId: string;
   segment: MaterialSourceDocument["segments"][number];
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
 }) {
   const citation = buildCitation({
     materialId: params.materialId,
@@ -83,7 +83,7 @@ export async function groundMaterialSegment(params: {
     });
 
   const prompt = buildMaterialSegmentGroundingPrompt({
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     materialTitle: params.materialTitle,
     segmentOrder: params.segment.order + 1,
     headingPath: params.segment.headingPath,
@@ -107,10 +107,10 @@ export async function groundMaterialSegment(params: {
       providerOptions: GOOGLE_ANALYSIS_PROVIDER_OPTIONS,
       experimental_telemetry: {
         isEnabled: true,
-        functionId: "learning_material_segment_grounding",
+        functionId: "lesson_material_segment_grounding",
         metadata: {
           traceId: params.traceId ?? "",
-          topicId: params.topicId ?? "",
+          lessonId: params.lessonId ?? "",
           materialId: params.materialId,
           segmentId: params.segment.segmentId,
         },
@@ -150,10 +150,10 @@ export async function groundMaterialSegment(params: {
     });
   } catch (error) {
     console.warn(
-      "[learning-material-upload] segment grounding failed; using deterministic fallback",
+      "[lesson-material-upload] segment grounding failed; using deterministic fallback",
       {
         traceId: params.traceId ?? null,
-        topicId: params.topicId ?? null,
+        lessonId: params.lessonId ?? null,
         materialId: params.materialId,
         segmentId: params.segment.segmentId,
         quota: isAiQuotaError(error),
@@ -221,3 +221,4 @@ export function buildDeterministicSections(
     };
   });
 }
+

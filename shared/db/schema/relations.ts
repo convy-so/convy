@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+﻿import { relations } from "drizzle-orm";
 import { users, accounts, sessions } from "./auth";
 import { surveys } from "./surveys";
 import { notifications } from "./notifications";
@@ -7,8 +7,8 @@ import {
   classroomInvitations,
   classroomStudents,
   courses,
-  learningTopics,
-  topicMaterials,
+  lessons,
+  lessonMaterials,
 } from "./learning";
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -32,11 +32,11 @@ export const usersRelations = relations(users, ({ many }) => ({
   courses: many(courses, {
     relationName: "created_courses",
   }),
-  learningTopics: many(learningTopics, {
-    relationName: "created_learning_topics",
+  lessons: many(lessons, {
+    relationName: "created_lessons",
   }),
-  topicMaterials: many(topicMaterials, {
-    relationName: "uploaded_topic_materials",
+  lessonMaterials: many(lessonMaterials, {
+    relationName: "uploaded_lesson_materials",
   }),
 }));
 
@@ -63,3 +63,4 @@ export const classroomInvitationsRelations = relations(
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
+

@@ -1,4 +1,4 @@
-function renderPolicyRows(rows: Array<[string, string]>) {
+﻿function renderPolicyRows(rows: Array<[string, string]>) {
   return rows.map(([label, value]) => `- ${label}: ${value}`).join("\n");
 }
 
@@ -19,7 +19,7 @@ function renderTutorOutputPolicy() {
 export function renderTutorPromptPolicy() {
   return `Prompt policy:
 ${renderPolicyRows([
-  ["Facts and scope", "Must come only from the topic grounding pack and teacher-approved material."],
+  ["Facts and scope", "Must come only from the lesson grounding pack and teacher-approved material."],
   ["Teaching method", "May come from the expert framework, few-shot examples, and heuristics."],
   ["Personalization", "May shape framing, examples, tone, pacing, and challenge level only."],
   ["Memory", "May provide soft preferences and continuity only; it must never add new facts."],
@@ -28,7 +28,7 @@ ${renderPolicyRows([
 
 Conflict rule:
 - If a lower-priority layer conflicts with a higher-priority layer, ignore the lower-priority layer.
-- Personalization and memory may influence wording and examples, but they must never introduce factual claims, topic importance claims, or real-world significance claims.
+- Personalization and memory may influence wording and examples, but they must never introduce factual claims, lesson importance claims, or real-world significance claims.
 - If a few-shot example conflicts with grounded scope, keep the grounded scope and ignore the example.
 - If grounding is absent for a factual claim, omit the claim and continue with a diagnostic or explanatory move instead.`;
 }
@@ -40,3 +40,4 @@ export function renderTutorResponsePolicy() {
 export function normalizeTutorOpening(opening: string) {
   return opening.replace(/\s+/g, " ").trim();
 }
+

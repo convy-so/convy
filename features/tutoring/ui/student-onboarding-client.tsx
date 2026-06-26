@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -76,7 +76,7 @@ export function StudentOnboardingClient({
   }, [onboardingQuery.data]);
 
   const onboardingTransport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/learning/onboarding" }),
+    () => new DefaultChatTransport({ api: "/api/students/onboarding" }),
     [],
   );
 
@@ -86,7 +86,7 @@ export function StudentOnboardingClient({
     setMessages,
     status,
   } = useChat({
-    id: `learning-onboarding-${membershipId}`,
+    id: `student-onboarding-${membershipId}`,
     transport: onboardingTransport,
     onFinish: () => {
       void Promise.all([
@@ -296,3 +296,4 @@ export function StudentOnboardingClient({
     </div>
   );
 }
+

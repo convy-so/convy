@@ -5,8 +5,8 @@ import type {
   ContentTranslationJobData,
   EmailJobData,
   ImageUploadJobData,
-  LearningMaterialBatchFinalizeJobData,
-  LearningMaterialProcessingJobData,
+  LessonMaterialBatchFinalizeJobData,
+  LessonMaterialProcessingJobData,
   NotificationJobData,
   SurveyAnalyticsJobData,
   TutoringReportJobData,
@@ -86,11 +86,11 @@ export const getTutoringReportQueue = () => {
   return global.tutoringReportQueue;
 };
 
-export const getLearningMaterialProcessingQueue = () => {
-  if (!global.learningMaterialProcessingQueue) {
-    global.learningMaterialProcessingQueue =
-      createQueue<LearningMaterialProcessingJobData>(
-        "learning-material-processing",
+export const getLessonMaterialProcessingQueue = () => {
+  if (!global.lessonMaterialProcessingQueue) {
+    global.lessonMaterialProcessingQueue =
+      createQueue<LessonMaterialProcessingJobData>(
+        "lesson-material-processing",
         {
           defaultJobOptions: {
             attempts: 1,
@@ -101,14 +101,14 @@ export const getLearningMaterialProcessingQueue = () => {
       );
   }
 
-  return global.learningMaterialProcessingQueue;
+  return global.lessonMaterialProcessingQueue;
 };
 
-export const getLearningMaterialBatchFinalizeQueue = () => {
-  if (!global.learningMaterialBatchFinalizeQueue) {
-    global.learningMaterialBatchFinalizeQueue =
-      createQueue<LearningMaterialBatchFinalizeJobData>(
-        "learning-material-batch-finalize",
+export const getLessonMaterialBatchFinalizeQueue = () => {
+  if (!global.lessonMaterialBatchFinalizeQueue) {
+    global.lessonMaterialBatchFinalizeQueue =
+      createQueue<LessonMaterialBatchFinalizeJobData>(
+        "lesson-material-batch-finalize",
         {
           defaultJobOptions: {
             attempts: 3,
@@ -120,7 +120,7 @@ export const getLearningMaterialBatchFinalizeQueue = () => {
       );
   }
 
-  return global.learningMaterialBatchFinalizeQueue;
+  return global.lessonMaterialBatchFinalizeQueue;
 };
 
 export const getContentTranslationQueue = () => {
@@ -175,8 +175,8 @@ export function listOpenQueues() {
     global.emailQueue,
     global.imageUploadQueue,
     global.tutoringReportQueue,
-    global.learningMaterialProcessingQueue,
-    global.learningMaterialBatchFinalizeQueue,
+    global.lessonMaterialProcessingQueue,
+    global.lessonMaterialBatchFinalizeQueue,
     global.contentTranslationQueue,
     global.experimentEvaluationQueue,
     global.notificationQueue,
@@ -188,8 +188,8 @@ export function clearQueueRegistry() {
   global.emailQueue = undefined;
   global.imageUploadQueue = undefined;
   global.tutoringReportQueue = undefined;
-  global.learningMaterialProcessingQueue = undefined;
-  global.learningMaterialBatchFinalizeQueue = undefined;
+  global.lessonMaterialProcessingQueue = undefined;
+  global.lessonMaterialBatchFinalizeQueue = undefined;
   global.contentTranslationQueue = undefined;
   global.experimentEvaluationQueue = undefined;
   global.notificationQueue = undefined;

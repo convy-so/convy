@@ -19,11 +19,11 @@ import {
 import { uniqueStrings } from "./text-processing";
 
 async function synthesizeGroundingMap(params: {
-  topicTitle: string;
+  lessonTitle: string;
   materialTitle: string;
   groundedSegments: MaterialGroundingSegment[];
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
   materialId: string;
 }) {
   const groundedSegmentsJson = JSON.stringify(
@@ -61,7 +61,7 @@ async function synthesizeGroundingMap(params: {
   );
 
   const prompt = buildMaterialGroundingMapPrompt({
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     materialTitle: params.materialTitle,
     groundedSegmentsJson,
   });
@@ -80,10 +80,10 @@ async function synthesizeGroundingMap(params: {
     providerOptions: GOOGLE_ANALYSIS_PROVIDER_OPTIONS,
     experimental_telemetry: {
       isEnabled: true,
-      functionId: "learning_material_grounding_map_synthesis",
+      functionId: "lesson_material_grounding_map_synthesis",
       metadata: {
         traceId: params.traceId ?? "",
-        topicId: params.topicId ?? "",
+        lessonId: params.lessonId ?? "",
         materialId: params.materialId,
       },
     },
@@ -128,12 +128,12 @@ function buildGroundingMapFallback(params: {
 }
 
 export async function resolveGroundingMapSynthesis(params: {
-  topicTitle: string;
+  lessonTitle: string;
   materialTitle: string;
   groundedSegments: MaterialGroundingSegment[];
   sections: MaterialGroundingMap["sections"];
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
   materialId: string;
 }) {
   if (!ENABLE_AI_GROUNDING_MAP_SYNTHESIS) {
@@ -145,10 +145,10 @@ export async function resolveGroundingMapSynthesis(params: {
 
   return await synthesizeGroundingMap(params).catch((error) => {
     console.warn(
-      "[learning-material-upload] grounding map synthesis failed; using fallback",
+      "[lesson-material-upload] grounding map synthesis failed; using fallback",
       {
         traceId: params.traceId ?? null,
-        topicId: params.topicId ?? null,
+        lessonId: params.lessonId ?? null,
         materialId: params.materialId,
         quota: isAiQuotaError(error),
         ...serializeAiError(error),
@@ -160,3 +160,4 @@ export async function resolveGroundingMapSynthesis(params: {
     });
   });
 }
+

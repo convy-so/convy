@@ -1,5 +1,5 @@
-import { Link } from "@/i18n/routing";
-import { getLearningMeData } from "@/shared/http/page-data";
+﻿import { Link } from "@/i18n/routing";
+import { getStudentMeData } from "@/shared/http/page-data";
 import {
   ClipboardList,
   ExternalLink,
@@ -91,9 +91,9 @@ function responseMeta(status: StudentSurveyItem["responseStatus"]) {
 }
 
 export default async function StudentSurveysPage() {
-  const learningMe = await getLearningMeData();
+  const studentMe = await getStudentMeData();
 
-  if (learningMe.role !== "student") {
+  if (studentMe.role !== "student") {
     return (
       <div className="mx-auto max-w-4xl">
         <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
@@ -109,7 +109,7 @@ export default async function StudentSurveysPage() {
     );
   }
 
-  const groups = learningMe.student.flatMap((membership): StudentSurveyGroup[] => {
+  const groups = studentMe.student.flatMap((membership): StudentSurveyGroup[] => {
     const surveys = membership.surveys ?? [];
     if (surveys.length === 0) return [];
 
@@ -327,3 +327,4 @@ export default async function StudentSurveysPage() {
     </div>
   );
 }
+

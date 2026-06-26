@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Award, Sparkles, AlertCircle, Lightbulb, Map, Target, Calendar, ChevronDown, ChevronUp } from "lucide-react";
@@ -19,10 +19,10 @@ type ProgressReportContent = {
 
 type ReportRecord = {
     id: string;
-    topicId: string;
+    lessonId: string;
     masteryPercent: number;
     createdAt: Date;
-    topic: {
+    lesson: {
         title: string;
         courseTitle: string | null;
     } | null;
@@ -39,9 +39,9 @@ type Props = {
 };
 
 function masteryLabelForStudent(level: string) {
-    if (level === "generative") return { text: "Strong â€” can use this in new situations", short: "Strong", tone: "good" as const };
-    if (level === "applied") return { text: "Getting there â€” you can use it with support", short: "Practice more", tone: "mid" as const };
-    return { text: "Still building â€” keep studying this idea", short: "Building", tone: "low" as const };
+    if (level === "generative") return { text: "Strong Ã¢â‚¬â€ can use this in new situations", short: "Strong", tone: "good" as const };
+    if (level === "applied") return { text: "Getting there Ã¢â‚¬â€ you can use it with support", short: "Practice more", tone: "mid" as const };
+    return { text: "Still building Ã¢â‚¬â€ keep studying this idea", short: "Building", tone: "low" as const };
 }
 
 export function ClassroomProgressClient({ latestModel, progressReports }: Props) {
@@ -63,7 +63,7 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
                         <div>
                             <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Your Skill Map</h2>
                             <p className="mt-1 text-slate-500 text-xs font-semibold leading-relaxed">
-                                A live view of your understanding across main ideas. Updates as you complete tutoring sessions.
+                                A live view of your understanding across main ideas. Updates as you complete lessons.
                             </p>
                         </div>
                     </div>
@@ -114,7 +114,7 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
                             <Sparkles className="mx-auto mb-3 h-8 w-8 text-indigo-400 animate-pulse" />
                             <p className="text-sm font-bold text-slate-900">Personalized calibration forming</p>
                             <p className="mx-auto mt-2 max-w-[200px] text-xs font-semibold leading-relaxed text-slate-500">
-                                As you complete tutoring chats, a interactive map of your core competencies will populate here.
+                                As you complete lessons, an interactive map of your core competencies will populate here.
                             </p>
                         </div>
                     )}
@@ -126,7 +126,7 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
                 <div className="flex items-center justify-between px-1">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
                         <Award className="h-5 w-5 text-amber-500" />
-                        Tutoring Session Reports
+                        Lesson Reports
                     </h2>
                     <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold tabular-nums text-slate-600">
                         {progressReports.length}
@@ -152,10 +152,10 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
                                     >
                                         <div className="min-w-0 space-y-1">
                                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                                                {report.topic?.courseTitle || getSubjectDisplayLabel(null)}
+                                                {report.lesson?.courseTitle || getSubjectDisplayLabel(null)}
                                             </span>
                                             <h3 className="text-lg font-extrabold text-slate-800 tracking-tight leading-snug">
-                                                {report.topic?.title || "Topic assessment"}
+                                                {report.lesson?.title || "Lesson assessment"}
                                             </h3>
                                             <div className="flex items-center gap-4 text-xs font-semibold text-slate-500 mt-1">
                                                 <span className="flex items-center gap-1">
@@ -229,7 +229,7 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
                         </div>
                         <h3 className="text-base font-bold text-slate-900 mb-1">No reports prepared</h3>
                         <p className="mt-1 max-w-xs px-4 text-xs font-semibold leading-relaxed text-slate-500">
-                            When you finish a tutoring session, a detailed AI mastery assessment report will appear here.
+                            When you finish a lesson, a detailed AI mastery assessment report will appear here.
                         </p>
                     </div>
                 )}
@@ -237,3 +237,4 @@ export function ClassroomProgressClient({ latestModel, progressReports }: Props)
         </div>
     );
 }
+

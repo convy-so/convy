@@ -4,7 +4,7 @@ import type { PatternMemoryState } from "@/features/tutoring/server/pattern-memo
 import type {
   ActiveExpertFramework,
   ContentScopeSnapshot,
-  LearningSessionState,
+  StudentSessionState,
   StudentInterestProfile,
 } from "@/features/tutoring/public-server";
 
@@ -15,7 +15,7 @@ export class TutoringPromptService {
     interestProfile: StudentInterestProfile | null;
     teachingPlaybook: LearningTeachingPlaybook | null;
     memoryState: PatternMemoryState;
-    state: LearningSessionState;
+    state: StudentSessionState;
     recentMessages: Array<{ role: "user" | "assistant"; content: string }>;
     latestUserText: string;
     studyLanguage: string;

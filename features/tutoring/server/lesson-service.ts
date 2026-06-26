@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+﻿import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
-import { learningTopics } from "@/shared/db/schema";
+import { lessons } from "@/shared/db/schema";
 import {
   LEARNING_LIMITS,
   LEARNING_STATUS,
@@ -10,9 +10,9 @@ import {
 import { getCourseById } from "@/features/tutoring/server/course-service";
 import {
   learningOutcomeDefinitionSchema,
-  topicSourceBoundarySchema,
+  lessonSourceBoundarySchema,
   type LearningOutcomeDefinition,
-  type TopicSourceBoundary,
+  type LessonSourceBoundary,
 } from "@/features/tutoring/public-server";
 import { requireValue } from "@/shared/utils/collections";
 
@@ -32,9 +32,9 @@ function normalizeLearningOutcome(
 }
 
 /**
- * Create a new learning topic with outcomes and source boundaries
+ * Create a new lesson with outcomes and source boundaries
  */
-export async function createLearningTopic(params: {
+export async function createLesson(params: {
   classroomId: string;
   createdByUserId: string;
   title: string;
@@ -42,16 +42,16 @@ export async function createLearningTopic(params: {
   courseId: string;
   contentLocale: "en" | "fr" | "de";
   learningOutcomes?: LearningOutcomeDefinition[];
-  sourceBoundary?: Partial<TopicSourceBoundary>;
+  sourceBoundary?: Partial<LessonSourceBoundary>;
 }) {
-  const topicId = nanoid();
+  const lessonId = nanoid();
   const now = new Date();
 
   const learningOutcomes = (params.learningOutcomes ?? []).map((outcome, index) =>
     normalizeLearningOutcome(outcome, index),
   );
 
-  const sourceBoundary = topicSourceBoundarySchema.parse({
+  const sourceBoundary = lessonSourceBoundarySchema.parse({
     ...params.sourceBoundary,
     teacherSummary: params.sourceBoundary?.teacherSummary ?? params.description ?? "",
   });
@@ -61,35 +61,35 @@ export async function createLearningTopic(params: {
     throw new Error("Course not found");
   }
 
-  const [topic] = await getDb().insert(learningTopics).values({
-    id: topicId,
+  const [lesson] = await getDb().insert(lessons).values({
+    id: lessonId,
     classroomId: params.classroomId,
     createdByUserId: params.createdByUserId,
     courseId: course.id,
     title: params.title,
     description: params.description || null,
     contentLocale: params.contentLocale,
-    status: LEARNING_STATUS.topicDraft,
-    openingPreference: LEARNING_STATUS.topicOpeningAuto,
+    status: LEARNING_STATUS.lessonDraft,
+    openingPreference: LEARNING_STATUS.lessonOpeningAuto,
     sourceBoundary,
     learningOutcomes,
     createdAt: now,
     updatedAt: now,
   }).returning();
 
-  return requireValue(topic, "Failed to create learning topic.");
+  return requireValue(lesson, "Failed to create lesson.");
 }
 
-export async function updateLearningTopicDetails(params: {
-  topicId: string;
+export async function updateLessonDetails(params: {
+  lessonId: string;
   title?: string;
   description?: string;
   contentLocale?: "en" | "fr" | "de";
   learningOutcomes?: LearningOutcomeDefinition[];
-  sourceBoundary?: Partial<TopicSourceBoundary>;
+  sourceBoundary?: Partial<LessonSourceBoundary>;
 }) {
-  const existing = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, params.topicId),
+  const existing = await getDb().query.lessons.findFirst({
+    where: eq(lessons.id, params.lessonId),
     columns: {
       sourceBoundary: true,
       learningOutcomes: true,
@@ -97,14 +97,14 @@ export async function updateLearningTopicDetails(params: {
   });
 
   if (!existing) {
-    throw new Error("Topic not found");
+    throw new Error("Lesson not found");
   }
 
   const learningOutcomes = (params.learningOutcomes ?? existing.learningOutcomes ?? []).map(
     (outcome, index) => normalizeLearningOutcome(outcome, index),
   );
 
-  const sourceBoundary = topicSourceBoundarySchema.parse({
+  const sourceBoundary = lessonSourceBoundarySchema.parse({
     ...(existing.sourceBoundary ?? {}),
     ...params.sourceBoundary,
     teacherSummary:
@@ -114,8 +114,8 @@ export async function updateLearningTopicDetails(params: {
       "",
   });
 
-  const [topic] = await getDb()
-    .update(learningTopics)
+  const [lesson] = await getDb()
+    .update(lessons)
     .set({
       title: params.title,
       description: params.description,
@@ -124,22 +124,23 @@ export async function updateLearningTopicDetails(params: {
       sourceBoundary,
       updatedAt: new Date(),
     })
-    .where(eq(learningTopics.id, params.topicId))
+    .where(eq(lessons.id, params.lessonId))
     .returning();
 
-  return requireValue(topic, "Failed to update learning topic details.");
+  return requireValue(lesson, "Failed to update lesson details.");
 }
 
 /**
- * List topics for a classroom
+ * List lessons for a classroom
  */
-export async function listTopicsByClassroom(classroomId: string) {
-  return await getDb().query.learningTopics.findMany({
-    where: eq(learningTopics.classroomId, classroomId),
+export async function listLessonsByClassroom(classroomId: string) {
+  return await getDb().query.lessons.findMany({
+    where: eq(lessons.classroomId, classroomId),
     orderBy: (table, { desc }) => [desc(table.updatedAt)],
   });
 }
 
-export const createTeachingSession = createLearningTopic;
-export const updateTeachingSessionDetails = updateLearningTopicDetails;
-export const listSessionsByClassroom = listTopicsByClassroom;
+export const createTeachingSession = createLesson;
+export const updateTeachingSessionDetails = updateLessonDetails;
+export const listSessionsByClassroom = listLessonsByClassroom;
+

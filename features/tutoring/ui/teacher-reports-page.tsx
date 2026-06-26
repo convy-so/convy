@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -17,9 +17,9 @@ import {
 
 import { Link } from "@/i18n/routing";
 import {
-  fetchClassroomTopics,
+  fetchClassroomLessons,
   fetchTeacherClassrooms,
-  fetchTopicReports,
+  fetchLessonReports,
 } from "@/features/tutoring/public-client";
 import { queryKeys } from "@/shared/http/query-keys";
 import { StatsCard } from "@/shared/ui/workspace/workspace-stat-card";
@@ -37,32 +37,32 @@ function formatDate(value: string | Date | null | undefined) {
 
 export function TeacherReportsPage({
   initialClassrooms,
-  initialTopics,
+  initialLessons,
   initialReportsPayload,
 }: {
   initialClassrooms?: Awaited<ReturnType<typeof fetchTeacherClassrooms>>;
-  initialTopics?: Awaited<ReturnType<typeof fetchClassroomTopics>>;
-  initialReportsPayload?: Awaited<ReturnType<typeof fetchTopicReports>>;
+  initialLessons?: Awaited<ReturnType<typeof fetchClassroomLessons>>;
+  initialReportsPayload?: Awaited<ReturnType<typeof fetchLessonReports>>;
 }) {
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(
     initialClassrooms?.data?.[0]?.id ?? null,
   );
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(
-    initialTopics?.data?.[0]?.id ?? null,
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(
+    initialLessons?.data?.[0]?.id ?? null,
   );
   
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
-  const [isTopicDropdownOpen, setIsTopicDropdownOpen] = useState(false);
+  const [isLessonDropdownOpen, setIsLessonDropdownOpen] = useState(false);
   const classDropdownRef = useRef<HTMLDivElement>(null);
-  const topicDropdownRef = useRef<HTMLDivElement>(null);
+  const lessonDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (classDropdownRef.current && !classDropdownRef.current.contains(event.target as Node)) {
         setIsClassDropdownOpen(false);
       }
-      if (topicDropdownRef.current && !topicDropdownRef.current.contains(event.target as Node)) {
-        setIsTopicDropdownOpen(false);
+      if (lessonDropdownRef.current && !lessonDropdownRef.current.contains(event.target as Node)) {
+        setIsLessonDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -86,48 +86,48 @@ export function TeacherReportsPage({
   const selectedClassroom =
     accessibleClassrooms.find((classroom) => classroom.id === effectiveSelectedClassroomId) ?? null;
 
-  const topicsQuery = useQuery({
+  const lessonsQuery = useQuery({
     queryKey: effectiveSelectedClassroomId
-      ? queryKeys.learning.topics(effectiveSelectedClassroomId)
-      : ["learningTopics", "reports-idle"],
+      ? queryKeys.learning.lessons(effectiveSelectedClassroomId)
+      : ["lessons", "reports-idle"],
     queryFn: async () => {
       if (!effectiveSelectedClassroomId) {
         throw new Error("Missing classroom id");
       }
 
-      return fetchClassroomTopics(effectiveSelectedClassroomId);
+      return fetchClassroomLessons(effectiveSelectedClassroomId);
     },
     enabled: Boolean(effectiveSelectedClassroomId),
     initialData:
-      initialTopics &&
+      initialLessons &&
       effectiveSelectedClassroomId === (initialClassrooms?.data?.[0]?.id ?? null)
-        ? initialTopics
+        ? initialLessons
         : undefined,
     staleTime: 30_000,
   });
 
-  const topics = useMemo(() => topicsQuery.data?.data ?? [], [topicsQuery.data]);
-  const effectiveSelectedTopicId = topics.some((topic) => topic.id === selectedTopicId)
-    ? selectedTopicId
-    : (topics[0]?.id ?? null);
-  const selectedTopic =
-    topics.find((topic) => topic.id === effectiveSelectedTopicId) ?? null;
+  const lessons = useMemo(() => lessonsQuery.data?.data ?? [], [lessonsQuery.data]);
+  const effectiveSelectedLessonId = lessons.some((lesson) => lesson.id === selectedLessonId)
+    ? selectedLessonId
+    : (lessons[0]?.id ?? null);
+  const selectedLesson =
+    lessons.find((lesson) => lesson.id === effectiveSelectedLessonId) ?? null;
 
   const reportsQuery = useQuery({
-    queryKey: effectiveSelectedTopicId
-      ? queryKeys.learning.reports(effectiveSelectedTopicId)
+    queryKey: effectiveSelectedLessonId
+      ? queryKeys.learning.reports(effectiveSelectedLessonId)
       : ["learningReports", "idle"],
     queryFn: async () => {
-      if (!effectiveSelectedTopicId) {
-        throw new Error("Missing topic id");
+      if (!effectiveSelectedLessonId) {
+        throw new Error("Missing lesson id");
       }
 
-      return fetchTopicReports(effectiveSelectedTopicId);
+      return fetchLessonReports(effectiveSelectedLessonId);
     },
-    enabled: Boolean(effectiveSelectedTopicId),
+    enabled: Boolean(effectiveSelectedLessonId),
     initialData:
       initialReportsPayload &&
-      effectiveSelectedTopicId === (initialTopics?.data?.[0]?.id ?? null)
+      effectiveSelectedLessonId === (initialLessons?.data?.[0]?.id ?? null)
         ? initialReportsPayload
         : undefined,
     staleTime: 30_000,
@@ -152,7 +152,7 @@ export function TeacherReportsPage({
               Report Center
             </h1>
             <p className="text-slate-500 text-base font-medium leading-relaxed">
-              Review analytics by classroom and topic. Inspect topic evidence and act on the patterns that matter.
+              Review analytics by classroom and lesson. Inspect lesson evidence and act on the patterns that matter.
             </p>
           </div>
           
@@ -176,7 +176,7 @@ export function TeacherReportsPage({
                       key={classroom.id}
                       onClick={() => {
                         setSelectedClassroomId(classroom.id);
-                        setSelectedTopicId(null);
+                        setSelectedLessonId(null);
                         setIsClassDropdownOpen(false);
                       }}
                       className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors text-left"
@@ -197,38 +197,38 @@ export function TeacherReportsPage({
             {/* Divider for desktop */}
             <div className="hidden sm:block w-px h-12 bg-slate-100 mx-2"></div>
 
-            {/* Topic Dropdown */}
-            <div className="relative flex-1 w-full" ref={topicDropdownRef}>
-              <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400 px-1 mb-1.5">Selected Topic</div>
+            {/* Lesson Dropdown */}
+            <div className="relative flex-1 w-full" ref={lessonDropdownRef}>
+              <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400 px-1 mb-1.5">Selected Lesson</div>
               <button
-                onClick={() => setIsTopicDropdownOpen(!isTopicDropdownOpen)}
+                onClick={() => setIsLessonDropdownOpen(!isLessonDropdownOpen)}
                 className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-200 transition-all"
               >
-                <span className="truncate">{selectedTopic?.title ?? "Select Topic"}</span>
-                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isTopicDropdownOpen ? "rotate-180" : ""}`} />
+                <span className="truncate">{selectedLesson?.title ?? "Select Lesson"}</span>
+                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isLessonDropdownOpen ? "rotate-180" : ""}`} />
               </button>
               
-              {isTopicDropdownOpen && (
+              {isLessonDropdownOpen && (
                 <div className="absolute top-full right-0 mt-2 w-full z-50 bg-white border border-slate-100 rounded-xl overflow-hidden py-1 shadow-lg shadow-slate-200/50">
-                  {topics.length ? topics.map((topic) => (
+                  {lessons.length ? lessons.map((lesson) => (
                     <button
-                      key={topic.id}
+                      key={lesson.id}
                       onClick={() => {
-                        setSelectedTopicId(topic.id);
-                        setIsTopicDropdownOpen(false);
+                        setSelectedLessonId(lesson.id);
+                        setIsLessonDropdownOpen(false);
                       }}
                       className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors text-left"
                     >
                       <div className="truncate pr-4">
-                        <div className={selectedTopic?.id === topic.id ? "text-emerald-600" : "text-slate-700 truncate"}>{topic.title}</div>
+                        <div className={selectedLesson?.id === lesson.id ? "text-emerald-600" : "text-slate-700 truncate"}>{lesson.title}</div>
                         <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                          {topic.courseTitle ?? getSubjectDisplayLabel(null)}
+                          {lesson.courseTitle ?? getSubjectDisplayLabel(null)}
                         </div>
                       </div>
-                      {selectedTopic?.id === topic.id && <Check className="h-4 w-4 text-emerald-500 flex-shrink-0" />}
+                      {selectedLesson?.id === lesson.id && <Check className="h-4 w-4 text-emerald-500 flex-shrink-0" />}
                     </button>
                   )) : (
-                    <div className="px-4 py-3 text-sm text-slate-400 italic">No topics available</div>
+                    <div className="px-4 py-3 text-sm text-slate-400 italic">No lessons available</div>
                   )}
                 </div>
               )}
@@ -270,7 +270,7 @@ export function TeacherReportsPage({
 
         {/* Main Content */}
         <div className="space-y-12">
-          {selectedTopic ? (
+          {selectedLesson ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-12">
               
               {summary ? (
@@ -338,7 +338,7 @@ export function TeacherReportsPage({
                 <SectionHeading
                   eyebrow="Student Analytics"
                   title="Session Reports"
-                  description="Detailed performance breakdowns for each student in this topic."
+                  description="Detailed performance breakdowns for each student in this lesson."
                 />
 
                 {reportsQuery.isLoading ? (
@@ -357,7 +357,7 @@ export function TeacherReportsPage({
                         <div key={report.id} className="rounded-2xl border border-slate-100 bg-white p-8 space-y-8 transition-all hover:border-slate-200">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div>
-                              <Link href={`/dashboard/learning/students/${report.student.id}`} className="text-xl font-medium text-slate-900 transition-colors hover:text-sky-600 leading-tight">
+                              <Link href={`/dashboard/teaching/students/${report.student.id}`} className="text-xl font-medium text-slate-900 transition-colors hover:text-sky-600 leading-tight">
                                 {report.student.fullName}
                               </Link>
                               <div className="mt-1.5 text-[10px] font-medium uppercase tracking-widest text-slate-400">
@@ -444,7 +444,7 @@ export function TeacherReportsPage({
                                   <div className="space-y-3">
                                     {riskFlags.map((flag) => (
                                       <div key={flag} className="text-sm font-medium leading-relaxed text-amber-900 flex items-start gap-2">
-                                        <span className="text-amber-400 mt-0.5">â€¢</span>
+                                        <span className="text-amber-400 mt-0.5">Ã¢â‚¬Â¢</span>
                                         {flag}
                                       </div>
                                     ))}
@@ -460,7 +460,7 @@ export function TeacherReportsPage({
                                   <div className="space-y-3">
                                     {homeworkAssigned.map((task) => (
                                       <div key={task} className="text-sm font-medium leading-relaxed text-sky-900 flex items-start gap-2">
-                                        <span className="text-sky-400 mt-0.5">â€¢</span>
+                                        <span className="text-sky-400 mt-0.5">Ã¢â‚¬Â¢</span>
                                         {task}
                                       </div>
                                     ))}
@@ -486,9 +486,9 @@ export function TeacherReportsPage({
               <div className="w-20 h-20 rounded-2xl bg-slate-50 flex items-center justify-center mb-6 border border-slate-100">
                 <FileText className="w-8 h-8 text-slate-200" />
               </div>
-              <h3 className="text-2xl font-medium text-slate-900 mb-3">Select a Topic</h3>
+              <h3 className="text-2xl font-medium text-slate-900 mb-3">Select a Lesson</h3>
               <p className="text-slate-500 max-w-sm mx-auto text-base leading-relaxed font-medium">
-                Choose a classroom and topic from the dropdowns above to dive deep into student analytics.
+                Choose a classroom and lesson from the dropdowns above to dive deep into student analytics.
               </p>
             </div>
           )}
@@ -497,4 +497,5 @@ export function TeacherReportsPage({
     </div>
   );
 }
+
 

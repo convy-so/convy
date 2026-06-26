@@ -6,21 +6,6 @@ import type { AuthSessionWithUser } from "@/features/auth/public-server";
 
 export type SurveyAccessLevel = "owner" | "none";
 
-export async function getSurveyAccessLevel(
-  userId: string,
-  surveyId: string,
-): Promise<SurveyAccessLevel> {
-  const [survey] = await getDb()
-    .select({
-      userId: surveys.userId,
-    })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId));
-
-  if (!survey) return "none";
-  return survey.userId === userId ? "owner" : "none";
-}
-
 export type SurveyPermissionContext = {
   surveyId: string;
   ownerId: string;
@@ -87,16 +72,4 @@ export function hasSurveyPermission(
   capability: SurveyPermissionCapability,
 ): permission is SurveyPermissionContext {
   return Boolean(permission?.[capability]);
-}
-
-export function getSurveyEditors(): string[] {
-  return [];
-}
-
-export async function isSurveyEditor(
-  userId: string,
-  surveyId: string,
-): Promise<boolean> {
-  const permission = await getSurveyPermissionContext(userId, surveyId);
-  return Boolean(permission?.canEdit);
 }

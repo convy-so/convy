@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+﻿import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Link } from "@/i18n/routing";
 import type { getClassroomStudentReportDetailData } from "@/shared/http/page-data";
@@ -24,12 +24,12 @@ export function TeacherStudentReportDetailPage({
 }: {
   initialReport: Awaited<ReturnType<typeof getClassroomStudentReportDetailData>>;
 }) {
-  const { student, topic, report, masteryPercent, updatedAt } = initialReport.data;
+  const { student, lesson, report, masteryPercent, updatedAt } = initialReport.data;
 
   return (
     <div className="mx-auto max-w-[1120px] space-y-8 px-2 pb-12">
       <Link
-        href={`/dashboard/learning/students/${student.id}`}
+        href={`/dashboard/teaching/students/${student.id}`}
         className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-950"
       >
         <div className="rounded-lg border border-slate-200 bg-white p-1.5">
@@ -46,7 +46,7 @@ export function TeacherStudentReportDetailPage({
           <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <span>{student.fullName}</span>
             <span>&bull;</span>
-            <span>{topic.title}</span>
+            <span>{lesson.title}</span>
             <span>&bull;</span>
             <span>{student.classroom.title}</span>
           </div>
@@ -136,10 +136,10 @@ export function TeacherStudentReportDetailPage({
             </div>
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
-                Topic status
+                Lesson status
               </div>
               <div className="mt-2 text-sm text-slate-700">
-                {formatStatusLabel(topic.status)}
+                {formatStatusLabel(lesson.status)}
               </div>
             </div>
           </div>
@@ -312,13 +312,14 @@ export function TeacherStudentReportDetailPage({
 
       <div className="flex justify-end">
         <Link
-          href={`/dashboard/learning/sessions/${topic.id}`}
+          href={`/dashboard/teaching/lessons/${lesson.id}`}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
         >
-          Open topic
+          Open lesson
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
     </div>
   );
 }
+

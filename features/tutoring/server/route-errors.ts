@@ -1,9 +1,9 @@
 import { apiError, apiUnhandledError } from "@/shared/http/api-error";
 import { toApiAuthError } from "@/features/auth/public-server";
-import { isLearningStateConflictError } from "@/features/tutoring/server/learning-session-state-errors";
+import { isStudentSessionStateConflictError } from "@/features/tutoring/server/student-session-state-errors";
 import { logTutoringError } from "@/features/tutoring/public-server";
 
-export function handleLearningRouteError(
+export function handleTutoringRouteError(
   error: unknown,
   fallbackMessage: string,
   route: string,
@@ -12,7 +12,7 @@ export function handleLearningRouteError(
   const authError = toApiAuthError(error);
   if (authError) return authError;
 
-  if (isLearningStateConflictError(error)) {
+  if (isStudentSessionStateConflictError(error)) {
     return apiError(
       "CONFLICT",
       "This tutoring session was updated elsewhere. Please retry your last message.",

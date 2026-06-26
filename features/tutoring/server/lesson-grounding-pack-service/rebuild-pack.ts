@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+﻿import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
-import { learningTopics } from "@/shared/db/schema";
+import { lessons } from "@/shared/db/schema";
 import {
   LEARNING_LIMITS,
   LEARNING_NUMERIC_DEFAULTS,
@@ -11,33 +11,33 @@ import {
 import { generateStructuredOutput } from "@/shared/ai/model-generation";
 import { createLogger, serializeError } from "@/shared/infra/logger";
 import {
-  buildTopicGroundingPackPrompt,
+  buildLessonGroundingPackPrompt,
 } from "@/features/tutoring/server/prompts/lesson-grounding-pack";
 import {
-  topicGroundingPackSchema,
-  topicSourceBoundarySchema,
-  type TopicGroundingPack,
+  lessonGroundingPackSchema,
+  lessonSourceBoundarySchema,
+  type LessonGroundingPack,
 } from "@/features/tutoring/public-server";
 
 import {
   buildCompiledGroundingText,
-  buildDeterministicTopicGroundingPack,
+  buildDeterministicLessonGroundingPack,
   mergePackWithBoundary,
-  topicGroundingPackExtractSchema,
+  lessonGroundingPackExtractSchema,
 } from "./core";
 
-const log = createLogger("topic-grounding-pack");
+const log = createLogger("lesson-grounding-pack");
 
-export function createEmptyTopicGroundingPack(params: {
-  topicTitle: string;
+export function createEmptyLessonGroundingPack(params: {
+  lessonTitle: string;
   materialIds?: string[];
   teacherSummary?: string;
-}): TopicGroundingPack {
-  return topicGroundingPackSchema.parse({
+}): LessonGroundingPack {
+  return lessonGroundingPackSchema.parse({
     version: LEARNING_NUMERIC_DEFAULTS.initialVersion,
     builtAt: new Date().toISOString(),
     materialIds: params.materialIds ?? [],
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     digest: params.teacherSummary?.trim() ?? "",
     inScopeConcepts: [],
     explicitlyOutOfScope: [],
@@ -50,9 +50,9 @@ export function createEmptyTopicGroundingPack(params: {
   });
 }
 
-export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicGroundingPack | null> {
-  const topic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, topicId),
+export async function rebuildLessonGroundingPack(lessonId: string): Promise<LessonGroundingPack | null> {
+  const lesson = await getDb().query.lessons.findFirst({
+    where: eq(lessons.id, lessonId),
     with: {
       materials: {
         orderBy: (table, { asc }) => [asc(table.createdAt)],
@@ -60,13 +60,13 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
     },
   });
 
-  if (!topic) {
+  if (!lesson) {
     return null;
   }
 
-  const boundary = topicSourceBoundarySchema.parse(topic.sourceBoundary ?? {});
+  const boundary = lessonSourceBoundarySchema.parse(lesson.sourceBoundary ?? {});
   const allowedMaterialIds = new Set(boundary.allowedMaterialIds);
-  const indexedMaterials = topic.materials.filter((material) => {
+  const indexedMaterials = lesson.materials.filter((material) => {
     if (
       material.indexingStatus !== LEARNING_STATUS.materialCompleted ||
       !material.groundingMap
@@ -82,11 +82,11 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
   });
   const materialIds = indexedMaterials.map((material) => material.id);
   const nextVersion =
-    (topic.topicGroundingPack?.version ?? LEARNING_NUMERIC_DEFAULTS.zero) + 1;
+    (lesson.lessonGroundingPack?.version ?? LEARNING_NUMERIC_DEFAULTS.zero) + 1;
 
   if (indexedMaterials.length === 0) {
-    const emptyPack = createEmptyTopicGroundingPack({
-      topicTitle: topic.title,
+    const emptyPack = createEmptyLessonGroundingPack({
+      lessonTitle: lesson.title,
       materialIds: [],
       teacherSummary: boundary.teacherSummary,
     });
@@ -96,13 +96,13 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
     );
 
     await getDb()
-      .update(learningTopics)
+      .update(lessons)
       .set({
-        topicGroundingPack: pack,
-        topicGroundingPackBuiltAt: new Date(),
+        lessonGroundingPack: pack,
+        lessonGroundingPackBuiltAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(learningTopics.id, topicId));
+      .where(eq(lessons.id, lessonId));
 
     return pack;
   }
@@ -111,28 +111,28 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
 
   try {
     const extracted = await generateStructuredOutput({
-      schema: topicGroundingPackExtractSchema,
-      prompt: buildTopicGroundingPackPrompt({
-        topicTitle: topic.title,
-        topicDescription: topic.description,
+      schema: lessonGroundingPackExtractSchema,
+      prompt: buildLessonGroundingPackPrompt({
+        lessonTitle: lesson.title,
+        lessonDescription: lesson.description,
         teacherSummary: boundary.teacherSummary,
-        learningOutcomes: topic.learningOutcomes ?? [],
+        learningOutcomes: lesson.learningOutcomes ?? [],
         compiledGroundingText,
         existingScopeNotes: boundary.scopeNotes,
         existingNotationNotes: boundary.notationNotes,
         existingRigorNotes: boundary.rigorNotes,
       }),
-      maxOutputTokens: LEARNING_LIMITS.topicGroundingPackMaxOutputTokens,
+      maxOutputTokens: LEARNING_LIMITS.lessonGroundingPackMaxOutputTokens,
       temperature: 0,
     });
 
     const pack = mergePackWithBoundary(
-      topicGroundingPackSchema.parse({
+      lessonGroundingPackSchema.parse({
         ...extracted,
         version: nextVersion,
         builtAt: new Date().toISOString(),
         materialIds,
-        topicTitle: topic.title,
+        lessonTitle: lesson.title,
         conflictNotes: [],
         sourceSummaries: indexedMaterials.map((material) => ({
           materialId: material.id,
@@ -155,10 +155,10 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
     );
 
     await getDb()
-      .update(learningTopics)
+      .update(lessons)
       .set({
-        topicGroundingPack: pack,
-        topicGroundingPackBuiltAt: new Date(),
+        lessonGroundingPack: pack,
+        lessonGroundingPackBuiltAt: new Date(),
         updatedAt: new Date(),
         ...(boundary.teacherSummary.trim()
           ? {}
@@ -171,10 +171,10 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
               }
             : {}),
       })
-      .where(eq(learningTopics.id, topicId));
+      .where(eq(lessons.id, lessonId));
 
-    log.info("Topic grounding pack rebuilt", {
-      topicId,
+    log.info("Lesson grounding pack rebuilt", {
+      lessonId,
       version: pack.version,
       materialCount: materialIds.length,
       formulaCount: pack.formulas.length,
@@ -183,14 +183,14 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
 
     return pack;
   } catch (error) {
-    log.error("Failed to rebuild topic grounding pack", {
-      topicId,
+    log.error("Failed to rebuild lesson grounding pack", {
+      lessonId,
       ...serializeError(error),
     });
 
-    const fallbackPack = buildDeterministicTopicGroundingPack({
-      topicTitle: topic.title,
-      topicDescription: topic.description,
+    const fallbackPack = buildDeterministicLessonGroundingPack({
+      lessonTitle: lesson.title,
+      lessonDescription: lesson.description,
       boundary,
       materialIds,
       nextVersion,
@@ -198,10 +198,10 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
     });
 
     await getDb()
-      .update(learningTopics)
+      .update(lessons)
       .set({
-        topicGroundingPack: fallbackPack,
-        topicGroundingPackBuiltAt: new Date(),
+        lessonGroundingPack: fallbackPack,
+        lessonGroundingPackBuiltAt: new Date(),
         updatedAt: new Date(),
         ...(boundary.teacherSummary.trim()
           ? {}
@@ -214,10 +214,10 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
               }
             : {}),
       })
-      .where(eq(learningTopics.id, topicId));
+      .where(eq(lessons.id, lessonId));
 
-    log.warn("Fell back to deterministic topic grounding pack", {
-      topicId,
+    log.warn("Fell back to deterministic lesson grounding pack", {
+      lessonId,
       version: fallbackPack.version,
       materialCount: materialIds.length,
       sectionCount: fallbackPack.sections.length,
@@ -227,3 +227,4 @@ export async function rebuildTopicGroundingPack(topicId: string): Promise<TopicG
     return fallbackPack;
   }
 }
+

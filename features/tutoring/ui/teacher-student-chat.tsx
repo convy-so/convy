@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -123,7 +123,7 @@ export function TeacherStudentChat({
     queryKey: ["teacherStudentChatSessions", classroomStudentId],
     queryFn: async () => {
       const response = await fetch(
-        `/api/learning/students/${classroomStudentId}/chat-sessions`,
+        `/api/students/${classroomStudentId}/chat-sessions`,
         {
           credentials: "include",
         },
@@ -160,7 +160,7 @@ export function TeacherStudentChat({
 
   async function loadSession(sessionId: string) {
     const response = await fetch(
-      `/api/learning/students/${classroomStudentId}/chat-sessions/${sessionId}`,
+      `/api/students/${classroomStudentId}/chat-sessions/${sessionId}`,
       { credentials: "include" },
     );
 
@@ -440,3 +440,4 @@ export function TeacherStudentChat({
     </section>
   );
 }
+

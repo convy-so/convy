@@ -1,4 +1,4 @@
-import type { PromptSpec } from "@/shared/ai/core/prompt-context-types";
+﻿import type { PromptSpec } from "@/shared/ai/core/prompt-context-types";
 import {
   buildPromptFrame,
   renderInterestProfile,
@@ -66,7 +66,7 @@ export function buildInterestOnboardingEvaluationPrompt(
 }
 
 export const onboardingTurnPromptSpec: PromptSpec = {
-  id: "learning-onboarding-turn",
+  id: "student-onboarding-turn",
   versionId: "2026-05-26.1",
   label: "Student Interest Onboarding",
   systemPrompt: "Conduct a conversational interest onboarding intake.",
@@ -99,7 +99,7 @@ Student: I like business, football, and technology.`,
       transcript: `Tutor: What helps things click for you when you are learning something hard?
 Student: I usually get it when someone shows me a real example first. If they start with definitions I switch off.`,
       good_response:
-        "That is useful. Think of a time that happened recently. What was the topic, and what kind of real example finally made it click for you?",
+        "That is useful. Think of a time that happened recently. What was the lesson, and what kind of real example finally made it click for you?",
       why_it_is_good:
         "It turns a general preference into evidence a tutor can reuse and validates only enough to keep momentum.",
       target_status: ONBOARDING_TURN_STATUS.CONTINUE,
@@ -118,5 +118,6 @@ Student: I usually get it when someone shows me a real example first. If they st
 };
 
 export function buildOnboardingGreeting(studentName: string): string {
-  return `Hi ${studentName}. Before we jump into school topics, I want to understand what matters to you. What kinds of things pull your attention in the real world?`;
+  return `Hi ${studentName}. Before we jump into school lessons, I want to understand what matters to you. What kinds of things pull your attention in the real world?`;
 }
+

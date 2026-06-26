@@ -1,15 +1,15 @@
-import { and, eq, inArray } from "drizzle-orm";
+﻿import { and, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
 import {
-  learningEvidenceEmbeddings,
-  learningInteractions,
-  studentProgressReports,
+  lessonEvidenceEmbeddings,
+  studentInteractions,
+  studentLessonReports,
 } from "@/shared/db/schema";
 
 import {
-  indexLearningInteractionEvidence,
-  indexLearningReportEvidence,
+  indexStudentInteractionEvidence,
+  indexStudentReportEvidence,
 } from "./indexing";
 
 export async function hydrateStudentLearningEvidence(params: {
@@ -17,15 +17,15 @@ export async function hydrateStudentLearningEvidence(params: {
   studentUserId?: string | null;
 }) {
   const [reports, interactions] = await Promise.all([
-    getDb().query.studentProgressReports.findMany({
-      where: eq(studentProgressReports.classroomStudentId, params.classroomStudentId),
-      with: { topic: { with: { classroom: true } } },
+    getDb().query.studentLessonReports.findMany({
+      where: eq(studentLessonReports.classroomStudentId, params.classroomStudentId),
+      with: { lesson: { with: { classroom: true } } },
       orderBy: (table, { desc }) => [desc(table.updatedAt)],
       limit: 12,
     }),
-    getDb().query.learningInteractions.findMany({
-      where: eq(learningInteractions.classroomStudentId, params.classroomStudentId),
-      with: { topic: { with: { classroom: true } } },
+    getDb().query.studentInteractions.findMany({
+      where: eq(studentInteractions.classroomStudentId, params.classroomStudentId),
+      with: { lesson: { with: { classroom: true } } },
       orderBy: (table, { desc }) => [desc(table.updatedAt)],
       limit: 40,
     }),
@@ -36,20 +36,20 @@ export async function hydrateStudentLearningEvidence(params: {
 
   const [existingReportEmbs, existingInteractionEmbs] = await Promise.all([
     reportIds.length > 0
-      ? getDb().query.learningEvidenceEmbeddings.findMany({
+      ? getDb().query.lessonEvidenceEmbeddings.findMany({
           where: and(
-            eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
-            eq(learningEvidenceEmbeddings.sourceType, "report"),
-            inArray(learningEvidenceEmbeddings.sourceId, reportIds),
+            eq(lessonEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
+            eq(lessonEvidenceEmbeddings.sourceType, "report"),
+            inArray(lessonEvidenceEmbeddings.sourceId, reportIds),
           ),
         })
       : Promise.resolve([]),
     interactionIds.length > 0
-      ? getDb().query.learningEvidenceEmbeddings.findMany({
+      ? getDb().query.lessonEvidenceEmbeddings.findMany({
           where: and(
-            eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
-            eq(learningEvidenceEmbeddings.sourceType, "interaction"),
-            inArray(learningEvidenceEmbeddings.sourceId, interactionIds),
+            eq(lessonEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
+            eq(lessonEvidenceEmbeddings.sourceType, "interaction"),
+            inArray(lessonEvidenceEmbeddings.sourceId, interactionIds),
           ),
         })
       : Promise.resolve([]),
@@ -73,16 +73,16 @@ export async function hydrateStudentLearningEvidence(params: {
       continue;
     }
 
-    await indexLearningReportEvidence({
+    await indexStudentReportEvidence({
       reportId: report.id,
       classroomStudentId: report.classroomStudentId,
       studentUserId: params.studentUserId ?? null,
-      topicId: report.topicId,
-      classroomId: report.topic?.classroomId ?? null,
-      topicTitle: report.topic?.title ?? null,
+      lessonId: report.lessonId,
+      classroomId: report.lesson?.classroomId ?? null,
+      lessonTitle: report.lesson?.title ?? null,
       language: report.sourceLocale,
-      subjectKey: report.topic?.courseId ?? null,
-      gradeBand: report.topic?.classroom.gradeBand ?? null,
+      subjectKey: report.lesson?.courseId ?? null,
+      gradeBand: report.lesson?.classroom.gradeBand ?? null,
       masteryPercent: report.masteryPercent,
       report: report.report as Record<string, unknown>,
       sourceUpdatedAt,
@@ -96,16 +96,16 @@ export async function hydrateStudentLearningEvidence(params: {
       continue;
     }
 
-    await indexLearningInteractionEvidence({
+    await indexStudentInteractionEvidence({
       interactionId: interaction.id,
       classroomStudentId: interaction.classroomStudentId,
       studentUserId: params.studentUserId ?? null,
-      topicId: interaction.topicId ?? null,
-      classroomId: interaction.topic?.classroomId ?? null,
-      topicTitle: interaction.topic?.title ?? null,
-      language: interaction.topic?.contentLocale ?? "en",
-      subjectKey: interaction.topic?.courseId ?? null,
-      gradeBand: interaction.topic?.classroom.gradeBand ?? null,
+      lessonId: interaction.lessonId ?? null,
+      classroomId: interaction.lesson?.classroomId ?? null,
+      lessonTitle: interaction.lesson?.title ?? null,
+      language: interaction.lesson?.contentLocale ?? "en",
+      subjectKey: interaction.lesson?.courseId ?? null,
+      gradeBand: interaction.lesson?.classroom.gradeBand ?? null,
       interactionType: interaction.interactionType,
       role: interaction.role,
       content: interaction.content,
@@ -116,3 +116,4 @@ export async function hydrateStudentLearningEvidence(params: {
     });
   }
 }
+

@@ -2,10 +2,10 @@ import type { UIMessage } from "ai";
 import type { z } from "zod";
 
 import type { tutorRuntimeService } from "@/features/tutoring/server/tutor-runtime-service";
-import type { learningSessionStateSchema } from "@/features/tutoring/public-server";
-import type { StudentTopicAccess } from "@/features/tutoring/server/tutoring-route-orchestrator";
+import type { studentSessionStateSchema } from "@/features/tutoring/public-server";
+import type { StudentLessonAccess } from "@/features/tutoring/server/tutoring-route-orchestrator";
 
-export type TutoringSessionState = z.infer<typeof learningSessionStateSchema>;
+export type TutoringSessionState = z.infer<typeof studentSessionStateSchema>;
 
 export type PreparedTutoringTurn = Awaited<ReturnType<typeof tutorRuntimeService.prepareTurn>>;
 
@@ -26,12 +26,12 @@ export type FinalizeTurnStep = {
 };
 
 export type FinalizeTutoringTurnParams = {
-  topicId: string;
+  lessonId: string;
   tutorSessionId: string;
   state: TutoringSessionState;
   expectedStateVersion: number;
   latestUserText: string;
-  access: StudentTopicAccess;
+  access: StudentLessonAccess;
   sessionUserId: string;
   prepared: PreparedTutoringTurn;
   previousAssistantText: string | null;
@@ -39,11 +39,12 @@ export type FinalizeTutoringTurnParams = {
 };
 
 export type PrepareTutoringTurnParams = {
-  topicId: string;
-  access: StudentTopicAccess;
+  lessonId: string;
+  access: StudentLessonAccess;
   tutorSessionId: string;
   studyLanguage: string;
   state: TutoringSessionState;
   latestUserText: string;
   messages: UIMessage[];
 };
+

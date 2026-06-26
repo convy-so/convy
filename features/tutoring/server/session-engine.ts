@@ -6,10 +6,10 @@ import { tutorRuntimeService } from "@/features/tutoring/server/tutor-runtime-se
 import { selectGroundingUnitsForPrompt } from "@/features/tutoring/server/grounding-units";
 import { buildAssessmentPreviewPrompt } from "@/features/tutoring/server/prompts/session-engine";
 import {
-  createDefaultLearningSessionState,
-  learningSessionStateSchema,
-  type LearningSessionState,
-  type TopicSourceBoundary,
+  createDefaultStudentSessionState,
+  studentSessionStateSchema,
+  type StudentSessionState,
+  type LessonSourceBoundary,
 } from "@/features/tutoring/public-server";
 import {
   LEARNING_DEFAULT_LOCALE,
@@ -19,7 +19,7 @@ import {
 
 export type TutoringRuntimeContext = {
   studyLanguage?: string;
-  topicId?: string | null;
+  lessonId?: string | null;
   classroomStudentId?: string | null;
 };
 
@@ -36,22 +36,22 @@ const assessmentPreviewSchema = z.object({
   evidenceRequirements: z.array(z.string()).default([]),
 });
 
-export function buildLearningSessionState(
-  partial?: Partial<LearningSessionState> | null,
+export function buildStudentSessionState(
+  partial?: Partial<StudentSessionState> | null,
 ) {
-  return learningSessionStateSchema.parse({
-    ...createDefaultLearningSessionState(),
+  return studentSessionStateSchema.parse({
+    ...createDefaultStudentSessionState(),
     ...(partial ?? {}),
   });
 }
 
 export async function runTutoringSessionTurn(params: {
-  state: LearningSessionState;
+  state: StudentSessionState;
   access: {
-    topic: {
+    lesson: {
       id: string;
       title: string;
-      sourceBoundary: TopicSourceBoundary;
+      sourceBoundary: LessonSourceBoundary;
       classroomId?: string | null;
       classroom: Record<string, never>;
     };
@@ -61,9 +61,9 @@ export async function runTutoringSessionTurn(params: {
   runtimeContext?: TutoringRuntimeContext;
 }) {
   const prepared = await tutorRuntimeService.prepareTurn({
-    topicId: params.access.topic.id,
-    topicTitle: params.access.topic.title,
-    sourceBoundary: params.access.topic.sourceBoundary,
+    lessonId: params.access.lesson.id,
+    lessonTitle: params.access.lesson.title,
+    sourceBoundary: params.access.lesson.sourceBoundary,
     studentUserId: params.access.classroomStudent.userId,
     studyLanguage: params.runtimeContext?.studyLanguage ?? LEARNING_DEFAULT_LOCALE,
     state: params.state,
@@ -81,10 +81,10 @@ export async function runTutoringSessionTurn(params: {
   };
 }
 
-export async function previewAssessmentQuestionForTopic(params: {
-  topicTitle: string;
+export async function previewAssessmentQuestionForLesson(params: {
+  lessonTitle: string;
   retrievedContext: string[];
-  contentScope?: LearningSessionState["contentScopeSnapshot"] | null;
+  contentScope?: StudentSessionState["contentScopeSnapshot"] | null;
   runtimeContext?: TutoringRuntimeContext;
   currentStageLabel?: string | null;
   questionType?: string;
@@ -97,7 +97,7 @@ export async function previewAssessmentQuestionForTopic(params: {
           query: [params.questionType, params.difficulty, params.currentStageLabel]
             .filter(Boolean)
             .join(" "),
-          recentSummary: params.topicTitle,
+          recentSummary: params.lessonTitle,
           budgetTokens: LEARNING_LIMITS.assessmentPreviewGroundingBudgetTokens,
           maxUnits: LEARNING_LIMITS.assessmentPreviewGroundingMaxUnits,
         }),
@@ -107,7 +107,7 @@ export async function previewAssessmentQuestionForTopic(params: {
   return await generateStructuredOutput({
     schema: assessmentPreviewSchema,
     prompt: buildAssessmentPreviewPrompt({
-      topicTitle: params.topicTitle,
+      lessonTitle: params.lessonTitle,
       currentStageLabel: params.currentStageLabel,
       retrievedContext: groundedContext,
       questionType: params.questionType,
@@ -115,3 +115,4 @@ export async function previewAssessmentQuestionForTopic(params: {
     }),
   });
 }
+

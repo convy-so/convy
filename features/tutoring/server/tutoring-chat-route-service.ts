@@ -1,4 +1,4 @@
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+﻿import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import { evaluateScopePolicy } from "@/shared/ai/scope-policy";
 import { buildScopeRedirectResponse, logUserTurn } from "@/features/tutoring/server/tutoring-turn-logging";
@@ -9,18 +9,18 @@ import {
 } from "@/features/tutoring/public-server";
 
 export async function evaluateTutoringScope(params: {
-  topicTitle: string;
+  lessonTitle: string;
   latestUserText: string;
 }) {
   return measureTutoringStep("scope:evaluate", {
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     latestUserText: summarizeTutoringText(params.latestUserText, 180),
   }, async () =>
     await evaluateScopePolicy({
       feature: "tutoring_chat",
-      objective: `Help the student learn ${params.topicTitle} using uploaded course materials`,
+      objective: `Help the student learn ${params.lessonTitle} using uploaded course materials`,
       currentPhase: "active tutoring session",
-      activeTopic: params.topicTitle,
+      activeLesson: params.lessonTitle,
       latestUserMessage: params.latestUserText,
       strictMode: true,
       driftCount: 0,
@@ -37,7 +37,7 @@ export async function maybeHandleScopeRedirect(params: {
   shouldRedirect: boolean;
   sessionId: string;
   classroomStudentId: string;
-  topicId: string;
+  lessonId: string;
   latestUserText: string;
   classification: string;
   redirectMessage: string;
@@ -45,7 +45,7 @@ export async function maybeHandleScopeRedirect(params: {
   if (!params.shouldRedirect) return null;
   logTutoringDebug("scope:redirect:start", {
     sessionId: params.sessionId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     classroomStudentId: params.classroomStudentId,
     classification: params.classification,
     redirectMessage: summarizeTutoringText(params.redirectMessage, 180),
@@ -54,7 +54,7 @@ export async function maybeHandleScopeRedirect(params: {
   await logUserTurn({
     sessionId: params.sessionId,
     classroomStudentId: params.classroomStudentId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     content: params.latestUserText,
     metadata: { classification: params.classification },
   });
@@ -62,7 +62,7 @@ export async function maybeHandleScopeRedirect(params: {
   const redirect = buildScopeRedirectResponse({
     sessionId: params.sessionId,
     classroomStudentId: params.classroomStudentId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     classification: params.classification,
     redirectMessage: params.redirectMessage,
   });
@@ -74,9 +74,10 @@ export async function maybeHandleScopeRedirect(params: {
       await redirect.persist();
       logTutoringDebug("scope:redirect:stream-complete", {
         sessionId: params.sessionId,
-        topicId: params.topicId,
+        lessonId: params.lessonId,
       });
     },
   }),
   });
 }
+

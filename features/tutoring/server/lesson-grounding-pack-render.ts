@@ -1,6 +1,6 @@
-import type { TopicGroundingPack } from "@/features/tutoring/public-server";
+﻿import type { LessonGroundingPack } from "@/features/tutoring/public-server";
 
-export function renderTopicGroundingPackForPrompt(pack: TopicGroundingPack): string {
+export function renderLessonGroundingPackForPrompt(pack: LessonGroundingPack): string {
   const sections = pack.sections
     .map((section) => {
       const points = section.keyPoints.map((point) => `  - ${point}`).join("\n");
@@ -44,3 +44,4 @@ export function renderTopicGroundingPackForPrompt(pack: TopicGroundingPack): str
       : "Teaching notes: none",
   ].join("\n\n");
 }
+

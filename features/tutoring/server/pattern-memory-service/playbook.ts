@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+﻿import { unstable_cache } from "next/cache";
 
 import {
   buildTeachingPlaybook,
@@ -20,10 +20,10 @@ const cachedBuildStudentTeachingPlaybook = unstable_cache(
       studentUserId,
       subjectKey,
       subjectLabel,
-      topicLocalGaps: [],
-      topicLocalUsedExamples: [],
+      lessonLocalGaps: [],
+      lessonLocalUsedExamples: [],
     }),
-  ["learning-student-teaching-playbook"],
+  ["student-teaching-playbook"],
   { revalidate: 300 },
 );
 
@@ -31,12 +31,12 @@ export async function buildStudentTeachingPlaybook(params: {
   studentUserId: string;
   subjectKey?: string | null;
   subjectLabel?: string | null;
-  topicLocalGaps?: string[];
-  topicLocalUsedExamples?: string[];
+  lessonLocalGaps?: string[];
+  lessonLocalUsedExamples?: string[];
 }): Promise<TeachingPlaybookResult> {
   if (
-    (params.topicLocalGaps?.length ?? 0) === 0 &&
-    (params.topicLocalUsedExamples?.length ?? 0) === 0
+    (params.lessonLocalGaps?.length ?? 0) === 0 &&
+    (params.lessonLocalUsedExamples?.length ?? 0) === 0
   ) {
     return await cachedBuildStudentTeachingPlaybook(
       params.studentUserId,
@@ -52,8 +52,8 @@ async function buildStudentTeachingPlaybookImpl(params: {
   studentUserId: string;
   subjectKey?: string | null;
   subjectLabel?: string | null;
-  topicLocalGaps?: string[];
-  topicLocalUsedExamples?: string[];
+  lessonLocalGaps?: string[];
+  lessonLocalUsedExamples?: string[];
 }): Promise<TeachingPlaybookResult> {
   const timer = createTutoringTimer();
   const summaries = await summarizeStudentPatternMemory({
@@ -88,8 +88,8 @@ async function buildStudentTeachingPlaybookImpl(params: {
   const playbook = buildTeachingPlaybook({
     globalProfile,
     subjectProfile,
-    topicLocalGaps: params.topicLocalGaps ?? [],
-    topicLocalUsedExamples: params.topicLocalUsedExamples ?? [],
+    lessonLocalGaps: params.lessonLocalGaps ?? [],
+    lessonLocalUsedExamples: params.lessonLocalUsedExamples ?? [],
   });
   log.debug("Student teaching playbook built", {
     studentUserId: params.studentUserId,
@@ -103,3 +103,4 @@ async function buildStudentTeachingPlaybookImpl(params: {
     memoryState: summaries.memoryState,
   };
 }
+

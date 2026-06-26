@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Loader2, Plus, X } from "lucide-react";
@@ -50,7 +50,7 @@ export function ExpertFrameworkCourses({
           title: string;
           description: string | null;
         };
-      }>("/api/learning/expert/courses", {
+      }>("/api/expert/courses", {
         method: "POST",
         body: JSON.stringify({
           title: newCourseTitle,
@@ -128,7 +128,7 @@ export function ExpertFrameworkCourses({
               Description
             </label>
             <textarea
-              placeholder="Brief summary of topics and learning goals"
+              placeholder="Brief summary of lessons and learning goals"
               value={newCourseDescription}
               onChange={(event) => setNewCourseDescription(event.target.value)}
               rows={3}
@@ -185,7 +185,7 @@ export function ExpertFrameworkCourses({
                           day: "numeric",
                           year: "numeric",
                         })
-                      : "â€”"}
+                      : "Ã¢â‚¬â€"}
                   </td>
                 </tr>
               ))}
@@ -196,3 +196,4 @@ export function ExpertFrameworkCourses({
     </div>
   );
 }
+

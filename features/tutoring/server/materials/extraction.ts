@@ -30,16 +30,16 @@ async function extractFileTextWithGemini(params: {
   filename: string;
   mimeType: string;
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
 }) {
   const pageMarkerInstruction =
     params.mimeType.toLowerCase() === PDF_MIME
       ? "Insert a standalone marker [[PAGE N]] each time a new PDF page starts."
       : "Preserve the document structure with clear section headings and list formatting.";
 
-  console.info("[learning-material-upload] gemini extraction start", {
+  console.info("[lesson-material-upload] gemini extraction start", {
     traceId: params.traceId ?? null,
-    topicId: params.topicId ?? null,
+    lessonId: params.lessonId ?? null,
     filename: params.filename,
     mimeType: params.mimeType,
     byteLength: params.buffer.length,
@@ -74,10 +74,10 @@ async function extractFileTextWithGemini(params: {
     ],
     experimental_telemetry: {
       isEnabled: true,
-      functionId: "learning_material_extraction",
+      functionId: "lesson_material_extraction",
       metadata: {
         traceId: params.traceId ?? "",
-        topicId: params.topicId ?? "",
+        lessonId: params.lessonId ?? "",
         filename: params.filename,
         mimeType: params.mimeType,
       },
@@ -87,19 +87,19 @@ async function extractFileTextWithGemini(params: {
   const text = result.text.trim();
   const diagnostics = getResultDiagnostics(result, text.length);
 
-  console.info("[learning-material-upload] gemini extraction complete", {
+  console.info("[lesson-material-upload] gemini extraction complete", {
     traceId: params.traceId ?? null,
-    topicId: params.topicId ?? null,
+    lessonId: params.lessonId ?? null,
     filename: params.filename,
     extractedTextLength: text.length,
     ...diagnostics,
   });
 
   logLearningMaterialTrace({
-    event: "learning_material_extraction_complete",
+    event: "lesson_material_extraction_complete",
     input: {
       traceId: params.traceId ?? "",
-      topicId: params.topicId ?? "",
+      lessonId: params.lessonId ?? "",
       filename: params.filename,
       mimeType: params.mimeType,
       byteLength: params.buffer.length,
@@ -125,19 +125,19 @@ export async function extractLearningMaterialSourceDocument(params: {
   mimeType: string;
   title?: string | null;
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
 }) {
   const mime = params.mimeType.toLowerCase();
 
   if (!LEARNING_MATERIAL_MIME_ALLOWLIST.has(mime)) {
-    throw new Error("Unsupported learning material format");
+    throw new Error("Unsupported lesson material format");
   }
 
   const sourceHash = crypto.createHash("sha256").update(params.buffer).digest("hex");
   const sourceTitle = params.title?.trim() || params.filename;
 
   if (mime === "text/plain") {
-    console.info("[learning-material-upload] txt decode", {
+    console.info("[lesson-material-upload] txt decode", {
       filename: params.filename,
       byteLength: params.buffer.length,
     });
@@ -169,7 +169,7 @@ export async function extractLearningMaterialSourceDocument(params: {
       });
     } catch (error) {
       console.warn(
-        "[learning-material-upload] local docx extraction failed; using gemini fallback",
+        "[lesson-material-upload] local docx extraction failed; using gemini fallback",
         {
           filename: params.filename,
           error: getErrorMessage(error),
@@ -182,7 +182,7 @@ export async function extractLearningMaterialSourceDocument(params: {
             filename: params.filename,
             mimeType: params.mimeType,
             traceId: params.traceId,
-            topicId: params.topicId,
+            lessonId: params.lessonId,
           }),
         ),
       );
@@ -205,7 +205,7 @@ export async function extractLearningMaterialSourceDocument(params: {
           filename: params.filename,
           mimeType: params.mimeType,
           traceId: params.traceId,
-          topicId: params.topicId,
+          lessonId: params.lessonId,
         }),
       ),
     );
@@ -219,7 +219,7 @@ export async function extractLearningMaterialSourceDocument(params: {
     });
   }
 
-  throw new Error("Unsupported learning material format");
+  throw new Error("Unsupported lesson material format");
 }
 
 export async function extractLearningMaterialText(params: {
@@ -229,7 +229,7 @@ export async function extractLearningMaterialText(params: {
   mimeType: string;
   title?: string | null;
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
 }) {
   const sourceDocument = await extractLearningMaterialSourceDocument({
     materialId: params.materialId ?? nanoid(),
@@ -238,20 +238,20 @@ export async function extractLearningMaterialText(params: {
     mimeType: params.mimeType,
     title: params.title,
     traceId: params.traceId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
   });
 
   return flattenSourceDocumentText(sourceDocument);
 }
 
 export function buildLegacySourceDocument(params: {
-  topicTitle: string;
+  lessonTitle: string;
   materialText: string;
 }): MaterialSourceDocument {
   const sourceHash = crypto.createHash("sha256").update(params.materialText).digest("hex");
   return {
     materialId: nanoid(),
-    sourceTitle: params.topicTitle,
+    sourceTitle: params.lessonTitle,
     mimeType: "text/plain",
     extractor: "legacy_text_wrapper",
     sourceHash,
@@ -260,7 +260,7 @@ export function buildLegacySourceDocument(params: {
     truncated: false,
     segments: buildSegmentsFromText({
       materialId: nanoid(),
-      sourceTitle: params.topicTitle,
+      sourceTitle: params.lessonTitle,
       mimeType: "text/plain",
       extractor: "legacy_text_wrapper",
       sourceHash,
@@ -268,3 +268,4 @@ export function buildLegacySourceDocument(params: {
     }).segments,
   };
 }
+

@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 import {
   executeImageSearchPipeline,
   executeVideoSearchPipeline,
@@ -147,7 +147,7 @@ function buildFrameworkToolDescription(input: {
 }
 
 export function createTutorTools(params: {
-  topicTitle: string;
+  lessonTitle: string;
   studentContext: string;
   capabilityGuidance: ExpertFrameworkCapabilityGuidance;
   priorQuizIds?: string[];
@@ -183,7 +183,7 @@ export function createTutorTools(params: {
         }
 
         imageSearchCalls += 1;
-        return await executeImageSearchPipeline(query, image_type, params.topicTitle, params.studentContext);
+        return await executeImageSearchPipeline(query, image_type, params.lessonTitle, params.studentContext);
       },
     };
   }
@@ -205,7 +205,7 @@ export function createTutorTools(params: {
         }
 
         videoSearchCalls += 1;
-        return await executeVideoSearchPipeline(query, params.topicTitle, params.studentContext);
+        return await executeVideoSearchPipeline(query, params.lessonTitle, params.studentContext);
       },
     };
   }
@@ -274,3 +274,4 @@ export function createTutorTools(params: {
     },
   };
 }
+

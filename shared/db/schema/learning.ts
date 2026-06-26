@@ -24,15 +24,15 @@ import type {
   MaterialGroundingMap,
   MaterialSourceDocument,
   LearningOutcomeDefinition,
-  LearningSessionState,
-  LearningInteractionType,
+  StudentSessionState,
+  StudentInteractionType,
   SessionOpeningPlan,
   StudentInterestProfile,
   TeacherProgressReport,
-  TopicGroundingPack,
-  TopicSourceBoundary,
+  LessonGroundingPack,
+  LessonSourceBoundary,
 } from "@/features/tutoring/public-server";
-import { defaultLearningSessionState } from "@/features/tutoring/public-server";
+import { defaultStudentSessionState } from "@/features/tutoring/public-server";
 import {
   EXPERT_CONFLICT_STATUS_VALUES,
   EXPERT_CRYSTALLIZATION_STATUS_VALUES,
@@ -183,8 +183,8 @@ export const courses = pgTable(
   ],
 );
 
-export const learningTopics = pgTable(
-  "learning_topics",
+export const lessons = pgTable(
+  "lessons",
   {
     id: text("id").primaryKey(),
     ...timestamps,
@@ -194,7 +194,7 @@ export const learningTopics = pgTable(
     createdByUserId: text("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // restrict: block course deletion while any classroom topic still references this catalog row.
+    // restrict: block course deletion while any classroom lesson still references this catalog row.
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "restrict" }),
@@ -203,12 +203,12 @@ export const learningTopics = pgTable(
     contentLocale: text("content_locale")
       .default(LEARNING_DEFAULT_LOCALE)
       .notNull(),
-    status: text("status").default(LEARNING_STATUS.topicDraft).notNull(),
+    status: text("status").default(LEARNING_STATUS.lessonDraft).notNull(),
     openingPreference: text("opening_preference")
-      .default(LEARNING_STATUS.topicOpeningAuto)
+      .default(LEARNING_STATUS.lessonOpeningAuto)
       .notNull(),
     sourceBoundary: jsonb("source_boundary")
-      .$type<TopicSourceBoundary>()
+      .$type<LessonSourceBoundary>()
       .notNull(),
     learningOutcomes: jsonb("learning_outcomes")
       .$type<LearningOutcomeDefinition[]>()
@@ -226,28 +226,28 @@ export const learningTopics = pgTable(
       withTimezone: true,
       mode: "date",
     }),
-    topicGroundingPack: jsonb("topic_grounding_pack").$type<TopicGroundingPack | null>(),
-    topicGroundingPackBuiltAt: timestamp("topic_grounding_pack_built_at", {
+    lessonGroundingPack: jsonb("lesson_grounding_pack").$type<LessonGroundingPack | null>(),
+    lessonGroundingPackBuiltAt: timestamp("lesson_grounding_pack_built_at", {
       withTimezone: true,
       mode: "date",
     }),
   },
   (table) => [
-    index("learning_topics_classroom_id_idx").on(table.classroomId),
-    index("learning_topics_created_by_user_id_idx").on(table.createdByUserId),
-    index("learning_topics_course_id_idx").on(table.courseId),
-    index("learning_topics_status_idx").on(table.status),
+    index("lessons_classroom_id_idx").on(table.classroomId),
+    index("lessons_created_by_user_id_idx").on(table.createdByUserId),
+    index("lessons_course_id_idx").on(table.courseId),
+    index("lessons_status_idx").on(table.status),
   ],
 );
 
-export const topicMaterials = pgTable(
-  "topic_materials",
+export const lessonMaterials = pgTable(
+  "lesson_materials",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    topicId: text("topic_id")
+    lessonId: text("lesson_id")
       .notNull()
-      .references(() => learningTopics.id, { onDelete: "cascade" }),
+      .references(() => lessons.id, { onDelete: "cascade" }),
     uploadedByUserId: text("uploaded_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -274,40 +274,40 @@ export const topicMaterials = pgTable(
     groundingMap: jsonb("grounding_map")
       .$type<MaterialGroundingMap | null>()
       .default(null),
-    coverageReview: jsonb("coverage_review")
+    coverageAnalysis: jsonb("coverage_analysis")
       .$type<MaterialCoverageReview | null>()
       .default(null),
     analysis: jsonb("analysis").$type<Record<string, unknown>>().default({}),
   },
   (table) => [
-    index("topic_materials_topic_id_idx").on(table.topicId),
-    index("topic_materials_uploaded_by_user_id_idx").on(table.uploadedByUserId),
+    index("lesson_materials_lesson_id_idx").on(table.lessonId),
+    index("lesson_materials_uploaded_by_user_id_idx").on(table.uploadedByUserId),
     check(
-      "topic_materials_extraction_status_check",
+      "lesson_materials_extraction_status_check",
       sql`${table.extractionStatus} in (${sqlTextList(MATERIAL_PIPELINE_STATUS_VALUES)})`,
     ),
     check(
-      "topic_materials_indexing_status_check",
+      "lesson_materials_indexing_status_check",
       sql`${table.indexingStatus} in (${sqlTextList(MATERIAL_PIPELINE_STATUS_VALUES)})`,
     ),
   ],
 );
 
-export const topicMaterialUploadAttempts = pgTable(
-  "topic_material_upload_attempts",
+export const lessonMaterialUploadAttempts = pgTable(
+  "lesson_material_upload_attempts",
   {
     id: text("id").primaryKey(),
     ...timestamps,
     previousAttemptId: text("previous_attempt_id").references(
-      (): AnyPgColumn => topicMaterialUploadAttempts.id,
+      (): AnyPgColumn => lessonMaterialUploadAttempts.id,
       {
         onDelete: "set null",
       },
     ),
     batchId: text("batch_id").notNull(),
-    topicId: text("topic_id")
+    lessonId: text("lesson_id")
       .notNull()
-      .references(() => learningTopics.id, { onDelete: "cascade" }),
+      .references(() => lessons.id, { onDelete: "cascade" }),
     uploadedByUserId: text("uploaded_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -341,22 +341,22 @@ export const topicMaterialUploadAttempts = pgTable(
       mode: "date",
     }),
     failureMessage: text("failure_message"),
-    materialId: text("material_id").references(() => topicMaterials.id, {
+    materialId: text("material_id").references(() => lessonMaterials.id, {
       onDelete: "set null",
     }),
   },
   (table) => [
-    index("topic_material_upload_attempts_topic_id_idx").on(table.topicId),
-    index("topic_material_upload_attempts_batch_id_idx").on(table.batchId),
-    index("topic_material_upload_attempts_status_idx").on(table.status),
-    index("topic_material_upload_attempts_previous_attempt_id_idx").on(table.previousAttemptId),
-    index("topic_material_upload_attempts_failed_at_idx").on(table.failedAt),
+    index("lesson_material_upload_attempts_lesson_id_idx").on(table.lessonId),
+    index("lesson_material_upload_attempts_batch_id_idx").on(table.batchId),
+    index("lesson_material_upload_attempts_status_idx").on(table.status),
+    index("lesson_material_upload_attempts_previous_attempt_id_idx").on(table.previousAttemptId),
+    index("lesson_material_upload_attempts_failed_at_idx").on(table.failedAt),
     check(
-      "topic_material_upload_attempts_status_check",
+      "lesson_material_upload_attempts_status_check",
       sql`${table.status} in (${sqlTextList(MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES)})`,
     ),
     check(
-      "topic_material_upload_attempts_stage_check",
+      "lesson_material_upload_attempts_stage_check",
       sql`${table.stage} in (${sqlTextList(MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES)})`,
     ),
   ],
@@ -383,12 +383,12 @@ export const studentInterestProfiles = pgTable(
   (table) => [index("student_interest_profiles_student_id_idx").on(table.classroomStudentId)],
 );
 
-export const learningSessions = pgTable(
-  "learning_sessions",
+export const studentSessions = pgTable(
+  "student_sessions",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "cascade",
     }),
     classroomStudentId: text("classroom_student_id")
@@ -403,8 +403,8 @@ export const learningSessions = pgTable(
       .default(LEARNING_NUMERIC_DEFAULTS.initialVersion)
       .notNull(),
     state: jsonb("state")
-      .$type<LearningSessionState>()
-      .default(defaultLearningSessionState),
+      .$type<StudentSessionState>()
+      .default(defaultStudentSessionState),
     openingPlan: jsonb("opening_plan").$type<SessionOpeningPlan>(),
     summary: text("summary"),
     completedAt: timestamp("completed_at", {
@@ -413,27 +413,27 @@ export const learningSessions = pgTable(
     }),
   },
   (table) => [
-    index("learning_sessions_topic_id_idx").on(table.topicId),
-    index("learning_sessions_student_id_idx").on(table.classroomStudentId),
-    index("learning_sessions_type_idx").on(table.sessionType),
+    index("student_sessions_lesson_id_idx").on(table.lessonId),
+    index("student_sessions_student_id_idx").on(table.classroomStudentId),
+    index("student_sessions_type_idx").on(table.sessionType),
     check(
-      "learning_sessions_status_check",
+      "student_sessions_status_check",
       sql`${table.sessionStatus} in (${sqlTextList(LEARNING_SESSION_STATUS_VALUES)})`,
     ),
-    uniqueIndex("learning_sessions_active_topic_unique")
+    uniqueIndex("student_sessions_active_lesson_unique")
       .on(
         table.classroomStudentId,
-        table.topicId,
+        table.lessonId,
         table.sessionType,
         table.sessionLocale,
       )
       .where(
-        sql`${table.topicId} is not null and ${table.sessionStatus} = ${LEARNING_STATUS.sessionActive}`,
+        sql`${table.lessonId} is not null and ${table.sessionStatus} = ${LEARNING_STATUS.sessionActive}`,
       ),
-    uniqueIndex("learning_sessions_active_non_topic_unique")
+    uniqueIndex("student_sessions_active_non_lesson_unique")
       .on(table.classroomStudentId, table.sessionType, table.sessionLocale)
       .where(
-        sql`${table.topicId} is null and ${table.sessionStatus} = ${LEARNING_STATUS.sessionActive}`,
+        sql`${table.lessonId} is null and ${table.sessionStatus} = ${LEARNING_STATUS.sessionActive}`,
       ),
   ],
 );
@@ -468,12 +468,12 @@ export const studentAccessTokens = pgTable(
   ],
 );
 
-export const learningEvidenceEmbeddings = pgTable(
-  "learning_evidence_embeddings",
+export const lessonEvidenceEmbeddings = pgTable(
+  "lesson_evidence_embeddings",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "cascade",
     }),
     classroomId: text("classroom_id").references(() => classrooms.id, {
@@ -516,35 +516,35 @@ export const learningEvidenceEmbeddings = pgTable(
     embedding: vector("embedding", { dimensions: 1024 }),
   },
   (table) => [
-    index("learning_evidence_embeddings_topic_idx").on(table.topicId),
-    index("learning_evidence_embeddings_classroom_idx").on(table.classroomId),
-    index("learning_evidence_embeddings_student_idx").on(table.classroomStudentId),
-    index("learning_evidence_embeddings_user_idx").on(table.studentUserId),
-    index("learning_evidence_embeddings_source_idx").on(
+    index("lesson_evidence_embeddings_lesson_idx").on(table.lessonId),
+    index("lesson_evidence_embeddings_classroom_idx").on(table.classroomId),
+    index("lesson_evidence_embeddings_student_idx").on(table.classroomStudentId),
+    index("lesson_evidence_embeddings_user_idx").on(table.studentUserId),
+    index("lesson_evidence_embeddings_source_idx").on(
       table.sourceType,
       table.sourceId,
     ),
-    index("learning_evidence_embeddings_language_idx").on(table.language),
-    index("learning_evidence_embeddings_subject_idx").on(table.subjectKey),
-    index("learning_evidence_embeddings_embedding_idx").using(
+    index("lesson_evidence_embeddings_language_idx").on(table.language),
+    index("lesson_evidence_embeddings_subject_idx").on(table.subjectKey),
+    index("lesson_evidence_embeddings_embedding_idx").using(
       "hnsw",
       table.embedding.op("vector_cosine_ops"),
     ),
-    uniqueIndex("learning_evidence_embeddings_source_chunk_unique").on(
+    uniqueIndex("lesson_evidence_embeddings_source_chunk_unique").on(
       table.sourceType,
       table.sourceId,
       table.chunkIndex,
       table.language,
     ),
-    index("learning_evidence_embeddings_retrieval_en_idx").using(
+    index("lesson_evidence_embeddings_retrieval_en_idx").using(
       "gin",
       sql`to_tsvector('english', ${table.retrievalContent})`,
     ),
-    index("learning_evidence_embeddings_retrieval_de_idx").using(
+    index("lesson_evidence_embeddings_retrieval_de_idx").using(
       "gin",
       sql`to_tsvector('german', ${table.retrievalContent})`,
     ),
-    index("learning_evidence_embeddings_retrieval_fr_idx").using(
+    index("lesson_evidence_embeddings_retrieval_fr_idx").using(
       "gin",
       sql`to_tsvector('french', ${table.retrievalContent})`,
     )
@@ -552,7 +552,7 @@ export const learningEvidenceEmbeddings = pgTable(
 );
 
 export const teacherStudentChatSessions = pgTable(
-  "learning_teacher_chat_sessions",
+  "teacher_student_chat_sessions",
   {
     id: text("id").primaryKey(),
     ...timestamps,
@@ -570,44 +570,44 @@ export const teacherStudentChatSessions = pgTable(
       .default([]),
   },
   (table) => [
-    index("learning_teacher_chat_sessions_student_idx").on(table.classroomStudentId),
-    index("learning_teacher_chat_sessions_user_idx").on(table.teacherUserId),
+    index("teacher_student_chat_sessions_student_idx").on(table.classroomStudentId),
+    index("teacher_student_chat_sessions_user_idx").on(table.teacherUserId),
   ],
 );
 
-export const learningMessages = pgTable(
-  "learning_messages",
+export const studentSessionMessages = pgTable(
+  "student_session_messages",
   {
     id: text("id").primaryKey(),
     ...timestamps,
     sessionId: text("session_id")
       .notNull()
-      .references(() => learningSessions.id, { onDelete: "cascade" }),
+      .references(() => studentSessions.id, { onDelete: "cascade" }),
     role: text("role").notNull(),
     content: text("content").notNull(),
     parts: jsonb("parts").$type<Array<Record<string, unknown>> | null>(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
-  (table) => [index("learning_messages_session_id_idx").on(table.sessionId)],
+  (table) => [index("student_session_messages_session_id_idx").on(table.sessionId)],
 );
 
-export const learningInteractions = pgTable(
-  "learning_interactions",
+export const studentInteractions = pgTable(
+  "student_interactions",
   {
     id: text("id").primaryKey(),
     ...timestamps,
     classroomStudentId: text("classroom_student_id")
       .notNull()
       .references(() => classroomStudents.id, { onDelete: "cascade" }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "cascade",
     }),
-    sessionId: text("session_id").references(() => learningSessions.id, {
+    sessionId: text("session_id").references(() => studentSessions.id, {
       onDelete: "cascade",
     }),
     role: text("role").notNull(),
     interactionType: text("interaction_type")
-      .$type<LearningInteractionType>()
+      .$type<StudentInteractionType>()
       .notNull(),
     phaseId: integer("phase_id"),
     phaseType: text("phase_type"),
@@ -616,26 +616,26 @@ export const learningInteractions = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
   (table) => [
-    index("learning_interactions_student_id_idx").on(table.classroomStudentId),
-    index("learning_interactions_topic_id_idx").on(table.topicId),
-    index("learning_interactions_session_id_idx").on(table.sessionId),
-    index("learning_interactions_phase_idx").on(table.sessionId, table.phaseId),
+    index("student_interactions_student_id_idx").on(table.classroomStudentId),
+    index("student_interactions_lesson_id_idx").on(table.lessonId),
+    index("student_interactions_session_id_idx").on(table.sessionId),
+    index("student_interactions_phase_idx").on(table.sessionId, table.phaseId),
   ],
 );
 
-export const studentProgressReports = pgTable(
-  "student_progress_reports",
+export const studentLessonReports = pgTable(
+  "student_lesson_reports",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    topicId: text("topic_id")
+    lessonId: text("lesson_id")
       .notNull()
-      .references(() => learningTopics.id, { onDelete: "cascade" }),
+      .references(() => lessons.id, { onDelete: "cascade" }),
     classroomStudentId: text("classroom_student_id")
       .notNull()
       .references(() => classroomStudents.id, { onDelete: "cascade" }),
     generatedFromSessionId: text("generated_from_session_id").references(
-      () => learningSessions.id,
+      () => studentSessions.id,
       { onDelete: "set null" },
     ),
     sourceLocale: text("source_locale").default(LEARNING_DEFAULT_LOCALE).notNull(),
@@ -646,17 +646,17 @@ export const studentProgressReports = pgTable(
     visibility: text("visibility").default(LEARNING_STATUS.reportTeacherOnly).notNull(),
   },
   (table) => [
-    index("student_progress_reports_topic_id_idx").on(table.topicId),
-    index("student_progress_reports_student_id_idx").on(table.classroomStudentId),
+    index("student_lesson_reports_lesson_id_idx").on(table.lessonId),
+    index("student_lesson_reports_student_id_idx").on(table.classroomStudentId),
     check(
-      "student_progress_reports_visibility_check",
+      "student_lesson_reports_visibility_check",
       sql`${table.visibility} in (${sqlTextList(REPORT_VISIBILITY_VALUES)})`,
     ),
   ],
 );
 
 // Expert framework rows are owned by the course catalog entry. Deleting a course cascades
-// frameworks â†’ versions â†’ runtime models. Classroom topics still use restrict on course_id.
+// frameworks â†’ versions â†’ runtime models. Classroom lessons still use restrict on course_id.
 export const expertFrameworks = pgTable(
   "expert_frameworks",
   {
@@ -706,17 +706,17 @@ export const expertReviewCases = pgTable(
     courseId: text("course_id").references(() => courses.id, {
       onDelete: "set null",
     }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "set null",
     }),
     classroomStudentId: text("classroom_student_id").references(
       () => classroomStudents.id,
       { onDelete: "set null" },
     ),
-    sessionId: text("session_id").references(() => learningSessions.id, {
+    sessionId: text("session_id").references(() => studentSessions.id, {
       onDelete: "set null",
     }),
-    interactionId: text("interaction_id").references(() => learningInteractions.id, {
+    interactionId: text("interaction_id").references(() => studentInteractions.id, {
       onDelete: "set null",
     }),
     status: text("status").default(LEARNING_STATUS.reviewCaseOpen).notNull(),
@@ -739,7 +739,7 @@ export const expertReviewCases = pgTable(
   },
   (table) => [
     index("expert_review_cases_course_idx").on(table.courseId),
-    index("expert_review_cases_topic_idx").on(table.topicId),
+    index("expert_review_cases_lesson_idx").on(table.lessonId),
     index("expert_review_cases_student_idx").on(table.classroomStudentId),
     index("expert_review_cases_session_idx").on(table.sessionId),
     check(
@@ -753,15 +753,15 @@ export const expertReviewCases = pgTable(
   ],
 );
 
-export const learningInterventions = pgTable(
-  "learning_interventions",
+export const lessonInterventions = pgTable(
+  "lesson_interventions",
   {
     id: text("id").primaryKey(),
     ...timestamps,
     classroomId: text("classroom_id")
       .notNull()
       .references(() => classrooms.id, { onDelete: "cascade" }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "set null",
     }),
     classroomStudentId: text("classroom_student_id")
@@ -787,10 +787,10 @@ export const learningInterventions = pgTable(
     }),
   },
   (table) => [
-    index("learning_interventions_classroom_idx").on(table.classroomId),
-    index("learning_interventions_topic_idx").on(table.topicId),
-    index("learning_interventions_student_idx").on(table.classroomStudentId),
-    index("learning_interventions_status_idx").on(table.status),
+    index("lesson_interventions_classroom_idx").on(table.classroomId),
+    index("lesson_interventions_lesson_idx").on(table.lessonId),
+    index("lesson_interventions_student_idx").on(table.classroomStudentId),
+    index("lesson_interventions_status_idx").on(table.status),
   ],
 );
 
@@ -802,7 +802,7 @@ export const expertCrystallizations = pgTable(
     courseId: text("course_id").references(() => courses.id, {
       onDelete: "set null",
     }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "set null",
     }),
     frameworkId: text("framework_id").references(
@@ -829,7 +829,7 @@ export const expertCrystallizations = pgTable(
   },
   (table) => [
     index("expert_crystallizations_course_idx").on(table.courseId),
-    index("expert_crystallizations_topic_idx").on(table.topicId),
+    index("expert_crystallizations_lesson_idx").on(table.lessonId),
     index("expert_crystallizations_framework_idx").on(
       table.frameworkId,
     ),
@@ -852,7 +852,7 @@ export const expertConflicts = pgTable(
     courseId: text("course_id").references(() => courses.id, {
       onDelete: "set null",
     }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "set null",
     }),
     frameworkId: text("framework_id").references(
@@ -877,7 +877,7 @@ export const expertConflicts = pgTable(
   },
   (table) => [
     index("expert_conflicts_course_idx").on(table.courseId),
-    index("expert_conflicts_topic_idx").on(table.topicId),
+    index("expert_conflicts_lesson_idx").on(table.lessonId),
     index("expert_conflicts_framework_idx").on(table.frameworkId),
     check(
       "expert_conflicts_status_check",
@@ -894,7 +894,7 @@ export const teachingMediaAssets = pgTable(
     classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "cascade",
     }),
     createdByUserId: text("created_by_user_id")
@@ -917,7 +917,7 @@ export const teachingMediaAssets = pgTable(
   },
   (table) => [
     index("teaching_media_assets_classroom_idx").on(table.classroomId),
-    index("teaching_media_assets_topic_idx").on(table.topicId),
+    index("teaching_media_assets_lesson_idx").on(table.lessonId),
     index("teaching_media_assets_status_idx").on(table.status),
     index("teaching_media_assets_asset_type_idx").on(table.assetType),
   ],
@@ -931,7 +931,7 @@ export const teachingMediaBindings = pgTable(
     assetId: text("asset_id")
       .notNull()
       .references(() => teachingMediaAssets.id, { onDelete: "cascade" }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "cascade",
     }),
     classroomId: text("classroom_id").references(() => classrooms.id, {
@@ -950,10 +950,10 @@ export const teachingMediaBindings = pgTable(
   },
   (table) => [
     index("teaching_media_bindings_asset_idx").on(table.assetId),
-    index("teaching_media_bindings_topic_idx").on(table.topicId),
+    index("teaching_media_bindings_lesson_idx").on(table.lessonId),
     index("teaching_media_bindings_classroom_idx").on(table.classroomId),
     index("teaching_media_bindings_lookup_idx").on(
-      table.topicId,
+      table.lessonId,
       table.conceptKey,
       table.phaseType,
       table.priority,
@@ -969,10 +969,10 @@ export const teachingMediaUsageEvents = pgTable(
     assetId: text("asset_id").references(() => teachingMediaAssets.id, {
       onDelete: "set null",
     }),
-    topicId: text("topic_id").references(() => learningTopics.id, {
+    lessonId: text("lesson_id").references(() => lessons.id, {
       onDelete: "set null",
     }),
-    sessionId: text("session_id").references(() => learningSessions.id, {
+    sessionId: text("session_id").references(() => studentSessions.id, {
       onDelete: "set null",
     }),
     classroomStudentId: text("classroom_student_id").references(
@@ -988,7 +988,7 @@ export const teachingMediaUsageEvents = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
   (table) => [
-    index("teaching_media_usage_events_topic_idx").on(table.topicId),
+    index("teaching_media_usage_events_lesson_idx").on(table.lessonId),
     index("teaching_media_usage_events_session_idx").on(table.sessionId),
     index("teaching_media_usage_events_student_idx").on(table.classroomStudentId),
 
@@ -1003,7 +1003,7 @@ export const classroomsRelations = relations(classrooms, ({ one, many }) => ({
     relationName: "teacher_classrooms",
   }),
   students: many(classroomStudents),
-  topics: many(learningTopics),
+  lessons: many(lessons),
   teachingMediaAssets: many(teachingMediaAssets),
   teachingMediaBindings: many(teachingMediaBindings),
 }));
@@ -1014,7 +1014,7 @@ export const coursesRelations = relations(courses, ({ one, many }) => ({
     references: [users.id],
     relationName: "created_courses",
   }),
-  sessions: many(learningTopics),
+  sessions: many(lessons),
   expertFrameworks: many(expertFrameworks),
   expertReviewCases: many(expertReviewCases),
   expertCrystallizations: many(expertCrystallizations),
@@ -1043,35 +1043,35 @@ export const classroomStudentsRelations = relations(
       references: [studentInterestProfiles.classroomStudentId],
     }),
     accessTokens: many(studentAccessTokens),
-    sessions: many(learningSessions),
-    interactions: many(learningInteractions),
-    reports: many(studentProgressReports),
-    interventions: many(learningInterventions),
+    sessions: many(studentSessions),
+    interactions: many(studentInteractions),
+    reports: many(studentLessonReports),
+    interventions: many(lessonInterventions),
     reviewCases: many(expertReviewCases),
   }),
 );
 
-export const learningTopicsRelations = relations(
-  learningTopics,
+export const lessonsRelations = relations(
+  lessons,
   ({ one, many }) => ({
     classroom: one(classrooms, {
-      fields: [learningTopics.classroomId],
+      fields: [lessons.classroomId],
       references: [classrooms.id],
     }),
     creator: one(users, {
-      fields: [learningTopics.createdByUserId],
+      fields: [lessons.createdByUserId],
       references: [users.id],
-      relationName: "created_learning_topics",
+      relationName: "created_lessons",
     }),
     course: one(courses, {
-      fields: [learningTopics.courseId],
+      fields: [lessons.courseId],
       references: [courses.id],
     }),
-    materials: many(topicMaterials),
-    materialUploadAttempts: many(topicMaterialUploadAttempts),
-    sessions: many(learningSessions),
-    interactions: many(learningInteractions),
-    reports: many(studentProgressReports),
+    materials: many(lessonMaterials),
+    materialUploadAttempts: many(lessonMaterialUploadAttempts),
+    sessions: many(studentSessions),
+    interactions: many(studentInteractions),
+    reports: many(studentLessonReports),
     expertFrameworks: many(expertFrameworks),
     expertReviewCases: many(expertReviewCases),
     expertCrystallizations: many(expertCrystallizations),
@@ -1082,33 +1082,33 @@ export const learningTopicsRelations = relations(
   }),
 );
 
-export const topicMaterialsRelations = relations(topicMaterials, ({ one }) => ({
-  topic: one(learningTopics, {
-    fields: [topicMaterials.topicId],
-    references: [learningTopics.id],
+export const lessonMaterialsRelations = relations(lessonMaterials, ({ one }) => ({
+  lesson: one(lessons, {
+    fields: [lessonMaterials.lessonId],
+    references: [lessons.id],
   }),
   uploadedBy: one(users, {
-    fields: [topicMaterials.uploadedByUserId],
+    fields: [lessonMaterials.uploadedByUserId],
     references: [users.id],
-    relationName: "uploaded_topic_materials",
+    relationName: "uploaded_lesson_materials",
   }),
 }));
 
-export const topicMaterialUploadAttemptsRelations = relations(
-  topicMaterialUploadAttempts,
+export const lessonMaterialUploadAttemptsRelations = relations(
+  lessonMaterialUploadAttempts,
   ({ one }) => ({
-    topic: one(learningTopics, {
-      fields: [topicMaterialUploadAttempts.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [lessonMaterialUploadAttempts.lessonId],
+      references: [lessons.id],
     }),
     uploadedBy: one(users, {
-      fields: [topicMaterialUploadAttempts.uploadedByUserId],
+      fields: [lessonMaterialUploadAttempts.uploadedByUserId],
       references: [users.id],
-      relationName: "uploaded_topic_material_upload_attempts",
+      relationName: "uploaded_lesson_material_upload_attempts",
     }),
-    material: one(topicMaterials, {
-      fields: [topicMaterialUploadAttempts.materialId],
-      references: [topicMaterials.id],
+    material: one(lessonMaterials, {
+      fields: [lessonMaterialUploadAttempts.materialId],
+      references: [lessonMaterials.id],
     }),
   }),
 );
@@ -1123,20 +1123,20 @@ export const studentInterestProfilesRelations = relations(
   }),
 );
 
-export const learningSessionsRelations = relations(
-  learningSessions,
+export const studentSessionsRelations = relations(
+  studentSessions,
   ({ one, many }) => ({
-    topic: one(learningTopics, {
-      fields: [learningSessions.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [studentSessions.lessonId],
+      references: [lessons.id],
     }),
     classroomStudent: one(classroomStudents, {
-      fields: [learningSessions.classroomStudentId],
+      fields: [studentSessions.classroomStudentId],
       references: [classroomStudents.id],
     }),
-    messages: many(learningMessages),
-    interactions: many(learningInteractions),
-    reports: many(studentProgressReports),
+    messages: many(studentSessionMessages),
+    interactions: many(studentInteractions),
+    reports: many(studentLessonReports),
     teachingMediaUsageEvents: many(teachingMediaUsageEvents),
   }),
 );
@@ -1155,19 +1155,19 @@ export const studentAccessTokensRelations = relations(
   }),
 );
 
-export const learningEvidenceEmbeddingsRelations = relations(
-  learningEvidenceEmbeddings,
+export const lessonEvidenceEmbeddingsRelations = relations(
+  lessonEvidenceEmbeddings,
   ({ one }) => ({
-    topic: one(learningTopics, {
-      fields: [learningEvidenceEmbeddings.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [lessonEvidenceEmbeddings.lessonId],
+      references: [lessons.id],
     }),
     classroomStudent: one(classroomStudents, {
-      fields: [learningEvidenceEmbeddings.classroomStudentId],
+      fields: [lessonEvidenceEmbeddings.classroomStudentId],
       references: [classroomStudents.id],
     }),
     studentUser: one(users, {
-      fields: [learningEvidenceEmbeddings.studentUserId],
+      fields: [lessonEvidenceEmbeddings.studentUserId],
       references: [users.id],
     }),
   }),
@@ -1187,48 +1187,48 @@ export const teacherStudentChatSessionsRelations = relations(
   }),
 );
 
-export const learningMessagesRelations = relations(
-  learningMessages,
+export const studentSessionMessagesRelations = relations(
+  studentSessionMessages,
   ({ one }) => ({
-    session: one(learningSessions, {
-      fields: [learningMessages.sessionId],
-      references: [learningSessions.id],
+    session: one(studentSessions, {
+      fields: [studentSessionMessages.sessionId],
+      references: [studentSessions.id],
     }),
   }),
 );
 
-export const learningInteractionsRelations = relations(
-  learningInteractions,
+export const studentInteractionsRelations = relations(
+  studentInteractions,
   ({ one }) => ({
     classroomStudent: one(classroomStudents, {
-      fields: [learningInteractions.classroomStudentId],
+      fields: [studentInteractions.classroomStudentId],
       references: [classroomStudents.id],
     }),
-    topic: one(learningTopics, {
-      fields: [learningInteractions.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [studentInteractions.lessonId],
+      references: [lessons.id],
     }),
-    session: one(learningSessions, {
-      fields: [learningInteractions.sessionId],
-      references: [learningSessions.id],
+    session: one(studentSessions, {
+      fields: [studentInteractions.sessionId],
+      references: [studentSessions.id],
     }),
   }),
 );
 
-export const studentProgressReportsRelations = relations(
-  studentProgressReports,
+export const studentLessonReportsRelations = relations(
+  studentLessonReports,
   ({ one }) => ({
-    topic: one(learningTopics, {
-      fields: [studentProgressReports.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [studentLessonReports.lessonId],
+      references: [lessons.id],
     }),
     classroomStudent: one(classroomStudents, {
-      fields: [studentProgressReports.classroomStudentId],
+      fields: [studentLessonReports.classroomStudentId],
       references: [classroomStudents.id],
     }),
-    session: one(learningSessions, {
-      fields: [studentProgressReports.generatedFromSessionId],
-      references: [learningSessions.id],
+    session: one(studentSessions, {
+      fields: [studentLessonReports.generatedFromSessionId],
+      references: [studentSessions.id],
     }),
   }),
 );
@@ -1256,21 +1256,21 @@ export const expertReviewCasesRelations = relations(
       fields: [expertReviewCases.courseId],
       references: [courses.id],
     }),
-    topic: one(learningTopics, {
-      fields: [expertReviewCases.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [expertReviewCases.lessonId],
+      references: [lessons.id],
     }),
     classroomStudent: one(classroomStudents, {
       fields: [expertReviewCases.classroomStudentId],
       references: [classroomStudents.id],
     }),
-    session: one(learningSessions, {
+    session: one(studentSessions, {
       fields: [expertReviewCases.sessionId],
-      references: [learningSessions.id],
+      references: [studentSessions.id],
     }),
-    interaction: one(learningInteractions, {
+    interaction: one(studentInteractions, {
       fields: [expertReviewCases.interactionId],
-      references: [learningInteractions.id],
+      references: [studentInteractions.id],
     }),
     framework: one(expertFrameworks, {
       fields: [expertReviewCases.frameworkId],
@@ -1290,9 +1290,9 @@ export const expertCrystallizationsRelations = relations(
       fields: [expertCrystallizations.courseId],
       references: [courses.id],
     }),
-    topic: one(learningTopics, {
-      fields: [expertCrystallizations.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [expertCrystallizations.lessonId],
+      references: [lessons.id],
     }),
     framework: one(expertFrameworks, {
       fields: [expertCrystallizations.frameworkId],
@@ -1312,9 +1312,9 @@ export const expertConflictsRelations = relations(
       fields: [expertConflicts.courseId],
       references: [courses.id],
     }),
-    topic: one(learningTopics, {
-      fields: [expertConflicts.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [expertConflicts.lessonId],
+      references: [lessons.id],
     }),
     framework: one(expertFrameworks, {
       fields: [expertConflicts.frameworkId],
@@ -1331,23 +1331,23 @@ export const expertConflictsRelations = relations(
   }),
 );
 
-export const learningInterventionsRelations = relations(
-  learningInterventions,
+export const lessonInterventionsRelations = relations(
+  lessonInterventions,
   ({ one }) => ({
     classroom: one(classrooms, {
-      fields: [learningInterventions.classroomId],
+      fields: [lessonInterventions.classroomId],
       references: [classrooms.id],
     }),
-    topic: one(learningTopics, {
-      fields: [learningInterventions.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [lessonInterventions.lessonId],
+      references: [lessons.id],
     }),
     classroomStudent: one(classroomStudents, {
-      fields: [learningInterventions.classroomStudentId],
+      fields: [lessonInterventions.classroomStudentId],
       references: [classroomStudents.id],
     }),
     createdBy: one(users, {
-      fields: [learningInterventions.createdByUserId],
+      fields: [lessonInterventions.createdByUserId],
       references: [users.id],
     }),
   }),
@@ -1360,9 +1360,9 @@ export const teachingMediaAssetsRelations = relations(
       fields: [teachingMediaAssets.classroomId],
       references: [classrooms.id],
     }),
-    topic: one(learningTopics, {
-      fields: [teachingMediaAssets.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [teachingMediaAssets.lessonId],
+      references: [lessons.id],
     }),
     createdBy: one(users, {
       fields: [teachingMediaAssets.createdByUserId],
@@ -1380,9 +1380,9 @@ export const teachingMediaBindingsRelations = relations(
       fields: [teachingMediaBindings.assetId],
       references: [teachingMediaAssets.id],
     }),
-    topic: one(learningTopics, {
-      fields: [teachingMediaBindings.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [teachingMediaBindings.lessonId],
+      references: [lessons.id],
     }),
     classroom: one(classrooms, {
       fields: [teachingMediaBindings.classroomId],
@@ -1398,13 +1398,13 @@ export const teachingMediaUsageEventsRelations = relations(
       fields: [teachingMediaUsageEvents.assetId],
       references: [teachingMediaAssets.id],
     }),
-    topic: one(learningTopics, {
-      fields: [teachingMediaUsageEvents.topicId],
-      references: [learningTopics.id],
+    lesson: one(lessons, {
+      fields: [teachingMediaUsageEvents.lessonId],
+      references: [lessons.id],
     }),
-    session: one(learningSessions, {
+    session: one(studentSessions, {
       fields: [teachingMediaUsageEvents.sessionId],
-      references: [learningSessions.id],
+      references: [studentSessions.id],
     }),
     classroomStudent: one(classroomStudents, {
       fields: [teachingMediaUsageEvents.classroomStudentId],
@@ -1416,3 +1416,4 @@ export const teachingMediaUsageEventsRelations = relations(
 export {
   // Exported directly above.
 };
+

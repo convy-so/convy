@@ -1,7 +1,7 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+﻿import { and, desc, eq, sql } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
-import { learningEvidenceEmbeddings } from "@/shared/db/schema";
+import { lessonEvidenceEmbeddings } from "@/shared/db/schema";
 import {
   buildRRFCandidatePool,
   textMatchSql,
@@ -32,7 +32,7 @@ function normalizeMetadata(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
-export async function searchStudentLearningEvidenceContext(params: {
+export async function searchStudentEvidenceContext(params: {
   classroomStudentId: string;
   query: string;
   language?: string;
@@ -41,48 +41,48 @@ export async function searchStudentLearningEvidenceContext(params: {
   const limit = params.limit ?? 8;
   const lang = getPgLanguage(params.language);
   const queryVector = JSON.stringify(
-    await generateEmbedding(params.query, { feature: "learning-evidence-search" }),
+    await generateEmbedding(params.query, { feature: "lesson-evidence-search" }),
   );
 
-  const scoreSql = vectorSimilaritySql(learningEvidenceEmbeddings.embedding, queryVector);
-  const rankSql = textRankSql(learningEvidenceEmbeddings.retrievalContent, params.query, lang);
-  const matchSql = textMatchSql(learningEvidenceEmbeddings.retrievalContent, params.query, lang);
+  const scoreSql = vectorSimilaritySql(lessonEvidenceEmbeddings.embedding, queryVector);
+  const rankSql = textRankSql(lessonEvidenceEmbeddings.retrievalContent, params.query, lang);
+  const matchSql = textMatchSql(lessonEvidenceEmbeddings.retrievalContent, params.query, lang);
 
   const [vectorRows, textRows] = await Promise.all([
     getDb()
       .select({
-        id: learningEvidenceEmbeddings.id,
-        content: learningEvidenceEmbeddings.rawContent,
-        retrievalContent: learningEvidenceEmbeddings.retrievalContent,
-        metadata: learningEvidenceEmbeddings.metadata,
-        sourceType: learningEvidenceEmbeddings.sourceType,
-        sourceId: learningEvidenceEmbeddings.sourceId,
+        id: lessonEvidenceEmbeddings.id,
+        content: lessonEvidenceEmbeddings.rawContent,
+        retrievalContent: lessonEvidenceEmbeddings.retrievalContent,
+        metadata: lessonEvidenceEmbeddings.metadata,
+        sourceType: lessonEvidenceEmbeddings.sourceType,
+        sourceId: lessonEvidenceEmbeddings.sourceId,
         score: scoreSql,
       })
-      .from(learningEvidenceEmbeddings)
+      .from(lessonEvidenceEmbeddings)
       .where(
         and(
-          eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
-          sql`${learningEvidenceEmbeddings.embedding} IS NOT NULL`,
+          eq(lessonEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
+          sql`${lessonEvidenceEmbeddings.embedding} IS NOT NULL`,
         ),
       )
-      .orderBy(sql`${learningEvidenceEmbeddings.embedding} <=> ${queryVector}::vector ASC`)
+      .orderBy(sql`${lessonEvidenceEmbeddings.embedding} <=> ${queryVector}::vector ASC`)
       .limit(limit * 6),
     getDb()
       .select({
-        id: learningEvidenceEmbeddings.id,
-        content: learningEvidenceEmbeddings.rawContent,
-        retrievalContent: learningEvidenceEmbeddings.retrievalContent,
-        metadata: learningEvidenceEmbeddings.metadata,
-        sourceType: learningEvidenceEmbeddings.sourceType,
-        sourceId: learningEvidenceEmbeddings.sourceId,
+        id: lessonEvidenceEmbeddings.id,
+        content: lessonEvidenceEmbeddings.rawContent,
+        retrievalContent: lessonEvidenceEmbeddings.retrievalContent,
+        metadata: lessonEvidenceEmbeddings.metadata,
+        sourceType: lessonEvidenceEmbeddings.sourceType,
+        sourceId: lessonEvidenceEmbeddings.sourceId,
         score: rankSql,
       })
-      .from(learningEvidenceEmbeddings)
+      .from(lessonEvidenceEmbeddings)
       .where(
         and(
-          eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
-          eq(learningEvidenceEmbeddings.language, params.language ?? "en"),
+          eq(lessonEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
+          eq(lessonEvidenceEmbeddings.language, params.language ?? "en"),
           matchSql,
         ),
       )
@@ -101,7 +101,7 @@ export async function searchStudentLearningEvidenceContext(params: {
   }));
 
   const reranked = await rerank(params.query, candidatePool, limit, {
-    feature: "learning-evidence-search",
+    feature: "lesson-evidence-search",
   });
 
   const rowById = new Map([...vectorRows, ...textRows].map((row) => [row.id, row]));
@@ -124,3 +124,4 @@ export async function searchStudentLearningEvidenceContext(params: {
     ];
   });
 }
+

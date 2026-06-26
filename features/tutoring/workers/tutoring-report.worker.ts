@@ -4,16 +4,16 @@ import { z } from "zod";
 import * as Sentry from "@sentry/node";
 
 import { getDb } from "@/shared/db";
-import { classroomStudents, learningSessions, studentProgressReports } from "@/shared/db/schema";
+import { classroomStudents, studentSessions, studentLessonReports } from "@/shared/db/schema";
 import { buildStudentTeachingPlaybook, captureCompletedSessionPatternMemory } from "@/features/tutoring/server/pattern-memory-service";
 import { generateTeacherProgressReport } from "@/features/tutoring/server/reporting";
 import {
   createStudentProgressReport,
-  listLearningInteractions,
-  updateLearningSessionState,
+  listStudentInteractions,
+  updateStudentSessionState,
 } from "@/features/tutoring/public-server";
 import {
-  learningSessionStateSchema,
+  studentSessionStateSchema,
   studentInterestProfileSchema,
   teacherProgressReportSchema,
 } from "@/features/tutoring/public-server";
@@ -22,12 +22,12 @@ import { getRedisClient } from "@/shared/infra/redis";
 
 const tutoringReportJobSchema = z.object({
   sessionId: z.string().min(1),
-  topicId: z.string().min(1),
+  lessonId: z.string().min(1),
   classroomId: z.string().min(1),
   studentUserId: z.string().min(1),
   classroomStudentId: z.string().min(1),
   studentName: z.string().min(1),
-  topicTitle: z.string().min(1),
+  lessonTitle: z.string().min(1),
   courseId: z.string().nullable().optional(),
   courseTitle: z.string().nullable().optional(),
   sourceLocale: z.string().nullable().optional(),
@@ -41,7 +41,7 @@ function normalizeMetadata(value: unknown): Record<string, unknown> | null {
 }
 
 function computeMasteryPercent(
-  state: ReturnType<typeof learningSessionStateSchema.parse>,
+  state: ReturnType<typeof studentSessionStateSchema.parse>,
 ) {
   const progressSignals =
     state.recentEvidence.length +
@@ -55,8 +55,8 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
   async (job: Job<TutoringReportJobData>) => {
     const data = tutoringReportJobSchema.parse(job.data);
 
-    const existingReport = await getDb().query.studentProgressReports.findFirst({
-      where: eq(studentProgressReports.generatedFromSessionId, data.sessionId),
+    const existingReport = await getDb().query.studentLessonReports.findFirst({
+      where: eq(studentLessonReports.generatedFromSessionId, data.sessionId),
       orderBy: (table, { desc }) => [desc(table.createdAt)],
     });
     if (existingReport) {
@@ -68,10 +68,10 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       };
     }
 
-    const tutoringSession = await getDb().query.learningSessions.findFirst({
+    const tutoringSession = await getDb().query.studentSessions.findFirst({
       where: and(
-        eq(learningSessions.id, data.sessionId),
-        eq(learningSessions.sessionType, "tutoring"),
+        eq(studentSessions.id, data.sessionId),
+        eq(studentSessions.sessionType, "tutoring"),
       ),
     });
 
@@ -79,8 +79,8 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       throw new Error("Tutoring session not found for report generation.");
     }
 
-    const state = learningSessionStateSchema.parse(tutoringSession.state ?? {});
-    const interactions = await listLearningInteractions({
+    const state = studentSessionStateSchema.parse(tutoringSession.state ?? {});
+    const interactions = await listStudentInteractions({
       classroomStudentId: data.classroomStudentId,
       sessionId: data.sessionId,
     });
@@ -99,14 +99,14 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
     const teachingPlaybook = await buildStudentTeachingPlaybook({
       studentUserId: data.studentUserId,
       subjectKey: data.courseId ?? null,
-      subjectLabel: data.courseTitle ?? data.topicTitle,
-      topicLocalGaps: [],
-      topicLocalUsedExamples: [],
+      subjectLabel: data.courseTitle ?? data.lessonTitle,
+      lessonLocalGaps: [],
+      lessonLocalUsedExamples: [],
     });
 
     const report = await generateTeacherProgressReport({
       studentName: data.studentName,
-      topicTitle: data.topicTitle,
+      lessonTitle: data.lessonTitle,
       state,
       sessionId: data.sessionId,
       userId: data.studentUserId,
@@ -120,7 +120,7 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
     });
 
     await createStudentProgressReport({
-      topicId: data.topicId,
+      lessonId: data.lessonId,
       classroomStudentId: data.classroomStudentId,
       generatedFromSessionId: data.sessionId,
       masteryPercent: computeMasteryPercent(state),
@@ -128,7 +128,7 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       report,
     });
 
-    await updateLearningSessionState({
+    await updateStudentSessionState({
       sessionId: data.sessionId,
       state: {
         ...state,
@@ -144,10 +144,10 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
         studentUserId: data.studentUserId,
         classroomId: data.classroomId,
         classroomStudentId: data.classroomStudentId,
-        topicId: data.topicId,
-        topicTitle: data.topicTitle,
+        lessonId: data.lessonId,
+        lessonTitle: data.lessonTitle,
         subjectKey: data.courseId ?? null,
-        subjectLabel: data.courseTitle ?? data.topicTitle,
+        subjectLabel: data.courseTitle ?? data.lessonTitle,
         sessionId: data.sessionId,
         interestProfile,
         state,
@@ -187,3 +187,4 @@ tutoringReportWorker.on("failed", (job, err) => {
 });
 
 export default tutoringReportWorker;
+

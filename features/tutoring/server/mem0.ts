@@ -1,4 +1,4 @@
-import MemoryClient from "mem0ai";
+﻿import MemoryClient from "mem0ai";
 
 import { env } from "@/shared/config/server-env";
 import type { LearningPatternObservation } from "@/features/tutoring/server/pattern-types";
@@ -222,7 +222,7 @@ export async function addLearningPatternObservations(params: {
   sourceId: string;
   classroomId?: string | null;
   classroomStudentId?: string | null;
-  topicId?: string | null;
+  lessonId?: string | null;
   sourceCreatedAt?: string | null;
   observations: LearningPatternObservation[];
 }) {
@@ -240,7 +240,7 @@ export async function addLearningPatternObservations(params: {
       const sharedMetadata = {
         classroomId: params.classroomId ?? null,
         classroomStudentId: params.classroomStudentId ?? null,
-      topicId: params.topicId ?? null,
+      lessonId: params.lessonId ?? null,
       sourceType: params.sourceType,
       sourceId: params.sourceId,
       sourceCreatedAt: params.sourceCreatedAt ?? null,
@@ -303,3 +303,4 @@ export async function deleteLearningPatternMemoriesForUser(studentUserId: string
       }),
   ]);
 }
+

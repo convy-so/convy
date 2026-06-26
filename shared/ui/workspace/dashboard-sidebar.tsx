@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
@@ -25,10 +25,10 @@ import { useAuth } from "@/features/auth/public-ui";
 
 import { authClient } from "@/features/auth/public-client";
 import toast from "react-hot-toast";
-import type { LearningMeData } from "@/features/tutoring/public-client";
+import type { StudentMeData } from "@/features/tutoring/public-client";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/http/query-keys";
-import { fetchLearningMe } from "@/features/tutoring/public-client";
+import { fetchStudentMe } from "@/features/tutoring/public-client";
 
 type ViewerAccessNav = {
   authRole: "student" | "teacher" | "expert" | "admin";
@@ -46,10 +46,10 @@ function isNavHrefActive(
 }
 
 export function DashboardSidebar({
-  initialLearningMe,
+  initialStudentMe,
   viewerAccess,
 }: {
-  initialLearningMe: LearningMeData;
+  initialStudentMe: StudentMeData;
   viewerAccess: ViewerAccessNav;
 }) {
   const { user } = useAuth();
@@ -58,22 +58,22 @@ export function DashboardSidebar({
   const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const learningMeQuery = useQuery({
+  const studentMeQuery = useQuery({
     queryKey: queryKeys.learning.me,
-    queryFn: fetchLearningMe,
-    initialData: initialLearningMe,
+    queryFn: fetchStudentMe,
+    initialData: initialStudentMe,
     enabled: viewerAccess.authRole === "student",
     retry: false,
   });
 
-  const isStudent = viewerAccess.authRole === "student" || learningMeQuery.data?.role === "student";
+  const isStudent = viewerAccess.authRole === "student" || studentMeQuery.data?.role === "student";
   const isAdminOrExpert = viewerAccess.authRole === "admin" || viewerAccess.authRole === "expert";
 
   const navigation = useMemo(() => {
     if (isAdminOrExpert) {
       return [
         { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard, exact: true },
-        { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
+        { name: "Learning", href: "/dashboard/teaching", icon: GraduationCap },
       ];
     }
 
@@ -88,7 +88,7 @@ export function DashboardSidebar({
 
     return [
       { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard, exact: true },
-      { name: "Classrooms", href: "/dashboard/learning", icon: GraduationCap },
+      { name: "Classrooms", href: "/dashboard/teaching", icon: GraduationCap },
       { name: "Surveys", href: "/dashboard/surveys", icon: MessageSquare },
       { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
     ];
@@ -287,3 +287,4 @@ export function DashboardSidebar({
     </>
   );
 }
+

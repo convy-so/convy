@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
-import { learningEvidenceEmbeddings, topicMaterials } from "@/shared/db/schema";
-import { deleteLearningMaterial } from "@/shared/infra/supabase-storage";
+import { lessonEvidenceEmbeddings, lessonMaterials } from "@/shared/db/schema";
+import { deleteLessonMaterial } from "@/shared/infra/supabase-storage";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -58,24 +58,25 @@ export async function deleteMaterialProcessingArtifacts(params: {
 }) {
   if (params.materialId) {
     await getDb()
-      .delete(learningEvidenceEmbeddings)
+      .delete(lessonEvidenceEmbeddings)
       .where(
         and(
-          eq(learningEvidenceEmbeddings.sourceType, "material"),
-          eq(learningEvidenceEmbeddings.sourceId, params.materialId),
+          eq(lessonEvidenceEmbeddings.sourceType, "material"),
+          eq(lessonEvidenceEmbeddings.sourceId, params.materialId),
         ),
       );
-    await getDb().delete(topicMaterials).where(eq(topicMaterials.id, params.materialId));
+    await getDb().delete(lessonMaterials).where(eq(lessonMaterials.id, params.materialId));
   }
 
   if (params.deleteSourceFile && params.storagePath) {
     try {
-      await deleteLearningMaterial(params.storagePath);
+      await deleteLessonMaterial(params.storagePath);
     } catch (error) {
-      console.warn("[learning-material-worker] failed to cleanup storage object", {
+      console.warn("[lesson-material-worker] failed to cleanup storage object", {
         storagePath: params.storagePath,
         error: getErrorMessage(error, "Storage cleanup failed"),
       });
     }
   }
 }
+

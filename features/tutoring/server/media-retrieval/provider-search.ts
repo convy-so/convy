@@ -1,4 +1,4 @@
-import {
+﻿import {
   type TavilyImageResult,
   type TavilySearchResponse,
   type YouTubeVideoResult,
@@ -245,7 +245,7 @@ export async function searchTavilyImages(
           const requestBody = {
             query: normalizeImageSearchQuery(query, imageType),
             search_depth: "advanced",
-            topic: TAVILY_SEARCH_TOPIC,
+            lesson: TAVILY_SEARCH_TOPIC,
             max_results: 10,
             include_images: true,
             include_image_descriptions: true,
@@ -310,3 +310,4 @@ export async function searchYouTubeVideos(
 
   return parseYouTubeSearchResults(parseJsonValue(await response.text()));
 }
+

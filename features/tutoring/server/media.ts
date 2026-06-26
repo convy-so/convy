@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, or } from "drizzle-orm";
+﻿import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
@@ -48,7 +48,7 @@ function inferPreferredAssetType(params: {
 }
 
 export async function selectTutorMedia(params: {
-  topicId: string;
+  lessonId: string;
   classroomId: string;
   gradeBand: string;
   currentPhaseType: string | null;
@@ -94,8 +94,8 @@ export async function selectTutorMedia(params: {
         eq(teachingMediaAssets.status, LEARNING_STATUS.teachingMediaApproved),
         eq(teachingMediaAssets.assetType, preferredType),
         or(
-          eq(teachingMediaBindings.topicId, params.topicId),
-          and(isNull(teachingMediaBindings.topicId), eq(teachingMediaBindings.classroomId, params.classroomId)),
+          eq(teachingMediaBindings.lessonId, params.lessonId),
+          and(isNull(teachingMediaBindings.lessonId), eq(teachingMediaBindings.classroomId, params.classroomId)),
         ),
         or(
           isNull(teachingMediaBindings.gradeBand),
@@ -140,7 +140,7 @@ export async function selectTutorMedia(params: {
 }
 
 export async function logTutorMediaUsage(params: {
-  topicId: string;
+  lessonId: string;
   sessionId: string;
   classroomStudentId: string;
   recommendation: TutorMediaRecommendation;
@@ -148,7 +148,7 @@ export async function logTutorMediaUsage(params: {
   await getDb().insert(teachingMediaUsageEvents).values({
     id: nanoid(),
     assetId: params.recommendation.assetId ?? null,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     sessionId: params.sessionId,
     classroomStudentId: params.classroomStudentId,
     selectionSource: params.recommendation.selectionSource,
@@ -166,3 +166,4 @@ export async function logTutorMediaUsage(params: {
     updatedAt: new Date(),
   });
 }
+

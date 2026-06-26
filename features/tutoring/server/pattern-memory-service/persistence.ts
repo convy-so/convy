@@ -4,7 +4,7 @@ import {
   deriveSubjectInfo,
 } from "@/features/tutoring/server/patterns";
 import type {
-  LearningSessionState,
+  StudentSessionState,
   StudentInterestProfile,
   TeacherProgressReport,
 } from "@/features/tutoring/public-server";
@@ -70,13 +70,13 @@ export async function captureCompletedSessionPatternMemory(params: {
   studentUserId: string;
   classroomId?: string | null;
   classroomStudentId: string;
-  topicId: string;
-  topicTitle: string;
+  lessonId: string;
+  lessonTitle: string;
   subjectKey?: string | null;
   subjectLabel?: string | null;
   sessionId: string;
   interestProfile: StudentInterestProfile;
-  state: LearningSessionState;
+  state: StudentSessionState;
   report: TeacherProgressReport;
   transcript: Array<{
     role: string;
@@ -105,7 +105,7 @@ export async function captureCompletedSessionPatternMemory(params: {
     studentName: params.studentName,
     subjectKey: subjectInfo.subjectKey,
     subjectLabel: subjectInfo.subjectLabel,
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     interestProfile: params.interestProfile,
     state: params.state,
     report: params.report,
@@ -121,7 +121,7 @@ export async function captureCompletedSessionPatternMemory(params: {
     sourceId: params.sessionId,
     classroomId: params.classroomId ?? null,
     classroomStudentId: params.classroomStudentId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     sourceCreatedAt: new Date().toISOString(),
     observations: observations.map((observation) => ({
       ...observation,
@@ -132,3 +132,4 @@ export async function captureCompletedSessionPatternMemory(params: {
     })),
   });
 }
+

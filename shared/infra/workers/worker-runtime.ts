@@ -17,8 +17,8 @@ import { env } from "@/shared/config/server-env";
 import { testRedisConnection } from "@/shared/infra/redis";
 import surveyAnalyticsWorker from "@/features/surveys/workers/survey-analytics.worker";
 import tutoringReportWorker from "@/features/tutoring/workers/tutoring-report.worker";
-import learningMaterialWorker from "@/features/tutoring/workers/learning-material.worker";
-import learningMaterialBatchWorker from "@/features/tutoring/workers/learning-material-batch.worker";
+import lessonMaterialWorker from "@/features/tutoring/workers/lesson-material.worker";
+import lessonMaterialBatchWorker from "@/features/tutoring/workers/lesson-material-batch.worker";
 
 import emailWorker from "./email.worker";
 import contentTranslationWorker from "./content-translation.worker";
@@ -41,8 +41,8 @@ const workers = [
   { name: "Survey Analytics", worker: surveyAnalyticsWorker },
   { name: "Email", worker: emailWorker },
   { name: "Tutoring Report", worker: tutoringReportWorker },
-  { name: "Learning Material", worker: learningMaterialWorker },
-  { name: "Learning Material Batch", worker: learningMaterialBatchWorker },
+  { name: "Lesson Material", worker: lessonMaterialWorker },
+  { name: "Lesson Material Batch", worker: lessonMaterialBatchWorker },
   { name: "Content Translation", worker: contentTranslationWorker },
 ];
 

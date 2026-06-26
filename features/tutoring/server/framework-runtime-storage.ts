@@ -1,4 +1,4 @@
-import { and, asc, eq, or } from "drizzle-orm";
+﻿import { and, asc, eq, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { unstable_cache } from "next/cache";
 
@@ -7,7 +7,7 @@ import {
   expertConflicts,
   expertCrystallizations,
   expertFrameworks,
-  learningTopics,
+  lessons,
 } from "@/shared/db/schema";
 import { getCourseById } from "@/features/tutoring/server/course-service";
 import { createEmptyExpertFramework } from "@/features/tutoring/server/framework-presets";
@@ -210,27 +210,27 @@ export async function listApprovedCrystallizations(params: {
   });
 }
 
-export async function listOpenConflicts(params: { topicId: string }) {
+export async function listOpenConflicts(params: { lessonId: string }) {
   return await getDb().query.expertConflicts.findMany({
     where: and(
-      eq(expertConflicts.topicId, params.topicId),
+      eq(expertConflicts.lessonId, params.lessonId),
       eq(expertConflicts.status, LEARNING_STATUS.conflictOpen),
     ),
     orderBy: (table, operators) => [operators.desc(table.createdAt)],
   });
 }
 
-export async function getActiveFrameworkBundleForTopic(
-  topicId: string,
+export async function getActiveFrameworkBundleForLesson(
+  lessonId: string,
 ): Promise<ActiveExpertFramework> {
-  const topic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, topicId),
+  const lesson = await getDb().query.lessons.findFirst({
+    where: eq(lessons.id, lessonId),
   });
-  if (!topic) {
-    throw new Error("Topic not found.");
+  if (!lesson) {
+    throw new Error("Lesson not found.");
   }
 
-  const framework = await getActiveFrameworkForCourse(topic.courseId);
+  const framework = await getActiveFrameworkForCourse(lesson.courseId);
   if (!framework) {
     throw new Error(
       "No active expert framework exists for this course. Activate a framework before tutoring starts.",
@@ -266,7 +266,7 @@ export async function getActiveFrameworkBundleForTopic(
       courseId: framework.courseId,
       frameworkId: framework.id,
     }),
-    listOpenConflicts({ topicId }),
+    listOpenConflicts({ lessonId }),
   ]);
 
   const blockedCrystallizationIds = new Set(
@@ -291,16 +291,17 @@ export async function getActiveFrameworkBundleForTopic(
   });
 }
 
-const cachedGetActiveFrameworkBundleForTopic = unstable_cache(
-  async (topicId: string) => await getActiveFrameworkBundleForTopic(topicId),
-  ["learning-active-framework-bundle-for-topic"],
+const cachedGetActiveFrameworkBundleForLesson = unstable_cache(
+  async (lessonId: string) => await getActiveFrameworkBundleForLesson(lessonId),
+  ["learning-active-framework-bundle-for-lesson"],
   { revalidate: 60 },
 );
 
-export async function getCachedActiveFrameworkBundleForTopic(topicId: string) {
-  return await cachedGetActiveFrameworkBundleForTopic(topicId);
+export async function getCachedActiveFrameworkBundleForLesson(lessonId: string) {
+  return await cachedGetActiveFrameworkBundleForLesson(lessonId);
 }
 
 export function isFrameworkEditable(framework: Pick<FrameworkRecord, "status">) {
   return framework.status !== LEARNING_STATUS.frameworkArchived;
 }
+

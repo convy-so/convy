@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -20,7 +20,7 @@ type LogInterventionModalProps = {
     classroomId: string;
     classroomStudentId: string;
     studentName: string;
-    topicId?: string | null;
+    lessonId?: string | null;
 };
 
 const INTERVENTION_TYPES: { value: InterventionType; label: string; color: string }[] = [
@@ -42,7 +42,7 @@ export function LogInterventionModal({
     classroomId,
     classroomStudentId,
     studentName,
-    topicId
+    lessonId
 }: LogInterventionModalProps) {
     const queryClient = useQueryClient();
     const [title, setTitle] = useState("");
@@ -77,7 +77,7 @@ export function LogInterventionModal({
             const result = await createLearningInterventionAction({
                 classroomId,
                 classroomStudentId,
-                topicId: topicId ?? undefined,
+                lessonId: lessonId ?? undefined,
                 interventionType: type,
                 priority,
                 title: title.trim(),
@@ -93,7 +93,7 @@ export function LogInterventionModal({
                 queryKey: queryKeys.learning.interventions(
                     classroomId, 
                     classroomStudentId, 
-                    topicId ?? undefined
+                    lessonId ?? undefined
                 ),
             });
             resetForm();
@@ -275,3 +275,4 @@ export function LogInterventionModal({
         document.body
     );
 }
+

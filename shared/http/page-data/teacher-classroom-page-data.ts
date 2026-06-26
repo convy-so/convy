@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+﻿import { eq } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
 import { classroomStudents } from "@/shared/db/schema";
@@ -63,7 +63,7 @@ export async function getTeacherClassroomsData(authContext?: QueryAuthContext) {
   return { success: true as const, data };
 }
 
-export async function getClassroomTopicsData(
+export async function getClassroomLessonsData(
   classroomId: string,
   authContext?: QueryAuthContext,
 ) {
@@ -79,12 +79,12 @@ export async function getClassroomTopicsData(
 
   return {
     success: true as const,
-    data: (await getDb().query.learningTopics.findMany({
+    data: (await getDb().query.lessons.findMany({
       where: (table, operators) => operators.eq(table.classroomId, classroomId),
       orderBy: (table, operators) => [operators.desc(table.createdAt)],
-    })).map((topic) => ({
-      ...topic,
-      contentLocale: normalizeAppLocale(topic.contentLocale),
+    })).map((lesson) => ({
+      ...lesson,
+      contentLocale: normalizeAppLocale(lesson.contentLocale),
     })),
   };
 }
@@ -119,10 +119,10 @@ export async function getClassroomAssignedSurveysData(
   };
 }
 
-export async function getLearningInterventionsData(
+export async function getLessonInterventionsData(
   input: {
     classroomId: string;
-    topicId?: string;
+    lessonId?: string;
     classroomStudentId?: string;
   },
   authContext?: QueryAuthContext,
@@ -139,7 +139,7 @@ export async function getLearningInterventionsData(
 
   const data = await InterventionService.listInterventions({
     classroomId: input.classroomId,
-    topicId: input.topicId,
+    lessonId: input.lessonId,
     classroomStudentId: input.classroomStudentId,
   });
 
@@ -149,7 +149,7 @@ export async function getLearningInterventionsData(
   };
 }
 
-export async function getTeacherLearningWorkspaceInitialData(
+export async function getTeacherTeachingWorkspaceInitialData(
   authContext?: QueryAuthContext,
 ) {
   const session = await resolveQuerySession(authContext);
@@ -160,20 +160,21 @@ export async function getTeacherLearningWorkspaceInitialData(
   ]);
   const initialClassroomId = initialClassrooms.data[0]?.id ?? null;
 
-  const [initialStudents, initialTopics] = initialClassroomId
+  const [initialStudents, initialLessons] = initialClassroomId
     ? await Promise.all([
         getClassroomStudentsData(initialClassroomId, queryAuthContext),
-        getClassroomTopicsData(initialClassroomId, queryAuthContext),
+        getClassroomLessonsData(initialClassroomId, queryAuthContext),
       ])
     : [undefined, undefined];
 
   return {
     initialClassrooms,
     initialStudents,
-    initialTopics,
+    initialLessons,
     availableCourses: availableCourses.map((course) => ({
       id: course.id,
       title: course.title,
     })),
   };
 }
+

@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 import {
   buildSessionOpeningPrompt,
   buildTutorReplyPrompt,
@@ -13,12 +13,12 @@ const tutorReplySchema = z.object({
 });
 
 export async function generateSessionOpening(params: {
-  topicTitle: string;
+  lessonTitle: string;
   studyLanguage: string;
   worldConnection?: string | null;
 }) {
   const result = await measureTutoringStep("session:opening-generate", {
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     studyLanguage: params.studyLanguage,
     worldConnection: params.worldConnection ?? null,
   }, async () => await generateStructuredOutput({
@@ -27,7 +27,7 @@ export async function generateSessionOpening(params: {
     temperature: 0.5,
     maxOutputTokens: 140,
     prompt: buildSessionOpeningPrompt({
-      topicTitle: params.topicTitle,
+      lessonTitle: params.lessonTitle,
       studyLanguage: params.studyLanguage,
       worldConnection: params.worldConnection,
     }),
@@ -47,3 +47,4 @@ export async function generateTutorReply(params: {
 
   return result.response;
 }
+

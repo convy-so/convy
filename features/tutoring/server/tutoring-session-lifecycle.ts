@@ -1,10 +1,10 @@
 import { enqueueTutoringReportGeneration } from "@/shared/infra/queue";
 import {
   getLatestStudentProgressReport,
-  logLearningInteraction,
-  updateLearningSessionState,
+  logStudentInteraction,
+  updateStudentSessionState,
 } from "@/features/tutoring/public-server";
-import type { LearningSessionState } from "@/features/tutoring/public-server";
+import type { StudentSessionState } from "@/features/tutoring/public-server";
 import {
   LEARNING_DEFAULT_LOCALE,
   LEARNING_STATUS,
@@ -17,28 +17,28 @@ const TUTOR_COMPLETE_MESSAGE = "Tutoring session completed by the tutor.";
 
 export async function finalizeTutoringSession(params: {
   sessionId: string;
-  topicId: string;
+  lessonId: string;
   classroomId: string;
   classroomStudentId: string;
   studentUserId: string;
   studentName: string;
-  topicTitle: string;
+  lessonTitle: string;
   courseId?: string | null;
   courseTitle?: string | null;
   sourceLocale?: string | null;
   summary?: string | null;
   expectedStateVersion: number;
-  state: LearningSessionState;
+  state: StudentSessionState;
   reason: (typeof TUTORING_COMPLETION_REASON_VALUES)[number];
 }) {
-  const completedState: LearningSessionState = {
+  const completedState: StudentSessionState = {
     ...params.state,
     completed: true,
     reportReady: false,
     completionRequestedAt: new Date().toISOString(),
   };
 
-  const completedSession = await updateLearningSessionState({
+  const completedSession = await updateStudentSessionState({
     sessionId: params.sessionId,
     state: completedState,
     sessionStatus: LEARNING_STATUS.sessionCompleted,
@@ -46,9 +46,9 @@ export async function finalizeTutoringSession(params: {
     expectedStateVersion: params.expectedStateVersion,
   });
 
-  await logLearningInteraction({
+  await logStudentInteraction({
     classroomStudentId: params.classroomStudentId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     sessionId: params.sessionId,
     role: "system",
     interactionType: "session_event",
@@ -62,18 +62,18 @@ export async function finalizeTutoringSession(params: {
   });
 
   const previousReport = await getLatestStudentProgressReport({
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     classroomStudentId: params.classroomStudentId,
   });
 
   await enqueueTutoringReportGeneration({
     sessionId: params.sessionId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     classroomId: params.classroomId,
     studentUserId: params.studentUserId,
     classroomStudentId: params.classroomStudentId,
     studentName: params.studentName,
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     courseId: params.courseId ?? null,
     courseTitle: params.courseTitle ?? null,
     sourceLocale: params.sourceLocale ?? LEARNING_DEFAULT_LOCALE,
@@ -85,3 +85,4 @@ export async function finalizeTutoringSession(params: {
 
   return completedSession;
 }
+

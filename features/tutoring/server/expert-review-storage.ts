@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+﻿import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/shared/db";
@@ -14,16 +14,16 @@ import { generateBatchEmbeddings } from "@/shared/retrieval/embeddings";
 import { requireValue } from "@/shared/utils/collections";
 
 export async function listExpertReviewCases(params: {
-  topicId?: string | null;
+  lessonId?: string | null;
   sessionId?: string | null;
 }) {
   const reviewCases = await getDb().query.expertReviewCases.findMany({
     where: and(
-      params.topicId ? eq(expertReviewCases.topicId, params.topicId) : undefined,
+      params.lessonId ? eq(expertReviewCases.lessonId, params.lessonId) : undefined,
       params.sessionId ? eq(expertReviewCases.sessionId, params.sessionId) : undefined,
     ),
     with: {
-      topic: {
+      lesson: {
         with: {
           classroom: true,
         },
@@ -35,7 +35,7 @@ export async function listExpertReviewCases(params: {
       },
       session: {
         with: {
-          topic: {
+          lesson: {
             with: {
               classroom: true,
             },
@@ -59,7 +59,7 @@ export async function createExpertReviewCase(params: {
 
   return requireValue(
     created,
-    `Failed to create expert review case for topic ${params.reviewCase.topicId}`,
+    `Failed to create expert review case for lesson ${params.reviewCase.lessonId}`,
   );
 }
 
@@ -85,7 +85,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
-  topicId: string;
+  lessonId: string;
   reviewType: string;
   relevanceScope: (typeof EXPERT_REVIEW_RELEVANCE_SCOPE_VALUES)[number];
   frameworkId?: string | null;
@@ -93,7 +93,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
   const cutoffDate = new Date(Date.now() - CRYSTALLIZATION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const reusableCases = await getDb().query.expertReviewCases.findMany({
     where: and(
-      eq(expertReviewCases.topicId, params.topicId),
+      eq(expertReviewCases.lessonId, params.lessonId),
       eq(expertReviewCases.status, LEARNING_STATUS.reviewCaseOpen),
       eq(expertReviewCases.reusableSignal, true),
       eq(expertReviewCases.reviewType, params.reviewType),
@@ -204,7 +204,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
 
     const duplicateDraft = await tx.query.expertCrystallizations.findFirst({
       where: and(
-        eq(expertCrystallizations.topicId, params.topicId),
+        eq(expertCrystallizations.lessonId, params.lessonId),
         eq(expertCrystallizations.status, LEARNING_STATUS.crystallizationDraft),
         eq(expertCrystallizations.relevanceScope, params.relevanceScope),
         params.relevanceScope === LEARNING_STATUS.relevanceFrameworkSpecific
@@ -226,7 +226,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
       .insert(expertCrystallizations)
       .values({
         id: nanoid(),
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         frameworkId:
           params.relevanceScope === LEARNING_STATUS.relevanceFrameworkSpecific
             ? (params.frameworkId ?? null)
@@ -257,7 +257,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
       .returning();
     const createdDraft = requireValue(
       draft,
-      `Failed to create expert crystallization draft for topic ${params.topicId}`,
+      `Failed to create expert crystallization draft for lesson ${params.lessonId}`,
     );
 
     await tx
@@ -286,14 +286,14 @@ export async function listExpertReviewQueue() {
           classroom: true,
         },
       },
-      topic: {
+      lesson: {
         with: {
           classroom: true,
         },
       },
       session: {
         with: {
-          topic: {
+          lesson: {
             with: {
               classroom: true,
             },
@@ -307,10 +307,10 @@ export async function listExpertReviewQueue() {
   return reviewCases.map((reviewCase) => ({
     key: reviewCase.id,
     sessionId: reviewCase.sessionId,
-    topicId: reviewCase.topicId,
+    lessonId: reviewCase.lessonId,
     classroomStudentId: reviewCase.classroomStudentId,
     studentName: reviewCase.classroomStudent?.fullName ?? null,
-    topicTitle: reviewCase.topic?.title ?? null,
+    lessonTitle: reviewCase.lesson?.title ?? null,
     priority: reviewCase.priority as "low" | "medium" | "high",
     reasons: [
       reviewCase.reviewType,
@@ -319,3 +319,4 @@ export async function listExpertReviewQueue() {
     createdAt: reviewCase.createdAt.toISOString(),
     }));
 }
+

@@ -247,7 +247,7 @@ export const engagementTrendSchema = z.object({
 
 export type EngagementTrend = z.infer<typeof engagementTrendSchema>;
 
-export const studentLearningPatternProfileSchema = z.object({
+export const studentPatternProfileSchema = z.object({
   scopeType: learningPatternScopeSchema,
   subjectKey: z.string().nullable().default(null),
   patternConfidence: z
@@ -278,8 +278,8 @@ export const studentLearningPatternProfileSchema = z.object({
   updatedAt: z.string(),
 });
 
-export type StudentLearningPatternProfile = z.infer<
-  typeof studentLearningPatternProfileSchema
+export type StudentPatternProfile = z.infer<
+  typeof studentPatternProfileSchema
 >;
 
 export const learningPatternObservationSchema = z.object({
@@ -303,7 +303,7 @@ export type LearningPatternObservation = z.infer<
 >;
 
 export const learningPatternAnalysisOutputSchema = z.object({
-  profiles: z.array(studentLearningPatternProfileSchema).min(1),
+  profiles: z.array(studentPatternProfileSchema).min(1),
   observations: z.array(learningPatternObservationSchema).default([]),
 });
 

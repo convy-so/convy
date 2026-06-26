@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowUpRight,
   BarChart3,
   BookOpen,
@@ -19,7 +19,7 @@ import { getDb } from "@/shared/db";
 import {
   classroomStudents,
   classrooms,
-  learningTopics,
+  lessons,
 } from "@/shared/db/schema/learning";
 import { surveyConversations, surveys } from "@/shared/db/schema/surveys";
 import { cache, cacheKeys } from "@/shared/infra/cache";
@@ -36,7 +36,7 @@ type Translate = Awaited<ReturnType<typeof getTranslations>>;
 type DashboardStats = {
   totalSurveys: number;
   totalClassrooms: number;
-  totalTopics: number;
+  totalLessons: number;
   totalStudents: number;
 };
 
@@ -73,7 +73,7 @@ function isDashboardStats(value: unknown): value is DashboardStats {
     isRecord(value) &&
     typeof value.totalSurveys === "number" &&
     typeof value.totalClassrooms === "number" &&
-    typeof value.totalTopics === "number" &&
+    typeof value.totalLessons === "number" &&
     typeof value.totalStudents === "number"
   );
 }
@@ -126,9 +126,9 @@ export async function DashboardHomeContent({
   const quickActions = [
     {
       title: "Start Learning",
-      description: "Create a new learning topic for your students",
+      description: "Create a new lesson for your students",
       icon: Sparkles,
-      href: "/dashboard/learning",
+      href: "/dashboard/teaching",
       color: "from-blue-600 to-indigo-600",
     },
     {
@@ -149,9 +149,9 @@ export async function DashboardHomeContent({
     {
       title: "Classrooms",
       description:
-        "Run classes, topics, student tutoring, and progress tracking.",
+        "Run classes, lessons, student tutoring, and progress tracking.",
       icon: GraduationCap,
-      href: "/dashboard/learning",
+      href: "/dashboard/teaching",
       color: "from-sky-500 to-blue-500",
     },
   ];
@@ -163,7 +163,7 @@ export async function DashboardHomeContent({
         const [
           surveysCountResult,
           classroomsCountResult,
-          topicsCountResult,
+          lessonsCountResult,
           studentsCountResult,
         ] = await Promise.all([
           getDb()
@@ -176,8 +176,8 @@ export async function DashboardHomeContent({
             .where(eq(classrooms.teacherUserId, userId)),
           getDb()
             .select({ count: count() })
-            .from(learningTopics)
-            .where(eq(learningTopics.createdByUserId, userId)),
+            .from(lessons)
+            .where(eq(lessons.createdByUserId, userId)),
           getDb()
             .select({ count: count() })
             .from(classroomStudents)
@@ -191,7 +191,7 @@ export async function DashboardHomeContent({
         return {
           totalSurveys: surveysCountResult[0]?.count || 0,
           totalClassrooms: classroomsCountResult[0]?.count || 0,
-          totalTopics: topicsCountResult[0]?.count || 0,
+          totalLessons: lessonsCountResult[0]?.count || 0,
           totalStudents: studentsCountResult[0]?.count || 0,
         };
       },
@@ -312,8 +312,8 @@ export async function DashboardHomeContent({
           iconColor="bg-sky-50 text-sky-600"
         />
         <StatsCard
-          title="Learning Topics"
-          value={stats.totalTopics.toString()}
+          title="Learning Lessons"
+          value={stats.totalLessons.toString()}
           change="Active Lessons"
           changeType="neutral"
           icon={<BookOpen className="h-6 w-6" />}
@@ -408,3 +408,4 @@ export async function DashboardHomeContent({
     </div>
   );
 }
+

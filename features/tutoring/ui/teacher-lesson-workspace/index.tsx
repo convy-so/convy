@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -6,9 +6,9 @@ import toast from "react-hot-toast";
 
 import {
   normalizeLearningOutcomesAction,
-  updateLearningTopicDetailsAction,
+  updateLessonDetailsAction,
 } from "@/app/actions/classroom";
-import { retryTopicMaterialUploadAttempt } from "@/features/tutoring/public-client";
+import { retryLessonMaterialUploadAttempt } from "@/features/tutoring/public-client";
 import { getSubjectDisplayLabel } from "@/features/tutoring/server/subject-packages";
 import {
   formatOutcomesForNotes,
@@ -27,13 +27,13 @@ import type { TeacherLessonWorkspaceProps } from "./workspace-model";
 
 export function TeacherLessonWorkspace({
   selectedDirectoryClassroom,
-  selectedTopic,
+  selectedLesson,
   reports,
   materials,
   students,
-  activeTopicView,
-  setActiveTopicView,
-  updateTopicStatusMutation,
+  activeLessonView,
+  setActiveLessonView,
+  updateLessonStatusMutation,
   materialTitle,
   setMaterialTitle,
   materialDescription,
@@ -48,16 +48,16 @@ export function TeacherLessonWorkspace({
   setIsInviteModalOpen,
 }: TeacherLessonWorkspaceProps) {
   const queryClient = useQueryClient();
-  const topicSubjectLabel =
-    selectedTopic.courseTitle ?? getSubjectDisplayLabel(null);
-  const topicLocaleLabel =
+  const lessonSubjectLabel =
+    selectedLesson.courseTitle ?? getSubjectDisplayLabel(null);
+  const lessonLocaleLabel =
     appLocaleLabels[
-      (selectedTopic.contentLocale ?? "en") as keyof typeof appLocaleLabels
+      (selectedLesson.contentLocale ?? "en") as keyof typeof appLocaleLabels
     ];
   const [rawOutcomeNotes, setRawOutcomeNotes] = useState(
-    formatOutcomesForNotes(toOutcomeDrafts(selectedTopic.learningOutcomes ?? [])),
+    formatOutcomesForNotes(toOutcomeDrafts(selectedLesson.learningOutcomes ?? [])),
   );
-  const [sessionTitle, setSessionTitle] = useState(selectedTopic.title);
+  const [sessionTitle, setSessionTitle] = useState(selectedLesson.title);
   const [isSavingSessionTitle, setIsSavingSessionTitle] = useState(false);
   const [outcomeReviewNotes, setOutcomeReviewNotes] = useState<string[]>([]);
   const [isGeneratingOutcomes, setIsGeneratingOutcomes] = useState(false);
@@ -67,26 +67,26 @@ export function TeacherLessonWorkspace({
   const visibleUploadAttempts = materialUploadAttempts.filter(
     (attempt) => attempt.status !== "succeeded",
   );
-  const isActivationEligibleTopic =
-    selectedTopic.status === "draft" || selectedTopic.status === "paused";
+  const isActivationEligibleLesson =
+    selectedLesson.status === "draft" || selectedLesson.status === "paused";
   const isActivationReady = activationState?.ready ?? false;
-  const canActivate = isActivationEligibleTopic && isActivationReady;
-  const canPause = selectedTopic.status === "active";
-  const canArchive = selectedTopic.status === "active";
+  const canActivate = isActivationEligibleLesson && isActivationReady;
+  const canPause = selectedLesson.status === "active";
+  const canArchive = selectedLesson.status === "active";
 
   let statusHint = isActivationStateLoading
     ? "Checking whether this session is ready to activate."
     : "To activate this session, add at least one learning outcome and one supporting material.";
-  if (selectedTopic.status === "active") {
+  if (selectedLesson.status === "active") {
     statusHint = "This session is live for tutoring. You can pause it or archive it.";
-  } else if (selectedTopic.status === "archived") {
+  } else if (selectedLesson.status === "archived") {
     statusHint = "This session is archived and no longer active for students.";
   } else if (isActivationStateLoading) {
     statusHint = "Checking whether this session is ready to activate.";
   } else if (isActivationStateError) {
     statusHint =
       "Could not verify activation readiness right now. Refresh the page to try again.";
-  } else if (selectedTopic.status === "paused") {
+  } else if (selectedLesson.status === "paused") {
     statusHint = isActivationReady
       ? "This session is paused. Resume it when students should access it again."
       : activationState?.reason ??
@@ -98,19 +98,19 @@ export function TeacherLessonWorkspace({
   }
 
   useEffect(() => {
-    setSessionTitle(selectedTopic.title);
-    const nextDrafts = toOutcomeDrafts(selectedTopic.learningOutcomes ?? []);
+    setSessionTitle(selectedLesson.title);
+    const nextDrafts = toOutcomeDrafts(selectedLesson.learningOutcomes ?? []);
     setRawOutcomeNotes(formatOutcomesForNotes(nextDrafts));
     setOutcomeReviewNotes([]);
-  }, [selectedTopic.id, selectedTopic.title, selectedTopic.learningOutcomes]);
+  }, [selectedLesson.id, selectedLesson.title, selectedLesson.learningOutcomes]);
 
-  const invalidateTopicData = async () => {
+  const invalidateLessonData = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.topics(selectedDirectoryClassroom.id),
+        queryKey: queryKeys.learning.lessons(selectedDirectoryClassroom.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.activationState(selectedTopic.id),
+        queryKey: queryKeys.learning.activationState(selectedLesson.id),
       }),
     ]);
   };
@@ -118,13 +118,13 @@ export function TeacherLessonWorkspace({
   const refreshMaterialState = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.materials(selectedTopic.id),
+        queryKey: queryKeys.learning.materials(selectedLesson.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.materialUploadAttempts(selectedTopic.id),
+        queryKey: queryKeys.learning.materialUploadAttempts(selectedLesson.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.activationState(selectedTopic.id),
+        queryKey: queryKeys.learning.activationState(selectedLesson.id),
       }),
     ]);
   };
@@ -133,8 +133,8 @@ export function TeacherLessonWorkspace({
     setRetryingAttemptId(attemptId);
 
     try {
-      const result = await retryTopicMaterialUploadAttempt({
-        topicId: selectedTopic.id,
+      const result = await retryLessonMaterialUploadAttempt({
+        lessonId: selectedLesson.id,
         attemptId,
       });
 
@@ -169,8 +169,8 @@ export function TeacherLessonWorkspace({
     setIsSavingSessionTitle(true);
 
     try {
-      const result = await updateLearningTopicDetailsAction({
-        topicId: selectedTopic.id,
+      const result = await updateLessonDetailsAction({
+        lessonId: selectedLesson.id,
         title: nextTitle,
       });
 
@@ -179,7 +179,7 @@ export function TeacherLessonWorkspace({
       }
 
       setSessionTitle(result.data.title);
-      await invalidateTopicData();
+      await invalidateLessonData();
       toast.success("Session title updated");
     } catch (error) {
       toast.error(
@@ -202,10 +202,10 @@ export function TeacherLessonWorkspace({
 
     try {
       const result = await normalizeLearningOutcomesAction({
-        topicId: selectedTopic.id,
+        lessonId: selectedLesson.id,
         rawNotes: notes,
-        title: selectedTopic.title,
-        description: selectedTopic.description ?? "",
+        title: selectedLesson.title,
+        description: selectedLesson.description ?? "",
       });
 
       if (!result.success) {
@@ -239,8 +239,8 @@ export function TeacherLessonWorkspace({
     setIsSavingOutcomes(true);
 
     try {
-      const result = await updateLearningTopicDetailsAction({
-        topicId: selectedTopic.id,
+      const result = await updateLessonDetailsAction({
+        lessonId: selectedLesson.id,
         learningOutcomes: normalizedOutcomes,
       });
 
@@ -250,7 +250,7 @@ export function TeacherLessonWorkspace({
 
       setRawOutcomeNotes(formatOutcomesForNotes(normalizedOutcomes));
       setOutcomeReviewNotes([]);
-      await invalidateTopicData();
+      await invalidateLessonData();
       toast.success("Learning outcomes saved");
     } catch (error) {
       toast.error(
@@ -264,7 +264,7 @@ export function TeacherLessonWorkspace({
   const uploadMaterial = () => {
     uploadMaterialMutation.mutate(
       {
-        topicId: selectedTopic.id,
+        lessonId: selectedLesson.id,
         files: materialFiles,
         title: materialTitle || undefined,
         description: materialDescription || undefined,
@@ -293,9 +293,9 @@ export function TeacherLessonWorkspace({
             <button
               key={view}
               type="button"
-              onClick={() => setActiveTopicView(view)}
+              onClick={() => setActiveLessonView(view)}
               className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
-                activeTopicView === view
+                activeLessonView === view
                   ? "border-slate-950 text-slate-950"
                   : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
               }`}
@@ -311,15 +311,15 @@ export function TeacherLessonWorkspace({
         </nav>
       </div>
 
-      {activeTopicView === "overview" ? (
+      {activeLessonView === "overview" ? (
         <TeacherLessonOverviewPanel
           classroomTitle={selectedDirectoryClassroom.title}
-          topicStatus={selectedTopic.status}
-          topicSubjectLabel={topicSubjectLabel}
-          topicLocaleLabel={topicLocaleLabel}
+          lessonStatus={selectedLesson.status}
+          lessonSubjectLabel={lessonSubjectLabel}
+          lessonLocaleLabel={lessonLocaleLabel}
           sessionTitle={sessionTitle}
           setSessionTitle={setSessionTitle}
-          selectedTopicTitle={selectedTopic.title}
+          selectedLessonTitle={selectedLesson.title}
           rawOutcomeNotes={rawOutcomeNotes}
           setRawOutcomeNotes={(value) => {
             setRawOutcomeNotes(value);
@@ -341,20 +341,20 @@ export function TeacherLessonWorkspace({
           handleSaveOutcomes={handleSaveOutcomes}
           uploadMaterial={uploadMaterial}
           statusHint={statusHint}
-          isActivationEligibleTopic={isActivationEligibleTopic}
+          isActivationEligibleLesson={isActivationEligibleLesson}
           isActivationStateLoading={isActivationStateLoading}
           isActivationReady={isActivationReady}
           canActivate={canActivate}
           canPause={canPause}
           canArchive={canArchive}
           isActivationStateError={isActivationStateError}
-          updateTopicStatus={(status) =>
-            updateTopicStatusMutation.mutate({
-              topicId: selectedTopic.id,
+          updateLessonStatus={(status) =>
+            updateLessonStatusMutation.mutate({
+              lessonId: selectedLesson.id,
               status,
             })
           }
-          isUpdateTopicStatusPending={updateTopicStatusMutation.isPending}
+          isUpdateLessonStatusPending={updateLessonStatusMutation.isPending}
           isSavingSessionTitle={isSavingSessionTitle}
           isGeneratingOutcomes={isGeneratingOutcomes}
           isSavingOutcomes={isSavingOutcomes}
@@ -362,11 +362,11 @@ export function TeacherLessonWorkspace({
         />
       ) : null}
 
-      {activeTopicView === "reports" ? (
+      {activeLessonView === "reports" ? (
         <TeacherLessonReportsPanel reports={reports} />
       ) : null}
 
-      {activeTopicView === "students" ? (
+      {activeLessonView === "students" ? (
         <TeacherLessonStudentsPanel
           students={students}
           openInviteModal={() => setIsInviteModalOpen(true)}
@@ -375,3 +375,4 @@ export function TeacherLessonWorkspace({
     </>
   );
 }
+

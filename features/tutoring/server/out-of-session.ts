@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 import { generateStructuredOutput } from "@/shared/ai/model-generation";
 import {
@@ -37,23 +37,23 @@ function buildQuestionClassification(
 }
 
 function classifyOutOfSessionHeuristically(params: {
-  topicTitle: string;
-  topicDescription?: string | null;
+  lessonTitle: string;
+  lessonDescription?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
   question: string;
 }) {
   const question = params.question.toLowerCase();
   const questionTokens = new Set(tokenize(params.question));
-  const topicTokens = new Set(
+  const lessonTokens = new Set(
     tokenize(
       [
-        params.topicTitle,
-        params.topicDescription ?? "",
+        params.lessonTitle,
+        params.lessonDescription ?? "",
         ...params.learningOutcomes.map((item) => `${item.title} ${item.description}`),
       ].join(" "),
     ),
   );
-  const overlap = [...questionTokens].filter((token) => topicTokens.has(token)).length;
+  const overlap = [...questionTokens].filter((token) => lessonTokens.has(token)).length;
 
   if (
     /\bweather|movie|music|celebrity|politics|football|soccer|basketball|gaming\b/i.test(
@@ -63,21 +63,21 @@ function classifyOutOfSessionHeuristically(params: {
   ) {
     return buildQuestionClassification(
       OUT_OF_SESSION_CLASSIFICATION.OFF_SCOPE,
-      "Heuristic router marked the question as unrelated to the active topic.",
+      "Heuristic router marked the question as unrelated to the active lesson.",
     );
   }
 
-  if (overlap >= LEARNING_LIMITS.heuristicStrongTopicOverlapMinimum) {
+  if (overlap >= LEARNING_LIMITS.heuristicStrongLessonOverlapMinimum) {
     return buildQuestionClassification(
       OUT_OF_SESSION_CLASSIFICATION.IN_SCOPE,
-      "Heuristic router found strong overlap with the topic and learning outcomes.",
+      "Heuristic router found strong overlap with the lesson and learning outcomes.",
     );
   }
 
-  if (overlap >= LEARNING_LIMITS.heuristicTopicOverlapMinimum) {
+  if (overlap >= LEARNING_LIMITS.heuristicLessonOverlapMinimum) {
     return buildQuestionClassification(
       OUT_OF_SESSION_CLASSIFICATION.BORDERLINE,
-      "Heuristic router found partial overlap, but the question may drift from the core topic.",
+      "Heuristic router found partial overlap, but the question may drift from the core lesson.",
     );
   }
 
@@ -85,8 +85,8 @@ function classifyOutOfSessionHeuristically(params: {
 }
 
 export async function classifyOutOfSessionQuestion(params: {
-  topicTitle: string;
-  topicDescription?: string | null;
+  lessonTitle: string;
+  lessonDescription?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
   question: string;
 }) {
@@ -103,7 +103,7 @@ export async function classifyOutOfSessionQuestion(params: {
 
 export async function generateOutOfSessionReply(params: {
   classification: QuestionClassification["classification"];
-  topicTitle: string;
+  lessonTitle: string;
   learningOutcomes: Array<{ title: string; description: string }>;
   gradeBand: string;
   studentProfile: StudentInterestProfile | null;
@@ -118,3 +118,4 @@ export async function generateOutOfSessionReply(params: {
 
   return result.response;
 }
+

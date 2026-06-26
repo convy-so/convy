@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { FileText } from "lucide-react";
 
 import { Link } from "@/i18n/routing";
 
-import type { TopicReport } from "./workspace-model";
+import type { LessonReport } from "./workspace-model";
 
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "Not yet";
@@ -15,7 +15,7 @@ function formatDate(value: string | Date | null | undefined) {
   }).format(new Date(value));
 }
 
-export function TeacherLessonReportsPanel({ reports }: { reports: TopicReport[] }) {
+export function TeacherLessonReportsPanel({ reports }: { reports: LessonReport[] }) {
   return (
     <section className="space-y-5">
       <div>
@@ -37,7 +37,7 @@ export function TeacherLessonReportsPanel({ reports }: { reports: TopicReport[] 
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <Link
-                      href={`/dashboard/learning/students/${report.student.id}`}
+                      href={`/dashboard/teaching/students/${report.student.id}`}
                       className="text-base font-semibold text-slate-950 transition hover:text-slate-700"
                     >
                       {report.student.fullName}
@@ -80,3 +80,4 @@ export function TeacherLessonReportsPanel({ reports }: { reports: TopicReport[] 
     </section>
   );
 }
+

@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Plus, Sparkles, BookOpen, Hash, AlertCircle } from "lucide-react";
-import { createLearningTopicAction } from "@/app/actions/classroom";
+import { createLessonAction } from "@/app/actions/classroom";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/http/query-keys";
 import toast from "react-hot-toast";
@@ -69,7 +69,7 @@ export function CreateLessonModal({
                 throw new Error("Choose a course before creating the session.");
             }
 
-            const result = await createLearningTopicAction({
+            const result = await createLessonAction({
                 classroomId,
                 courseId: selectedCourse.id,
                 title: title.trim(),
@@ -81,11 +81,11 @@ export function CreateLessonModal({
 
             toast.success("Session draft created");
             await queryClient.invalidateQueries({
-                queryKey: queryKeys.learning.topics(classroomId),
+                queryKey: queryKeys.learning.lessons(classroomId),
             });
             resetForm();
             onClose();
-            router.push(`/dashboard/learning/sessions/${result.data.id}`);
+            router.push(`/dashboard/teaching/lessons/${result.data.id}`);
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {
@@ -141,7 +141,7 @@ export function CreateLessonModal({
 
                         <InputField
                             label="Session title"
-                            id="topic-title"
+                            id="lesson-title"
                             placeholder="e.g. Newton's Laws of Motion"
                             icon={BookOpen}
                             value={title}
@@ -151,7 +151,7 @@ export function CreateLessonModal({
 
                         <div className="grid gap-4">
                             <FormDropdown
-                                id="topic-course"
+                                id="lesson-course"
                                 label="Course"
                                 icon={Hash}
                                 value={courseId}
@@ -166,7 +166,7 @@ export function CreateLessonModal({
 
                             <TextareaField
                                 label="Session overview"
-                                id="topic-overview"
+                                id="lesson-overview"
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 rows={4}
@@ -211,3 +211,4 @@ export function CreateLessonModal({
         document.body
     );
 }
+

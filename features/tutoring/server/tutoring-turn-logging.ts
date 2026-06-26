@@ -1,10 +1,10 @@
-import { appendLearningMessage, logLearningInteraction } from "@/features/tutoring/public-server";
+import { appendStudentMessage, logStudentInteraction } from "@/features/tutoring/public-server";
 import { measureTutoringStep, logTutoringDebug } from "@/features/tutoring/public-server";
 
 type BaseTurnLogParams = {
   sessionId: string;
   classroomStudentId: string;
-  topicId: string;
+  lessonId: string;
   content: string;
   metadata: Record<string, unknown>;
 };
@@ -12,19 +12,19 @@ type BaseTurnLogParams = {
 export async function logUserTurn(params: BaseTurnLogParams) {
   return measureTutoringStep("turn-log:user", {
     sessionId: params.sessionId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     contentLength: params.content.length,
     metadataKeys: Object.keys(params.metadata),
   }, async () => {
-    await appendLearningMessage({
+    await appendStudentMessage({
       sessionId: params.sessionId,
       role: "user",
       content: params.content,
       metadata: params.metadata,
     });
-    await logLearningInteraction({
+    await logStudentInteraction({
       classroomStudentId: params.classroomStudentId,
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       sessionId: params.sessionId,
       role: "user",
       interactionType: "student_message",
@@ -37,19 +37,19 @@ export async function logUserTurn(params: BaseTurnLogParams) {
 export async function logAssistantTurn(params: BaseTurnLogParams) {
   return measureTutoringStep("turn-log:assistant", {
     sessionId: params.sessionId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     contentLength: params.content.length,
     metadataKeys: Object.keys(params.metadata),
   }, async () => {
-    await appendLearningMessage({
+    await appendStudentMessage({
       sessionId: params.sessionId,
       role: "assistant",
       content: params.content,
       metadata: params.metadata,
     });
-    await logLearningInteraction({
+    await logStudentInteraction({
       classroomStudentId: params.classroomStudentId,
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       sessionId: params.sessionId,
       role: "assistant",
       interactionType: "tutor_message",
@@ -62,7 +62,7 @@ export async function logAssistantTurn(params: BaseTurnLogParams) {
 export function buildScopeRedirectResponse(params: {
   sessionId: string;
   classroomStudentId: string;
-  topicId: string;
+  lessonId: string;
   classification: string;
   redirectMessage: string;
 }) {
@@ -72,13 +72,13 @@ export function buildScopeRedirectResponse(params: {
     async persist() {
       logTutoringDebug("turn-log:redirect:persist", {
         sessionId: params.sessionId,
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         classification: params.classification,
       });
       await logAssistantTurn({
         sessionId: params.sessionId,
         classroomStudentId: params.classroomStudentId,
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         content: params.redirectMessage,
         metadata: {
           messageKind: "scope_redirect",
@@ -88,3 +88,4 @@ export function buildScopeRedirectResponse(params: {
     },
   };
 }
+

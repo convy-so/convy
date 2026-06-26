@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ChevronDown, Loader2, Plus } from "lucide-react";
@@ -66,7 +66,7 @@ export function ExpertFrameworkStudioPicker({
         const result = await fetchJson<{
           success: true;
           data: { frameworks: CourseFrameworkRecord[] };
-        }>(`/api/learning/expert/courses/${selectedCourseId}/frameworks`);
+        }>(`/api/expert/courses/${selectedCourseId}/frameworks`);
         if (!cancelled) {
           setFrameworks(result.data.frameworks);
         }
@@ -101,7 +101,7 @@ export function ExpertFrameworkStudioPicker({
       const result = await fetchJson<{
         success: true;
         data: { id: string; name: string; status: CourseFrameworkRecord["status"] };
-      }>(`/api/learning/expert/courses/${selectedCourse.courseId}/frameworks`, {
+      }>(`/api/expert/courses/${selectedCourse.courseId}/frameworks`, {
         method: "POST",
         body: JSON.stringify({
           name: `${selectedCourse.courseTitle} framework`,
@@ -225,7 +225,7 @@ export function ExpertFrameworkStudioPicker({
                       <div>
                         <p className="font-medium text-slate-950">{framework.name}</p>
                         <p className="text-sm text-slate-500">
-                          {framework.status} â€¢{" "}
+                          {framework.status} Ã¢â‚¬Â¢{" "}
                           {new Date(framework.updatedAt).toLocaleDateString(undefined, {
                             month: "short",
                             day: "numeric",
@@ -252,3 +252,4 @@ export function ExpertFrameworkStudioPicker({
     </div>
   );
 }
+

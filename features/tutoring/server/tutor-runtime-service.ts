@@ -1,15 +1,15 @@
 import { contentScopeService } from "@/features/tutoring/server/content-scope-service";
 import { buildStudentTeachingPlaybook } from "@/features/tutoring/server/pattern-memory-service";
 import { tutoringPromptService } from "@/features/tutoring/server/tutoring-prompt-service";
-import { getCachedTopicWithMaterials } from "@/features/tutoring/public-server";
-import { getCachedActiveFrameworkBundleForTopic } from "@/features/tutoring/server/framework-runtime-storage";
+import { getCachedLessonWithMaterials } from "@/features/tutoring/public-server";
+import { getCachedActiveFrameworkBundleForLesson } from "@/features/tutoring/server/framework-runtime-storage";
 import {
-  createDefaultLearningSessionState,
+  createDefaultStudentSessionState,
   getIncompleteExpertFrameworkCapabilityIds,
-  learningSessionStateSchema,
-  type LearningSessionState,
+  studentSessionStateSchema,
+  type StudentSessionState,
   type StudentInterestProfile,
-  type TopicSourceBoundary,
+  type LessonSourceBoundary,
 } from "@/features/tutoring/public-server";
 import {
   logTutoringDebug,
@@ -30,53 +30,53 @@ function getFrameworkCapabilityReadinessErrorMessage(
 
 export class TutorRuntimeService {
   private async resolveContentScope(params: {
-    topicId: string;
-    sourceBoundary: TopicSourceBoundary;
+    lessonId: string;
+    sourceBoundary: LessonSourceBoundary;
     studyLanguage: string;
-    existingSnapshot?: LearningSessionState["contentScopeSnapshot"];
+    existingSnapshot?: StudentSessionState["contentScopeSnapshot"];
   }) {
     const timer = createTutoringTimer();
     logTutoringDebug("runtime:resolve-content-scope:start", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       studyLanguage: params.studyLanguage,
       hasExistingSnapshot: Boolean(params.existingSnapshot),
     });
 
     if (params.existingSnapshot) {
       logTutoringDebug("runtime:resolve-content-scope:reuse-snapshot", {
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         packVersion: params.existingSnapshot.groundingPackVersion,
         durationMs: timer.elapsedMs(),
       });
       return params.existingSnapshot;
     }
 
-    const topic = await measureTutoringStep(
-      "runtime:resolve-content-scope:topic",
+    const lesson = await measureTutoringStep(
+      "runtime:resolve-content-scope:lesson",
       {
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         studyLanguage: params.studyLanguage,
       },
-      async () => await getCachedTopicWithMaterials(params.topicId),
+      async () => await getCachedLessonWithMaterials(params.lessonId),
     );
-    const packVersion = topic?.topicGroundingPack?.version ?? 0;
+    const packVersion = lesson?.lessonGroundingPack?.version ?? 0;
 
     const scope = await measureTutoringStep(
       "runtime:resolve-content-scope:build",
       {
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         studyLanguage: params.studyLanguage,
         packVersion,
       },
       async () =>
         await contentScopeService.buildScopeFromPack({
-          topicId: params.topicId,
+          lessonId: params.lessonId,
           sourceBoundary: params.sourceBoundary,
           contentLocale: params.studyLanguage,
         }),
     );
     logTutoringDebug("runtime:resolve-content-scope:built", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       packVersion: scope.groundingPackVersion,
       materialIds: scope.materialIds,
       learningOutcomes: scope.learningOutcomes.length,
@@ -86,42 +86,42 @@ export class TutorRuntimeService {
   }
 
   async initializeSessionState(params: {
-    topicId: string;
-    topicTitle: string;
-    sourceBoundary: TopicSourceBoundary;
+    lessonId: string;
+    lessonTitle: string;
+    sourceBoundary: LessonSourceBoundary;
     studyLanguage: string;
-  }): Promise<LearningSessionState> {
+  }): Promise<StudentSessionState> {
     const timer = createTutoringTimer();
     logTutoringDebug("runtime:initialize-session-state:start", {
-      topicId: params.topicId,
-      topicTitle: params.topicTitle,
+      lessonId: params.lessonId,
+      lessonTitle: params.lessonTitle,
       studyLanguage: params.studyLanguage,
     });
     const [activeFramework, contentScope] = await Promise.all([
       measureTutoringStep(
         "runtime:initialize-session-state:framework",
         {
-          topicId: params.topicId,
+          lessonId: params.lessonId,
           studyLanguage: params.studyLanguage,
         },
-        async () => await getCachedActiveFrameworkBundleForTopic(params.topicId),
+        async () => await getCachedActiveFrameworkBundleForLesson(params.lessonId),
       ),
       measureTutoringStep(
         "runtime:initialize-session-state:content-scope",
         {
-          topicId: params.topicId,
+          lessonId: params.lessonId,
           studyLanguage: params.studyLanguage,
         },
         async () =>
           await contentScopeService.buildScopeFromPack({
-            topicId: params.topicId,
+            lessonId: params.lessonId,
             sourceBoundary: params.sourceBoundary,
             contentLocale: params.studyLanguage,
           }),
       ),
     ]);
     logTutoringDebug("runtime:initialize-session-state:resolved", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       frameworkId: activeFramework.frameworkId,
       contentScopeVersion: contentScope.groundingPackVersion,
       materialIds: contentScope.materialIds,
@@ -139,38 +139,38 @@ export class TutorRuntimeService {
       throw new Error(readinessError);
     }
 
-    return learningSessionStateSchema.parse({
-      ...createDefaultLearningSessionState(),
-      topicId: params.topicId,
-      topicTitle: params.topicTitle,
+    return studentSessionStateSchema.parse({
+      ...createDefaultStudentSessionState(),
+      lessonId: params.lessonId,
+      lessonTitle: params.lessonTitle,
       frameworkId: activeFramework.frameworkId,
       activeFrameworkSnapshot: activeFramework,
       groundingPackVersion: contentScope.groundingPackVersion,
       contentScopeSnapshot: contentScope,
       tutorNotes: [
         `Framework ${activeFramework.frameworkId} is active.`,
-        `Topic grounding pack v${contentScope.groundingPackVersion} loaded for session.`,
+        `Lesson grounding pack v${contentScope.groundingPackVersion} loaded for session.`,
       ],
     });
   }
 
   async prepareTurn(params: {
-    topicId: string;
-    topicTitle: string;
+    lessonId: string;
+    lessonTitle: string;
     subjectKey?: string | null;
     subjectLabel?: string | null;
-    sourceBoundary: TopicSourceBoundary;
+    sourceBoundary: LessonSourceBoundary;
     studentUserId?: string | null;
     studyLanguage: string;
-    state: LearningSessionState;
+    state: StudentSessionState;
     interestProfile: StudentInterestProfile | null;
     recentMessages: Array<{ role: "user" | "assistant"; content: string }>;
     latestUserText: string;
   }) {
     const timer = createTutoringTimer();
     logTutoringDebug("runtime:prepare-turn:start", {
-      topicId: params.topicId,
-      topicTitle: params.topicTitle,
+      lessonId: params.lessonId,
+      lessonTitle: params.lessonTitle,
       studyLanguage: params.studyLanguage,
       turnCount: params.state.turnCount,
       hasInterestProfile: Boolean(params.interestProfile),
@@ -180,14 +180,14 @@ export class TutorRuntimeService {
       (await measureTutoringStep(
         "runtime:prepare-turn:framework",
         {
-          topicId: params.topicId,
+          lessonId: params.lessonId,
           studyLanguage: params.studyLanguage,
         },
-        async () => await getCachedActiveFrameworkBundleForTopic(params.topicId),
+        async () => await getCachedActiveFrameworkBundleForLesson(params.lessonId),
       ));
     if (params.state.activeFrameworkSnapshot) {
       logTutoringDebug("runtime:prepare-turn:framework:reuse-snapshot", {
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         studyLanguage: params.studyLanguage,
         frameworkId: activeFramework.frameworkId,
       });
@@ -203,7 +203,7 @@ export class TutorRuntimeService {
       throw new Error(readinessError);
     }
     const contentScope = await this.resolveContentScope({
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       sourceBoundary: params.sourceBoundary,
       studyLanguage: params.studyLanguage,
       existingSnapshot: params.state.contentScopeSnapshot,
@@ -213,7 +213,7 @@ export class TutorRuntimeService {
       ? await measureTutoringStep(
           "runtime:prepare-turn:playbook",
           {
-            topicId: params.topicId,
+            lessonId: params.lessonId,
             studyLanguage: params.studyLanguage,
             studentUserId,
           },
@@ -222,8 +222,8 @@ export class TutorRuntimeService {
               studentUserId,
               subjectKey: params.subjectKey ?? null,
               subjectLabel: params.subjectLabel ?? null,
-              topicLocalGaps: [],
-              topicLocalUsedExamples: [],
+              lessonLocalGaps: [],
+              lessonLocalUsedExamples: [],
             }),
         )
       : {
@@ -234,7 +234,7 @@ export class TutorRuntimeService {
           },
         };
     logTutoringDebug("runtime:prepare-turn:playbook", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       playbookState: playbookResult.memoryState.status,
       hasPlaybook: Boolean(playbookResult.playbook),
       durationMs: timer.elapsedMs(),
@@ -252,17 +252,17 @@ export class TutorRuntimeService {
       studyLanguage: params.studyLanguage,
     });
 
-    const nextState = learningSessionStateSchema.parse({
+    const nextState = studentSessionStateSchema.parse({
       ...params.state,
-      topicId: params.topicId,
-      topicTitle: params.topicTitle,
+      lessonId: params.lessonId,
+      lessonTitle: params.lessonTitle,
       frameworkId: activeFramework.frameworkId,
       activeFrameworkSnapshot: activeFramework,
       groundingPackVersion: contentScope.groundingPackVersion,
       contentScopeSnapshot: contentScope,
     });
     logTutoringDebug("runtime:prepare-turn:done", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       frameworkId: activeFramework.frameworkId,
       contentScopeVersion: contentScope.groundingPackVersion,
       systemPromptLength: systemPrompt.dynamicSystemPrompt.length,
@@ -287,3 +287,4 @@ export class TutorRuntimeService {
 }
 
 export const tutorRuntimeService = new TutorRuntimeService();
+

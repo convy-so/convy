@@ -5,7 +5,7 @@ import { users, sessions } from "@/shared/db/schema/auth";
 import { usageLogs } from "@/shared/db/schema/billing";
 import { surveys, surveyCreationConversations, surveyBriefs } from "@/shared/db/schema/surveys";
 import { platformFeedback } from "@/shared/db/schema/feedback";
-import { classroomStudents, classrooms, learningTopics, learningSessions } from "@/shared/db/schema/learning";
+import { classroomStudents, classrooms, lessons, studentSessions } from "@/shared/db/schema/learning";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
 
 import { requireRole } from "@/features/auth/public-server";
@@ -15,9 +15,9 @@ import { requireValue } from "@/shared/utils/collections";
 export type AdminStats = {
   totalUsers: number;
   totalSurveys: number;
-  totalTopics: number;
+  totalLessons: number;
   totalClassrooms: number;
-  totalLearningSessions: number;
+  totalStudentSessions: number;
   totalUsageCost: string;
   activeSessions: number;
   newUsersLast30Days: number;
@@ -131,18 +131,18 @@ export async function getAdminStats(authHeaders?: Headers | string | null): Prom
     const [
       totalUsers,
       totalSurveys,
-      totalTopics,
+      totalLessons,
       totalClassrooms,
-      totalLearningSessions,
+      totalStudentSessions,
       totalUsageCost,
       activeSessions,
       newUsersLast30Days,
     ] = await Promise.all([
       getDb().select({ count: count() }).from(users),
       getDb().select({ count: count() }).from(surveys),
-      getDb().select({ count: count() }).from(learningTopics),
+      getDb().select({ count: count() }).from(lessons),
       getDb().select({ count: count() }).from(classrooms),
-      getDb().select({ count: count() }).from(learningSessions),
+      getDb().select({ count: count() }).from(studentSessions),
       getDb().select({ total: sum(usageLogs.cost) }).from(usageLogs),
       getDb()
         .select({ count: count() })
@@ -155,11 +155,11 @@ export async function getAdminStats(authHeaders?: Headers | string | null): Prom
     ]);
     const totalUsersRow = requireValue(totalUsers[0], "Missing total users aggregate.");
     const totalSurveysRow = requireValue(totalSurveys[0], "Missing total surveys aggregate.");
-    const totalTopicsRow = requireValue(totalTopics[0], "Missing total topics aggregate.");
+    const totalLessonsRow = requireValue(totalLessons[0], "Missing total lessons aggregate.");
     const totalClassroomsRow = requireValue(totalClassrooms[0], "Missing total classrooms aggregate.");
-    const totalLearningSessionsRow = requireValue(
-      totalLearningSessions[0],
-      "Missing total learning sessions aggregate.",
+    const totalStudentSessionsRow = requireValue(
+      totalStudentSessions[0],
+      "Missing total student sessions aggregate.",
     );
     const totalUsageCostRow = requireValue(totalUsageCost[0], "Missing usage cost aggregate.");
     const activeSessionsRow = requireValue(activeSessions[0], "Missing active sessions aggregate.");
@@ -173,9 +173,9 @@ export async function getAdminStats(authHeaders?: Headers | string | null): Prom
       data: {
         totalUsers: totalUsersRow.count,
         totalSurveys: totalSurveysRow.count,
-        totalTopics: totalTopicsRow.count,
+        totalLessons: totalLessonsRow.count,
         totalClassrooms: totalClassroomsRow.count,
-        totalLearningSessions: totalLearningSessionsRow.count,
+        totalStudentSessions: totalStudentSessionsRow.count,
         totalUsageCost: totalUsageCostRow.total || "0",
         activeSessions: activeSessionsRow.count,
         newUsersLast30Days: newUsersLast30DaysRow.count,

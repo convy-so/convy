@@ -152,7 +152,7 @@ function getUsageSummary(value: unknown) {
 }
 
 export function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown AI review error";
+  return error instanceof Error ? error.message : "Unknown AI analysis error";
 }
 
 export function isAiQuotaError(error: unknown) {

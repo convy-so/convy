@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   teacherOnboardingSummarySchema,
   teacherProgressReportSchema,
-  type LearningSessionState,
+  type StudentSessionState,
   type StudentInterestProfile,
   type TeacherProgressReport,
 } from "@/features/tutoring/public-server";
@@ -64,8 +64,8 @@ const reportingEvidenceSchema = z.object({
 
 function buildReportingEvidenceExtractionPrompt(params: {
   studentName: string;
-  topicTitle: string;
-  state: LearningSessionState;
+  lessonTitle: string;
+  state: StudentSessionState;
   teachingPlaybook?: Record<string, unknown> | null;
   transcript: Array<{
     role: string;
@@ -77,7 +77,7 @@ function buildReportingEvidenceExtractionPrompt(params: {
   return [
     buildPromptFrame({
       role: "Extract session evidence for a teacher progress report.",
-      goal: `Summarize grounded evidence about ${params.studentName}'s progress in ${params.topicTitle}.`,
+      goal: `Summarize grounded evidence about ${params.studentName}'s progress in ${params.lessonTitle}.`,
       constraints: [
         "Use only the transcript, session state, and previous report context.",
         "Capture evidence, not polished report prose.",
@@ -86,7 +86,7 @@ function buildReportingEvidenceExtractionPrompt(params: {
       outputContract: ["Return only the structured evidence extraction object."],
     }),
     renderTaggedSection("student", params.studentName),
-    renderTaggedSection("topic", params.topicTitle),
+    renderTaggedSection("lesson", params.lessonTitle),
     renderTaggedSection("session_state", renderReportState(params.state, params.teachingPlaybook)),
     renderTaggedSection("previous_report", renderPreviousReport(params.previousReport)),
     renderTaggedSection("transcript", renderTranscript(params.transcript)),
@@ -107,8 +107,8 @@ export async function generateTeacherOnboardingSummary(params: {
 
 export async function generateTeacherProgressReport(params: {
   studentName: string;
-  topicTitle: string;
-  state: LearningSessionState;
+  lessonTitle: string;
+  state: StudentSessionState;
   sessionId?: string | null;
   userId?: string | null;
   transcript: Array<{
@@ -123,7 +123,7 @@ export async function generateTeacherProgressReport(params: {
     schema: reportingEvidenceSchema,
     prompt: buildReportingEvidenceExtractionPrompt({
       studentName: params.studentName,
-      topicTitle: params.topicTitle,
+      lessonTitle: params.lessonTitle,
       state: params.state,
       teachingPlaybook: params.teachingPlaybook ?? null,
       transcript: params.transcript,
@@ -136,7 +136,7 @@ export async function generateTeacherProgressReport(params: {
     schema: teacherProgressReportSchema,
     prompt: buildReportingPrompt({
       studentName: params.studentName,
-      topicTitle: params.topicTitle,
+      lessonTitle: params.lessonTitle,
       sessionState: params.state,
       teachingPlaybook: params.teachingPlaybook ?? null,
       transcript: [
@@ -162,7 +162,7 @@ export async function generateTeacherProgressReport(params: {
   });
 }
 
-export function buildClassroomTopicReportSummary(
+export function buildClassroomLessonReportSummary(
   reports: Array<{
     student: {
       id: string;
@@ -274,3 +274,4 @@ export function buildClassroomTopicReportSummary(
     ),
   };
 }
+

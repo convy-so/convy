@@ -1,35 +1,35 @@
-import {
-  topicSourceBoundarySchema,
+﻿import {
+  lessonSourceBoundarySchema,
   type ContentScopeSnapshot,
   type LearningOutcomeDefinition,
-  type TopicGroundingPack,
-  type TopicSourceBoundary,
+  type LessonGroundingPack,
+  type LessonSourceBoundary,
 } from "@/features/tutoring/public-server";
 
 import { packToRetrievedContextLines, uniqueStrings, mergePackWithBoundary } from "./core";
-import { createEmptyTopicGroundingPack } from "./rebuild-pack";
+import { createEmptyLessonGroundingPack } from "./rebuild-pack";
 
 export function buildContentScopeFromPack(params: {
-  topicId: string;
-  topicTitle: string;
+  lessonId: string;
+  lessonTitle: string;
   contentLocale: string;
-  sourceBoundary: TopicSourceBoundary;
+  sourceBoundary: LessonSourceBoundary;
   learningOutcomes: LearningOutcomeDefinition[];
-  pack: TopicGroundingPack | null;
+  pack: LessonGroundingPack | null;
   materialIds: string[];
 }): ContentScopeSnapshot {
-  const boundary = topicSourceBoundarySchema.parse(params.sourceBoundary);
+  const boundary = lessonSourceBoundarySchema.parse(params.sourceBoundary);
   const pack = params.pack
     ? mergePackWithBoundary(params.pack, boundary)
-    : createEmptyTopicGroundingPack({
-        topicTitle: params.topicTitle,
+    : createEmptyLessonGroundingPack({
+        lessonTitle: params.lessonTitle,
         materialIds: params.materialIds,
         teacherSummary: boundary.teacherSummary,
       });
 
   return {
-    topicId: params.topicId,
-    topicTitle: params.topicTitle,
+    lessonId: params.lessonId,
+    lessonTitle: params.lessonTitle,
     contentLocale: params.contentLocale,
     teacherSummary: boundary.teacherSummary || pack.digest,
     materialIds:
@@ -42,6 +42,7 @@ export function buildContentScopeFromPack(params: {
     retrievedContext: packToRetrievedContextLines(pack),
     learningOutcomes: params.learningOutcomes,
     groundingPackVersion: pack.version,
-    topicGroundingPack: pack,
+    lessonGroundingPack: pack,
   };
 }
+

@@ -1,29 +1,29 @@
-import { eq } from "drizzle-orm";
+﻿import { eq } from "drizzle-orm";
 
-import { getTeacherTopicAccess } from "@/features/tutoring/server/access";
-import { indexLearningMaterialEvidence } from "@/features/tutoring/server/evidence";
-import { topicSourceBoundarySchema } from "@/features/tutoring/public-server";
+import { getTeacherLessonAccess } from "@/features/tutoring/server/access";
+import { indexLessonMaterialEvidence } from "@/features/tutoring/server/evidence";
+import { lessonSourceBoundarySchema } from "@/features/tutoring/public-server";
 import { getDb } from "@/shared/db";
-import { learningTopics, topicMaterials } from "@/shared/db/schema";
+import { lessons, lessonMaterials } from "@/shared/db/schema";
 import { LEARNING_STATUS } from "@/shared/learning/constants";
 
 export async function indexMaterialAndSyncBoundary(params: {
-  topicId: string;
+  lessonId: string;
   materialId: string;
-  material: typeof topicMaterials.$inferSelect;
+  material: typeof lessonMaterials.$inferSelect;
   mimeType: string;
   extractedText: string;
   analysis: Record<string, unknown>;
   sourceDocument: Record<string, unknown>;
   groundingMap: Record<string, unknown>;
-  topic: NonNullable<Awaited<ReturnType<typeof getTeacherTopicAccess>>>;
+  lesson: NonNullable<Awaited<ReturnType<typeof getTeacherLessonAccess>>>;
 }) {
-  const currentTopic = await getDb().query.learningTopics.findFirst({
-    where: eq(learningTopics.id, params.topicId),
+  const currentLesson = await getDb().query.lessons.findFirst({
+    where: eq(lessons.id, params.lessonId),
     columns: { sourceBoundary: true },
   });
-  const existingBoundary = topicSourceBoundarySchema.parse(currentTopic?.sourceBoundary ?? {});
-  const updatedBoundary = topicSourceBoundarySchema.parse({
+  const existingBoundary = lessonSourceBoundarySchema.parse(currentLesson?.sourceBoundary ?? {});
+  const updatedBoundary = lessonSourceBoundarySchema.parse({
     ...existingBoundary,
     rigorNotes: Array.from(
       new Set([
@@ -48,13 +48,13 @@ export async function indexMaterialAndSyncBoundary(params: {
     ),
   });
 
-  await indexLearningMaterialEvidence({
+  await indexLessonMaterialEvidence({
     materialId: params.materialId,
-    topicId: params.topicId,
-    classroomId: params.topic.classroomId,
-    language: params.topic.contentLocale,
-    subjectKey: params.topic.courseId,
-    gradeBand: params.topic.classroom.gradeBand,
+    lessonId: params.lessonId,
+    classroomId: params.lesson.classroomId,
+    language: params.lesson.contentLocale,
+    subjectKey: params.lesson.courseId,
+    gradeBand: params.lesson.classroom.gradeBand,
     sourceTitle: params.material.title,
     sourceUpdatedAt: params.material.updatedAt ?? new Date(),
     sourceDocument: params.sourceDocument,
@@ -63,20 +63,21 @@ export async function indexMaterialAndSyncBoundary(params: {
 
   await Promise.all([
     getDb()
-      .update(topicMaterials)
+      .update(lessonMaterials)
       .set({
         indexingStatus: LEARNING_STATUS.materialCompleted,
         indexingError: null,
         updatedAt: new Date(),
       })
-      .where(eq(topicMaterials.id, params.materialId)),
+      .where(eq(lessonMaterials.id, params.materialId)),
     getDb()
-      .update(learningTopics)
+      .update(lessons)
       .set({
         sourceBoundary: updatedBoundary,
         lastMaterialSyncAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(learningTopics.id, params.topicId)),
+      .where(eq(lessons.id, params.lessonId)),
   ]);
 }
+

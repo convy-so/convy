@@ -7,14 +7,14 @@ import { buildStudentTurnPromptRuntime } from "@/features/tutoring/server/prompt
 import type {
   ActiveExpertFramework,
   ContentScopeSnapshot,
-  LearningSessionState,
+  StudentSessionState,
   StudentInterestProfile,
 } from "@/features/tutoring/public-server";
 
 function createContentScope(): ContentScopeSnapshot {
   return {
-    topicId: "topic_1",
-    topicTitle: "Quadratic Equations",
+    lessonId: "lesson_1",
+    lessonTitle: "Quadratic Equations",
     contentLocale: "en",
     teacherSummary: "Factorising and solving basic quadratic equations.",
     materialIds: ["mat_1"],
@@ -36,11 +36,11 @@ function createContentScope(): ContentScopeSnapshot {
       },
     ],
     groundingPackVersion: 3,
-    topicGroundingPack: {
+    lessonGroundingPack: {
       version: 3,
       builtAt: "2026-05-28T00:00:00.000Z",
       materialIds: ["mat_1"],
-      topicTitle: "Quadratic Equations",
+      lessonTitle: "Quadratic Equations",
       digest: "Quadratic equations can often be solved by factoring into two binomials.",
       inScopeConcepts: [
         {
@@ -49,7 +49,7 @@ function createContentScope(): ContentScopeSnapshot {
           citations: [],
         },
       ],
-      explicitlyOutOfScope: ["Do not use the quadratic formula in this topic."],
+      explicitlyOutOfScope: ["Do not use the quadratic formula in this lesson."],
       formulas: [
         {
           id: "formula_1",
@@ -143,10 +143,10 @@ function createFramework(): ActiveExpertFramework {
   };
 }
 
-function createState(): LearningSessionState {
+function createState(): StudentSessionState {
   return {
-    topicId: "topic_1",
-    topicTitle: "Quadratic Equations",
+    lessonId: "lesson_1",
+    lessonTitle: "Quadratic Equations",
     frameworkId: "framework_1",
     activeFrameworkSnapshot: createFramework(),
     groundingPackVersion: 3,
@@ -231,7 +231,7 @@ function run() {
     "expected disabled capabilities to be serialized explicitly in the runtime artifact",
   );
   assert.ok(
-    !promptRuntime.dynamicSystemPrompt.includes("Topic grounding pack (authoritative source for this session):"),
+    !promptRuntime.dynamicSystemPrompt.includes("Lesson grounding pack (authoritative source for this session):"),
     "expected tutoring to stop injecting the full grounding pack block",
   );
   assert.ok(
@@ -239,7 +239,7 @@ function run() {
     "expected tutoring grounding retrieval to stay selective",
   );
   assert.ok(
-    promptRuntime.promptCache?.namespace === "learning-tutor-chat",
+    promptRuntime.promptCache?.namespace === "tutoring-session-chat",
     "expected tutoring prompt caching metadata to be attached",
   );
 
@@ -253,7 +253,7 @@ function run() {
         sourceId: "report_1",
         score: 0.92,
         content: "Mastery improved from naming factors to solving correctly after checking expansion.",
-        metadata: { topicTitle: "Quadratic Equations" },
+        metadata: { lessonTitle: "Quadratic Equations" },
       },
     ],
     uniqueReports: [],
@@ -298,7 +298,8 @@ function run() {
     "expected lower-priority layers to drop first when over budget",
   );
 
-  console.log("learning-prompt-runtime tests passed");
+  console.log("tutoring-prompt-runtime tests passed");
 }
 
 run();
+

@@ -1,4 +1,4 @@
-import {
+﻿import {
   buildPromptFrame,
   renderTaggedSection,
   renderTeacherEvidenceBlocks,
@@ -16,12 +16,12 @@ export function buildTeacherEvidenceAnswerPrompt(input: {
     metadata?: Record<string, unknown> | null;
   }>;
   uniqueReports: Array<{
-    topicTitle: string | null;
+    lessonTitle: string | null;
     masteryPercent: number | null;
     report: unknown;
   }>;
   uniqueInteractions: Array<{
-    topicTitle: string | null;
+    lessonTitle: string | null;
     role: string;
     interactionType: string;
     content: string;
@@ -62,3 +62,4 @@ export function buildTeacherEvidenceAnswerPrompt(input: {
     .filter(Boolean)
     .join("\n\n");
 }
+

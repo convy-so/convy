@@ -1,4 +1,4 @@
-import {
+﻿import {
   materialGroundingMapSchema,
   type MaterialGroundingMap,
   type MaterialSourceDocument,
@@ -19,24 +19,24 @@ import {
 } from "./text-processing";
 
 export async function buildMaterialGroundingMap(params: {
-  topicTitle: string;
+  lessonTitle: string;
   materialId: string;
   materialTitle: string;
   sourceDocument: MaterialSourceDocument;
   traceId?: string;
-  topicId?: string;
+  lessonId?: string;
 }) {
   const groundedSegments = await mapWithConcurrency(
     params.sourceDocument.segments,
     MATERIAL_SEGMENT_GROUNDING_CONCURRENCY,
     async (segment) =>
       await groundMaterialSegment({
-        topicTitle: params.topicTitle,
+        lessonTitle: params.lessonTitle,
         materialTitle: params.materialTitle,
         materialId: params.materialId,
         segment,
         traceId: params.traceId,
-        topicId: params.topicId,
+        lessonId: params.lessonId,
       }),
   );
 
@@ -59,12 +59,12 @@ export async function buildMaterialGroundingMap(params: {
   );
 
   const synthesis = await resolveGroundingMapSynthesis({
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     materialTitle: params.materialTitle,
     groundedSegments,
     sections,
     traceId: params.traceId,
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     materialId: params.materialId,
   });
 
@@ -109,3 +109,4 @@ export async function buildMaterialGroundingMap(params: {
     segmentGroundings: groundedSegments,
   });
 }
+

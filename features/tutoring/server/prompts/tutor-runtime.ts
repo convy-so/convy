@@ -1,5 +1,5 @@
-export function buildSessionOpeningPrompt(input: {
-  topicTitle: string;
+﻿export function buildSessionOpeningPrompt(input: {
+  lessonTitle: string;
   studyLanguage: string;
   worldConnection?: string | null;
 }) {
@@ -8,7 +8,7 @@ export function buildSessionOpeningPrompt(input: {
   return `Write the first tutor message that opens a new tutoring session.
 
 Reply in ${input.studyLanguage}.
-Topic: ${input.topicTitle}
+Lesson: ${input.lessonTitle}
 World connection: ${worldConnection || "none"}
 
 Requirements:
@@ -32,3 +32,4 @@ ${input.userMessage}
 
 Write the tutor's next reply.`;
 }
+

@@ -5,7 +5,7 @@ import { ExternalLink, FileText, Loader2, RotateCcw, UploadCloud } from "lucide-
 import { InputField } from "@/features/auth/public-ui";
 import { formatAttemptStatus } from "@/features/tutoring/ui/lesson-editor-helpers";
 
-import type { TopicMaterialListItem } from "./lesson-setup-page-model";
+import type { LessonMaterialListItem } from "./lesson-setup-page-model";
 
 type UploadAttempt = {
   id: string;
@@ -31,7 +31,7 @@ export function LessonSetupMaterialsSection(props: {
   visibleUploadAttempts: UploadAttempt[];
   retryingAttemptId: string | null;
   handleRetryAttempt: (attemptId: string) => Promise<void>;
-  materials: TopicMaterialListItem[];
+  materials: LessonMaterialListItem[];
 }) {
   const {
     materialTitle,
@@ -52,7 +52,7 @@ export function LessonSetupMaterialsSection(props: {
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div className="border-b border-slate-100 px-6 py-4">
         <h2 className="text-lg font-semibold tracking-tight text-slate-950">
-          Learning material
+          Lesson material
         </h2>
       </div>
       <div className="space-y-5 px-6 py-5">
@@ -199,7 +199,7 @@ export function LessonSetupMaterialsSection(props: {
                     <div className="mt-1">{material.indexingStatus}</div>
                   </div>
                   <a
-                    href={`/api/media/learning/${material.id}`}
+                    href={`/api/media/lessons/${material.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
@@ -219,3 +219,4 @@ export function LessonSetupMaterialsSection(props: {
     </section>
   );
 }
+

@@ -5,13 +5,13 @@ import { analysisModel } from "@/shared/ai";
 import {
   buildOnboardingLearningPatternAnalysisPrompt,
   buildSessionLearningPatternAnalysisPrompt,
-} from "@/features/tutoring/server/prompts/learning-pattern-analysis";
+} from "@/features/tutoring/server/prompts/student-pattern-analysis";
 import {
   learningPatternAnalysisOutputSchema,
-  type StudentLearningPatternProfile,
+  type StudentPatternProfile,
 } from "@/features/tutoring/server/pattern-types";
 import type {
-  LearningSessionState,
+  StudentSessionState,
   StudentInterestProfile,
   TeacherProgressReport,
 } from "@/features/tutoring/public-server";
@@ -33,7 +33,7 @@ type MemoryRecord = {
 };
 
 function buildPatternSummaryRewritePrompt(input: {
-  profile: StudentLearningPatternProfile;
+  profile: StudentPatternProfile;
   studentName: string;
 }) {
   return `Write two summaries of a student's learning pattern profile.
@@ -84,7 +84,7 @@ export async function analyzeOnboardingLearningPatterns(params: {
   classroomStudentId: string;
   interestProfile: StudentInterestProfile;
   transcript: Array<{ role: string; content: string }>;
-  currentProfiles: StudentLearningPatternProfile[];
+  currentProfiles: StudentPatternProfile[];
   relevantMemories: MemoryRecord[];
 }) {
   const prompt = buildOnboardingLearningPatternAnalysisPrompt({
@@ -121,9 +121,9 @@ export async function analyzeSessionLearningPatterns(params: {
   studentName: string;
   subjectKey: string;
   subjectLabel: string;
-  topicTitle: string;
+  lessonTitle: string;
   interestProfile: StudentInterestProfile;
-  state: LearningSessionState;
+  state: StudentSessionState;
   report: TeacherProgressReport;
   transcript: Array<{
     role: string;
@@ -135,14 +135,14 @@ export async function analyzeSessionLearningPatterns(params: {
     content: string;
     metadata?: Record<string, unknown> | null;
   }>;
-  currentProfiles: StudentLearningPatternProfile[];
+  currentProfiles: StudentPatternProfile[];
   relevantMemories: MemoryRecord[];
 }) {
   const prompt = buildSessionLearningPatternAnalysisPrompt({
     studentName: params.studentName,
     subjectKey: params.subjectKey,
     subjectLabel: params.subjectLabel,
-    topicTitle: params.topicTitle,
+    lessonTitle: params.lessonTitle,
     interestProfileJson: JSON.stringify(params.interestProfile),
     currentProfilesJson: JSON.stringify(sortProfilesForStorage(params.currentProfiles)),
     relevantMemoriesText: formatMemoryRecall(params.relevantMemories),
@@ -180,7 +180,7 @@ export async function analyzeSessionLearningPatterns(params: {
 }
 
 export async function rewritePatternSummaries(params: {
-  profile: StudentLearningPatternProfile;
+  profile: StudentPatternProfile;
   studentName: string;
 }) {
   const { output } = await generateText({
@@ -193,3 +193,4 @@ export async function rewritePatternSummaries(params: {
 
   return output;
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Brain, Check, X, Pencil, Loader2, BookOpen } from "lucide-react";
@@ -18,7 +18,7 @@ type DraftCrystallization = {
   heuristic: ExpertHeuristic;
   relevanceScope: string;
   createdAt: Date;
-  topic: {
+  lesson: {
     title: string;
   } | null;
 };
@@ -129,7 +129,7 @@ export function ExpertCrystallizationInbox({
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 flex items-center gap-1">
                       <BookOpen className="w-3 h-3" />
-                      {draft.topic?.title || "Unknown Topic"}
+                      {draft.lesson?.title || "Unknown Lesson"}
                     </span>
                     <span className="text-xs text-slate-400">
                       Generated {new Date(draft.createdAt).toLocaleDateString()}
@@ -265,3 +265,4 @@ export function ExpertCrystallizationInbox({
     </div>
   );
 }
+

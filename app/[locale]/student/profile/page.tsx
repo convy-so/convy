@@ -1,4 +1,4 @@
-import { getVerifiedSession } from "@/features/auth/public-server";
+﻿import { getVerifiedSession } from "@/features/auth/public-server";
 import { UserCircle, Compass, Target, Brain, Sparkles, ArrowRight } from "lucide-react";
 import { Link } from "@/i18n/routing";
 
@@ -35,7 +35,7 @@ export default async function StudentProfilePage() {
           Interest Profile
         </h1>
         <p className="text-slate-500 text-lg mt-1">
-          This is your universal tutor profile. You set it once, the tutor uses it across every class and session, and you can come back here anytime to refine it.
+          This is your universal learning profile. You set it once, Convy uses it across every class and lesson, and you can come back here anytime to refine it.
         </p>
       </div>
 
@@ -65,12 +65,12 @@ export default async function StudentProfilePage() {
                 </div>
                 <h3 className="text-lg font-bold text-slate-900">
                   {needsInterestProfileSetup
-                    ? "Finish your interest profile before tutoring"
+                    ? "Finish your interest profile before starting lessons"
                     : "Update your profile with a guided conversation"}
                 </h3>
                 <p className="text-sm leading-6 text-slate-600">
                   {needsInterestProfileSetup
-                    ? "The tutor reads this profile before teaching, so complete it once here to unlock personalized tutoring everywhere."
+                    ? "Convy reads this profile before lessons so it can personalize explanations and examples across your classes."
                     : "Open the dedicated profile conversation if your interests, goals, or learning preferences have changed."}
                 </p>
               </div>
@@ -87,21 +87,21 @@ export default async function StudentProfilePage() {
           <section>
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-4">
               <Compass className="w-5 h-5 text-sky-500" />
-              Topics of Interest
+              Lessons of Interest
             </h3>
             <div className="flex flex-wrap gap-2">
               {profileData.curiosityAreas.length > 0 ? (
-                profileData.curiosityAreas.map((topic) => (
+                profileData.curiosityAreas.map((lesson) => (
                   <span
-                    key={topic}
+                    key={lesson}
                     className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700"
                   >
-                    {topic}
+                    {lesson}
                   </span>
                 ))
               ) : (
                 <p className="text-sm text-slate-500 italic">
-                  No interests recorded yet. Start the profile conversation to set them once for all tutoring.
+                  No interests recorded yet. Start the profile conversation to set them once for all of your lessons.
                 </p>
               )}
             </div>
@@ -124,7 +124,7 @@ export default async function StudentProfilePage() {
                 ))
               ) : (
                 <p className="text-sm text-slate-500 italic">
-                  No goals recorded yet. Add them in the profile conversation and the tutor will use them across classes.
+                  No goals recorded yet. Add them in the profile conversation and Convy will use them across your classes.
                 </p>
               )}
             </div>
@@ -138,7 +138,7 @@ export default async function StudentProfilePage() {
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
               <p className="text-slate-700 text-sm">
                 {profileData.learningRelationship ||
-                  "Your tutor is still analyzing the best way to explain concepts to you."}
+                  "Convy is still learning the best way to explain concepts to you."}
               </p>
             </div>
           </section>
@@ -147,3 +147,4 @@ export default async function StudentProfilePage() {
     </div>
   );
 }
+

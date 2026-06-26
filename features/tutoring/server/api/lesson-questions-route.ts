@@ -3,21 +3,21 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/shared/http/api-error";
 
 import { getDb } from "@/shared/db";
-import { learningInteractions } from "@/shared/db/schema";
+import { studentInteractions } from "@/shared/db/schema";
 import { getVerifiedSession } from "@/features/auth/public-server";
-import { getTeacherTopicAccess } from "@/features/tutoring/server/access";
-import { handleLearningRouteError } from "@/features/tutoring/server/route-errors";
+import { getTeacherLessonAccess } from "@/features/tutoring/server/access";
+import { handleTutoringRouteError } from "@/features/tutoring/server/route-errors";
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ topicId: string }> },
+  { params }: { params: Promise<{ lessonId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
-    const { topicId } = await params;
-    const topic = await getTeacherTopicAccess(session.user.id, topicId);
+    const { lessonId } = await params;
+    const lesson = await getTeacherLessonAccess(session.user.id, lessonId);
 
-    if (!topic) {
+    if (!lesson) {
       return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
@@ -25,16 +25,16 @@ export async function GET(
     const classroomStudentId =
       url.searchParams.get("classroomStudentId") ?? url.searchParams.get("studentId");
 
-    const interactions = await getDb().query.learningInteractions.findMany({
+    const interactions = await getDb().query.studentInteractions.findMany({
       where: classroomStudentId
         ? and(
-            eq(learningInteractions.topicId, topicId),
-            isNull(learningInteractions.sessionId),
-            eq(learningInteractions.classroomStudentId, classroomStudentId),
+            eq(studentInteractions.lessonId, lessonId),
+            isNull(studentInteractions.sessionId),
+            eq(studentInteractions.classroomStudentId, classroomStudentId),
           )
         : and(
-            eq(learningInteractions.topicId, topicId),
-            isNull(learningInteractions.sessionId),
+            eq(studentInteractions.lessonId, lessonId),
+            isNull(studentInteractions.sessionId),
           ),
       with: {
         classroomStudent: true,
@@ -60,10 +60,11 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return handleLearningRouteError(
+    return handleTutoringRouteError(
       error,
       "Failed to load questions",
-      "/api/learning/lessons/[lessonId]/questions:get",
+      "/api/lessons/[lessonId]/questions:get",
     );
   }
 }
+

@@ -1,6 +1,6 @@
-import { getVerifiedSession } from "@/features/auth/public-server";
+﻿import { getVerifiedSession } from "@/features/auth/public-server";
 import { getDb } from "@/shared/db";
-import { classroomStudents, studentProgressReports } from "@/shared/db/schema/learning";
+import { classroomStudents, studentLessonReports } from "@/shared/db/schema/learning";
 import { and, eq, desc } from "drizzle-orm";
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -32,11 +32,11 @@ export default async function ClassroomProgressPage({ params }: ClassroomProgres
     }
 
     // Get progress reports
-    const progressReports = await getDb().query.studentProgressReports.findMany({
-        where: eq(studentProgressReports.classroomStudentId, membership.id),
-        orderBy: [desc(studentProgressReports.createdAt)],
+    const progressReports = await getDb().query.studentLessonReports.findMany({
+        where: eq(studentLessonReports.classroomStudentId, membership.id),
+        orderBy: [desc(studentLessonReports.createdAt)],
         with: {
-            topic: {
+            lesson: {
                 with: {
                     course: true,
                 },
@@ -56,13 +56,13 @@ export default async function ClassroomProgressPage({ params }: ClassroomProgres
             latestModel={latestModel} 
             progressReports={progressReports.map((report) => ({
                 id: report.id,
-                topicId: report.topicId,
+                lessonId: report.lessonId,
                 masteryPercent: report.masteryPercent,
                 createdAt: report.createdAt,
-                topic: report.topic
+                lesson: report.lesson
                     ? {
-                        title: report.topic.title,
-                        courseTitle: report.topic.course?.title ?? null,
+                        title: report.lesson.title,
+                        courseTitle: report.lesson.course?.title ?? null,
                     }
                     : null,
                 report: report.report,
@@ -70,3 +70,4 @@ export default async function ClassroomProgressPage({ params }: ClassroomProgres
         />
     );
 }
+

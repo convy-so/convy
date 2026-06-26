@@ -159,9 +159,9 @@ async function StatsGridSection() {
         description="Surveys across all users"
       />
       <StatsCard
-        title="Learning Topics"
-        value={stats.totalTopics.toString()}
-        description="Total topics created"
+        title="Lessons"
+        value={stats.totalLessons.toString()}
+        description="Total lessons created"
       />
       <StatsCard
         title="Classrooms"
@@ -170,8 +170,8 @@ async function StatsGridSection() {
       />
       <StatsCard
         title="Active Sessions"
-        value={stats.totalLearningSessions.toString()}
-        description="Total student learning sessions"
+        value={stats.totalStudentSessions.toString()}
+        description="Total student sessions"
       />
     </div>
   );

@@ -319,13 +319,13 @@ export const CLASSROOM_ONBOARDING_STATUS_VALUES = [
   "completed",
 ] as const;
 export const COURSE_STATUS_VALUES = ["active"] as const;
-export const LEARNING_TOPIC_STATUS_VALUES = [
+export const LESSON_STATUS_VALUES = [
   "draft",
   "active",
   "paused",
   "archived",
 ] as const;
-export const LEARNING_TOPIC_OPENING_PREFERENCE_VALUES = ["auto"] as const;
+export const LESSON_OPENING_PREFERENCE_VALUES = ["auto"] as const;
 export const MATERIAL_PIPELINE_STATUS_VALUES = [
   "pending",
   "processing",
@@ -341,13 +341,10 @@ export const MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES = [
 export const MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES = [
   "upload",
   "extraction",
-  "review",
   "analysis",
   "indexing",
   "pack_build",
 ] as const;
-export const MATERIAL_UPLOAD_ATTEMPT_REVIEW_ALIAS =
-  MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[2];
 export const STUDENT_INTEREST_VISIBILITY_VALUES = [
   "private_to_student_and_agent",
 ] as const;
@@ -434,12 +431,12 @@ export const MATERIAL_BATCH_GATE_STATUS = {
 } as const;
 
 export const STUDENT_TUTORING_ACCESS_REASON_VALUES = [
-  "topic_unavailable",
+  "lesson_unavailable",
   "interest_profile_required",
 ] as const;
 
 export const STUDENT_TUTORING_ACCESS_REASON = {
-  TOPIC_UNAVAILABLE: STUDENT_TUTORING_ACCESS_REASON_VALUES[0],
+  LESSON_UNAVAILABLE: STUDENT_TUTORING_ACCESS_REASON_VALUES[0],
   INTEREST_PROFILE_REQUIRED: STUDENT_TUTORING_ACCESS_REASON_VALUES[1],
 } as const;
 
@@ -462,11 +459,11 @@ export const LEARNING_STATUS = {
   onboardingInterestProfilePending: CLASSROOM_ONBOARDING_STATUS_VALUES[0],
   onboardingCompleted: CLASSROOM_ONBOARDING_STATUS_VALUES[1],
   courseActive: COURSE_STATUS_VALUES[0],
-  topicDraft: LEARNING_TOPIC_STATUS_VALUES[0],
-  topicActive: LEARNING_TOPIC_STATUS_VALUES[1],
-  topicPaused: LEARNING_TOPIC_STATUS_VALUES[2],
-  topicArchived: LEARNING_TOPIC_STATUS_VALUES[3],
-  topicOpeningAuto: LEARNING_TOPIC_OPENING_PREFERENCE_VALUES[0],
+  lessonDraft: LESSON_STATUS_VALUES[0],
+  lessonActive: LESSON_STATUS_VALUES[1],
+  lessonPaused: LESSON_STATUS_VALUES[2],
+  lessonArchived: LESSON_STATUS_VALUES[3],
+  lessonOpeningAuto: LESSON_OPENING_PREFERENCE_VALUES[0],
   materialPending: MATERIAL_PIPELINE_STATUS_VALUES[0],
   materialProcessing: MATERIAL_PIPELINE_STATUS_VALUES[1],
   materialCompleted: MATERIAL_PIPELINE_STATUS_VALUES[2],
@@ -477,9 +474,9 @@ export const LEARNING_STATUS = {
   uploadFailed: MATERIAL_UPLOAD_ATTEMPT_STATUS_VALUES[3],
   uploadStageUpload: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[0],
   uploadStageExtraction: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[1],
-  uploadStageAnalysis: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[3],
-  uploadStageIndexing: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[4],
-  uploadStagePackBuild: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[5],
+  uploadStageAnalysis: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[2],
+  uploadStageIndexing: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[3],
+  uploadStagePackBuild: MATERIAL_UPLOAD_ATTEMPT_STAGE_VALUES[4],
   studentInterestPrivateToStudentAndAgent: STUDENT_INTEREST_VISIBILITY_VALUES[0],
   sessionActive: LEARNING_SESSION_STATUS_VALUES[0],
   sessionCompleted: LEARNING_SESSION_STATUS_VALUES[1],
@@ -557,8 +554,8 @@ export const LEARNING_LIMITS = {
   assessmentPreviewGroundingMaxUnits: 6,
   attentionGapThreshold: 2,
   defaultLearningOutcomeMasteryThreshold: 70,
-  heuristicTopicOverlapMinimum: 1,
-  heuristicStrongTopicOverlapMinimum: 3,
+  heuristicLessonOverlapMinimum: 1,
+  heuristicStrongLessonOverlapMinimum: 3,
   interestProfileRefreshDays: 30,
   lowConfidenceScoreThreshold: 4,
   normalizedOutcomeMaxOutputTokens: 1_400,
@@ -572,6 +569,6 @@ export const LEARNING_LIMITS = {
   reportingTopItemsLimit: 5,
   strongMasteryPercent: 80,
   teacherChatTitlePreviewLength: 72,
-  topicGroundingPackMaxOutputTokens: 4_800,
+  lessonGroundingPackMaxOutputTokens: 4_800,
   tutoringAttentionMasteryPercent: 60,
 } as const;

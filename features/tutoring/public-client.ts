@@ -1,7 +1,7 @@
 "use client";
 
-export * from "@/features/tutoring/client/api/learning-api";
+export * from "@/features/tutoring/client/api/workspace-api";
 export {
-  learningSessionStateSchema,
+  studentSessionStateSchema,
   teacherProgressReportSchema,
 } from "@/features/tutoring/public-server";

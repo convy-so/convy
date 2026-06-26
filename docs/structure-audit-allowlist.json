@@ -37,7 +37,7 @@
     "shared/ai/prompt-specs.ts",
     "shared/db/schema/surveys.ts",
     "shared/http/page-data.ts",
-    "shared/http/page-data/student-learning-page-data.ts",
+    "shared/http/page-data/student-workspace-page-data.ts",
     "shared/http/page-data/teacher-classroom-page-data.ts",
     "shared/http/page-data/teacher-student-page-data.ts",
     "shared/http/page-data/teacher-topic-page-data.ts",

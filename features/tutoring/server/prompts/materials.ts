@@ -5,7 +5,7 @@ export const MATERIAL_GROUNDING_MAP_MAX_CHARS = 32_000;
 export const MATERIAL_COVERAGE_REVIEW_MAX_CHARS = 24_000;
 
 export function buildMaterialSegmentGroundingPrompt(input: {
-  topicTitle: string;
+  lessonTitle: string;
   materialTitle: string;
   segmentOrder: number;
   headingPath: string[];
@@ -24,33 +24,33 @@ export function buildMaterialSegmentGroundingPrompt(input: {
 
   return `You are extracting grounded teaching facts from one segment of a teacher-uploaded course document.
 
-Topic: ${input.topicTitle}
+Lesson: ${input.lessonTitle}
 Material title: ${input.materialTitle}
 Segment order: ${input.segmentOrder}
 Heading path: ${heading}
 Page range: ${pageLabel}
 
 Segment text:
-${renderUntrustedContextBlock("learning_material_segment", input.segmentText.slice(0, MATERIAL_SEGMENT_MAX_CHARS))}
+${renderUntrustedContextBlock("lesson_material_segment", input.segmentText.slice(0, MATERIAL_SEGMENT_MAX_CHARS))}
 
 Return only facts that are directly supported by this segment.
 
 Rules:
 - Do not infer learning outcomes.
-- Do not judge whether the material is sufficient for the topic.
+- Do not judge whether the material is sufficient for the lesson.
 - Prefer short, concrete extractions over narrative prose.
 - If a category has no evidence, return an empty list.
 - If wording is ambiguous, capture that in ambiguities instead of guessing.`;
 }
 
 export function buildMaterialGroundingMapPrompt(input: {
-  topicTitle: string;
+  lessonTitle: string;
   materialTitle: string;
   groundedSegmentsJson: string;
 }) {
   return `You are compiling a full-document grounding map for one uploaded teaching material.
 
-Topic: ${input.topicTitle}
+Lesson: ${input.lessonTitle}
 Material title: ${input.materialTitle}
 
 Grounded segment data:
@@ -68,8 +68,8 @@ Rules:
 }
 
 export function buildMaterialCoverageReviewPrompt(input: {
-  topicTitle: string;
-  topicDescription?: string | null;
+  lessonTitle: string;
+  lessonDescription?: string | null;
   learningOutcomes: Array<{ title: string; description: string }>;
   materialGroundingMapsJson: string;
 }) {
@@ -77,10 +77,10 @@ export function buildMaterialCoverageReviewPrompt(input: {
     .map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`)
     .join("\n");
 
-  return `You are reviewing whether the uploaded teaching material can ground a tutoring session for the planned topic outcomes.
+  return `You are checking whether the uploaded teaching material can ground a tutoring session for the planned lesson outcomes.
 
-Topic: ${input.topicTitle}
-Description: ${input.topicDescription ?? ""}
+Lesson: ${input.lessonTitle}
+Description: ${input.lessonDescription ?? ""}
 
 Planned learning outcomes:
 ${outcomes || "(none)"}
@@ -88,13 +88,14 @@ ${outcomes || "(none)"}
 Grounding maps derived from the uploaded material:
 ${renderUntrustedContextBlock("material_grounding_maps", input.materialGroundingMapsJson.slice(0, MATERIAL_COVERAGE_REVIEW_MAX_CHARS))}
 
-Return a teacher-facing coverage review.
+Return a teacher-facing coverage analysis.
 
 Rules:
-- Learning outcomes come from the topic plan, not from the source material.
+- Learning outcomes come from the lesson plan, not from the source material.
 - Supported outcomes must be explicitly grounded by the material.
 - Partial outcomes should note where support is incomplete.
 - Unsupported outcomes should only include genuinely ungrounded expectations.
 - Recommended outcome edits are only for vague or unsupported outcomes.
 - Do not invent missing content from the material.`;
 }
+

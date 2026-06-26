@@ -1,4 +1,4 @@
-import { logBraintrustTrace } from "@/shared/ai/braintrust";
+﻿import { logBraintrustTrace } from "@/shared/ai/braintrust";
 import { persistTutorTurnOutcome } from "@/features/tutoring/public-server";
 import { finalizeTutoringSession } from "@/features/tutoring/server/tutoring-session-lifecycle";
 import {
@@ -137,7 +137,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   });
   const formatWarnings = formatTutorResponseWarnings(assistantText);
   logTutoringDebug("turn:finalize:start", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     stepCount: params.result.steps.length,
     assistantText: assistantText ? summarizeTutoringText(assistantText, 180) : null,
@@ -149,7 +149,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   });
   if (!assistantText && assistantParts.length === 0) {
     logTutoringWarn("turn:finalize:empty-assistant-text", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
       stepCount: params.result.steps.length,
     });
@@ -158,7 +158,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
 
   if (formatWarnings.length > 0) {
     logTutoringWarn("turn:finalize:format-warning", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
       formatWarnings,
       assistantText: summarizeTutoringText(assistantText, 180),
@@ -193,7 +193,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     turnCount: params.state.turnCount + 1,
   };
   logTutoringDebug("turn:finalize:next-state", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     turnCount: nextState.turnCount,
     evidenceCount: nextState.recentEvidence.length,
@@ -204,7 +204,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   await measureTutoringStep(
     "turn:finalize:persist",
     {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
       expectedStateVersion: params.expectedStateVersion,
     },
@@ -212,7 +212,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
       await persistTutorTurnOutcome({
         sessionId: params.tutorSessionId,
         classroomStudentId: params.access.classroomStudent.id,
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         assistantText,
         assistantParts,
         assistantMetadata: {
@@ -226,7 +226,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
       }),
   );
   logTutoringDebug("turn:finalize:persisted", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     expectedStateVersion: params.expectedStateVersion,
     durationMs: timer.elapsedMs(),
@@ -236,22 +236,22 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     await measureTutoringStep(
       "turn:finalize:finish-session",
       {
-        topicId: params.topicId,
+        lessonId: params.lessonId,
         tutorSessionId: params.tutorSessionId,
         expectedStateVersion: params.expectedStateVersion + 1,
       },
       async () =>
         await finalizeTutoringSession({
           sessionId: params.tutorSessionId,
-          topicId: params.topicId,
-          classroomId: params.access.topic.classroomId,
+          lessonId: params.lessonId,
+          classroomId: params.access.lesson.classroomId,
           classroomStudentId: params.access.classroomStudent.id,
           studentUserId: params.sessionUserId,
           studentName: params.access.classroomStudent.fullName,
-          topicTitle: params.access.topic.title,
-          courseId: params.access.topic.courseId,
-          courseTitle: params.access.topic.course.title,
-          sourceLocale: params.access.topic.contentLocale,
+          lessonTitle: params.access.lesson.title,
+          courseId: params.access.lesson.courseId,
+          courseTitle: params.access.lesson.course.title,
+          sourceLocale: params.access.lesson.contentLocale,
           summary:
             finishSessionResult.completionRationale ??
             params.state.recentMessageSummary ??
@@ -262,7 +262,7 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
         }),
     );
     logTutoringDebug("turn:finalize:finish-session:completed", {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       tutorSessionId: params.tutorSessionId,
       durationMs: timer.elapsedMs(),
     });
@@ -271,13 +271,13 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
   await logBraintrustTrace({
     event: "tutoring_turn",
     input: {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       sessionId: params.tutorSessionId,
       studentMessage: params.latestUserText,
     },
     output: { tutorMessage: assistantText, steps: params.result.steps.length },
     metadata: {
-      topicId: params.topicId,
+      lessonId: params.lessonId,
       frameworkId: params.prepared.activeFramework.frameworkId,
       materialIds: params.prepared.contentScope.materialIds,
       conflictState:
@@ -289,8 +289,9 @@ export async function finalizeTutoringTurn(params: FinalizeTutoringTurnParams) {
     },
   }).catch(() => undefined);
   logTutoringDebug("turn:finalize:braintrust-trace-requested", {
-    topicId: params.topicId,
+    lessonId: params.lessonId,
     tutorSessionId: params.tutorSessionId,
     durationMs: timer.elapsedMs(),
   });
 }
+

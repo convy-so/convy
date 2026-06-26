@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Loader2, Save } from "lucide-react";
@@ -6,15 +6,15 @@ import toast from "react-hot-toast";
 
 import {
   normalizeLearningOutcomesAction,
-  updateLearningTopicDetailsAction,
+  updateLessonDetailsAction,
 } from "@/app/actions/classroom";
 import { Link } from "@/i18n/routing";
 import {
-  fetchTopicMaterialUploadAttempts,
-  fetchTopicMaterials,
-  retryTopicMaterialUploadAttempt,
-  uploadTopicMaterial,
-  type TopicMaterialUploadAttempt,
+  fetchLessonMaterialUploadAttempts,
+  fetchLessonMaterials,
+  retryLessonMaterialUploadAttempt,
+  uploadLessonMaterial,
+  type LessonMaterialUploadAttempt,
 } from "@/features/tutoring/public-client";
 import { getFriendlyActionError } from "@/shared/http/friendly-action-error";
 import { getSubjectDisplayLabel } from "@/features/tutoring/server/subject-packages";
@@ -31,21 +31,21 @@ import { LessonSetupOutcomesSection } from "./outcomes-section";
 import { LessonSetupScopeSection } from "./scope-section";
 import type {
   LessonSetupPageProps,
-  TopicMaterialListItem,
+  LessonMaterialListItem,
 } from "./lesson-setup-page-model";
 
 export function LessonSetupPage({
   initialData,
   initialMaterials,
 }: LessonSetupPageProps) {
-  const { topic, classroom } = initialData.data;
-  const sourceBoundary = topic.sourceBoundary ?? {
+  const { lesson, classroom } = initialData.data;
+  const sourceBoundary = lesson.sourceBoundary ?? {
     teacherSummary: "",
     scopeNotes: [],
     notationNotes: [],
     rigorNotes: [],
   };
-  const initialMaterialList: TopicMaterialListItem[] = (initialMaterials.data ?? []).map(
+  const initialMaterialList: LessonMaterialListItem[] = (initialMaterials.data ?? []).map(
     (material) => ({
       id: material.id,
       title: material.title,
@@ -62,20 +62,20 @@ export function LessonSetupPage({
     }),
   );
 
-  const [title, setTitle] = useState(topic.title);
-  const [description, setDescription] = useState(topic.description);
+  const [title, setTitle] = useState(lesson.title);
+  const [description, setDescription] = useState(lesson.description);
   const [rawOutcomeNotes, setRawOutcomeNotes] = useState(
-    formatOutcomesForNotes(topic.learningOutcomes ?? []),
+    formatOutcomesForNotes(lesson.learningOutcomes ?? []),
   );
   const [outcomeReviewNotes, setOutcomeReviewNotes] = useState<string[]>([]);
   const [scopeNotes, setScopeNotes] = useState(
     (sourceBoundary.scopeNotes ?? []).join("\n"),
   );
-  const [materials, setMaterials] = useState<TopicMaterialListItem[]>(initialMaterialList);
+  const [materials, setMaterials] = useState<LessonMaterialListItem[]>(initialMaterialList);
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialDescription, setMaterialDescription] = useState("");
   const [materialFiles, setMaterialFiles] = useState<File[]>([]);
-  const [uploadAttempts, setUploadAttempts] = useState<TopicMaterialUploadAttempt[]>([]);
+  const [uploadAttempts, setUploadAttempts] = useState<LessonMaterialUploadAttempt[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -83,8 +83,8 @@ export function LessonSetupPage({
   const [isGeneratingOutcomes, setIsGeneratingOutcomes] = useState(false);
 
   const subjectName = useMemo(
-    () => topic.courseTitle ?? getSubjectDisplayLabel(null),
-    [topic.courseTitle],
+    () => lesson.courseTitle ?? getSubjectDisplayLabel(null),
+    [lesson.courseTitle],
   );
   const visibleUploadAttempts = uploadAttempts.filter(
     (attempt) => attempt.status !== "succeeded",
@@ -93,20 +93,20 @@ export function LessonSetupPage({
   useEffect(() => {
     let cancelled = false;
 
-    void fetchTopicMaterialUploadAttempts(topic.id)
+    void fetchLessonMaterialUploadAttempts(lesson.id)
       .then((result) => {
         if (!cancelled) {
           setUploadAttempts(result.data);
         }
       })
       .catch((err) => {
-        console.warn("[topic-setup] failed to load material upload attempts", err);
+        console.warn("[lesson-setup] failed to load material upload attempts", err);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [topic.id]);
+  }, [lesson.id]);
 
   useEffect(() => {
     if (
@@ -120,8 +120,8 @@ export function LessonSetupPage({
     const refreshUploads = async () => {
       try {
         const [attemptResult, materialResult] = await Promise.all([
-          fetchTopicMaterialUploadAttempts(topic.id),
-          fetchTopicMaterials(topic.id),
+          fetchLessonMaterialUploadAttempts(lesson.id),
+          fetchLessonMaterials(lesson.id),
         ]);
 
         setUploadAttempts(attemptResult.data);
@@ -142,7 +142,7 @@ export function LessonSetupPage({
           })),
         );
       } catch (err) {
-        console.warn("[topic-setup] failed to refresh material upload state", err);
+        console.warn("[lesson-setup] failed to refresh material upload state", err);
       }
     };
 
@@ -151,20 +151,20 @@ export function LessonSetupPage({
     }, 2500);
 
     return () => window.clearInterval(interval);
-  }, [topic.id, uploadAttempts]);
+  }, [lesson.id, uploadAttempts]);
 
   const handleRetryAttempt = async (attemptId: string) => {
     setRetryingAttemptId(attemptId);
 
     try {
-      const result = await retryTopicMaterialUploadAttempt({
-        topicId: topic.id,
+      const result = await retryLessonMaterialUploadAttempt({
+        lessonId: lesson.id,
         attemptId,
       });
 
       const [attemptResult, materialResult] = await Promise.all([
-        fetchTopicMaterialUploadAttempts(topic.id),
-        fetchTopicMaterials(topic.id),
+        fetchLessonMaterialUploadAttempts(lesson.id),
+        fetchLessonMaterials(lesson.id),
       ]);
 
       setUploadAttempts(attemptResult.data);
@@ -216,9 +216,9 @@ export function LessonSetupPage({
 
     try {
       const result = await normalizeLearningOutcomesAction({
-        topicId: topic.id,
+        lessonId: lesson.id,
         rawNotes: notes,
-        title: title.trim() || topic.title,
+        title: title.trim() || lesson.title,
         description: description.trim() || "",
       });
 
@@ -256,8 +256,8 @@ export function LessonSetupPage({
         );
       }
 
-      const result = await updateLearningTopicDetailsAction({
-        topicId: topic.id,
+      const result = await updateLessonDetailsAction({
+        lessonId: lesson.id,
         title: title.trim(),
         description: description.trim() || "",
         learningOutcomes: normalizedOutcomes,
@@ -295,8 +295,8 @@ export function LessonSetupPage({
     setError(null);
 
     try {
-      const result = await uploadTopicMaterial({
-        topicId: topic.id,
+      const result = await uploadLessonMaterial({
+        lessonId: lesson.id,
         files: materialFiles,
         title: materialTitle.trim() || undefined,
         description: materialDescription.trim() || undefined,
@@ -337,7 +337,7 @@ export function LessonSetupPage({
   return (
     <div className="mx-auto max-w-[980px] space-y-8 px-2 pb-12">
       <Link
-        href="/dashboard/learning"
+        href="/dashboard/teaching"
         className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-950"
       >
         <div className="rounded-lg border border-slate-200 bg-white p-1.5">
@@ -356,7 +356,7 @@ export function LessonSetupPage({
             <span>&bull;</span>
             <span>{subjectName}</span>
             <span>&bull;</span>
-            <span className="capitalize">{topic.status}</span>
+            <span className="capitalize">{lesson.status}</span>
           </div>
           <p className="max-w-3xl text-sm leading-6 text-slate-500">
             Define what this session should cover, upload the supporting learning material,
@@ -418,7 +418,7 @@ export function LessonSetupPage({
 
         <div className="flex items-center justify-end gap-3">
           <Link
-            href="/dashboard/learning"
+            href="/dashboard/teaching"
             className="px-3 py-2 text-sm font-medium text-slate-500 transition hover:text-slate-900"
           >
             Cancel
@@ -447,3 +447,4 @@ export function LessonSetupPage({
     </div>
   );
 }
+

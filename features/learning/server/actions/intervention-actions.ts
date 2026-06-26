@@ -1,11 +1,11 @@
-
+﻿
 "use server";
 
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb } from "@/shared/db";
-import { classroomStudents, learningTopics } from "@/shared/db/schema";
+import { classroomStudents, lessons } from "@/shared/db/schema";
 import * as InterventionService from "@/features/tutoring/server/intervention-service";
 import {
   ActionResult,
@@ -29,7 +29,7 @@ import {
 const learningInterventionSchema = z.object({
   classroomId: z.string().min(1),
   classroomStudentId: z.string().min(1),
-  topicId: z.string().min(1).optional(),
+  lessonId: z.string().min(1).optional(),
   interventionType: z.enum(LEARNING_INTERVENTION_TYPE_VALUES),
   priority: z.enum(LEARNING_PRIORITY_VALUES),
   title: z.string().trim().min(3),
@@ -61,17 +61,17 @@ export async function createLearningInterventionAction(input: unknown): Promise<
       throw new NotFoundError("Student");
     }
 
-    if (body.topicId) {
-      const topic = await getDb().query.learningTopics.findFirst({
+    if (body.lessonId) {
+      const lesson = await getDb().query.lessons.findFirst({
         where: and(
-          eq(learningTopics.id, body.topicId),
-          eq(learningTopics.classroomId, body.classroomId),
+          eq(lessons.id, body.lessonId),
+          eq(lessons.classroomId, body.classroomId),
         ),
       });
 
-      if (!topic) {
+      if (!lesson) {
         throw new ActionError(
-          "Topic does not belong to the selected classroom",
+          "Lesson does not belong to the selected classroom",
           "VALIDATION_ERROR",
         );
       }
@@ -108,3 +108,4 @@ export async function updateLearningInterventionAction(input: unknown): Promise<
     return { success: true, data: result };
   }, "updateLearningInterventionAction");
 }
+
