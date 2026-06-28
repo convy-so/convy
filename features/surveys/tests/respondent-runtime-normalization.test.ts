@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { normalizeRespondentTurnPayload } from "@/features/surveys/server/respondent-runtime-models";
+import { normalizeRespondentTurnPayload } from "@/features/surveys/server/respondent-runtime-service";
 
 function run() {
   const payload = normalizeRespondentTurnPayload({

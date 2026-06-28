@@ -9,8 +9,10 @@ import {
 } from "@/shared/db/schema";
 import type {
   StudentInterestProfile,
+} from "@/features/tutoring/server/lesson-foundation-schemas";
+import type {
   TeacherProgressReport,
-} from "@/features/tutoring/public-server";
+} from "@/features/tutoring/server/student-session-schemas";
 import {
   TUTORING_DEFAULT_LOCALE,
   TUTORING_STATUS,

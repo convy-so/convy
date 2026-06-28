@@ -16,12 +16,11 @@ import {
   isSurveyTone,
   type SurveySessionType,
 } from "@/shared/surveys/constants";
-
-const log = createLogger("refinement");
-
-import { buildCoveragePlan } from "./creation-workflow";
+import { buildCoveragePlan } from "./creation-workflow/brief-extraction";
 import type { SampleConductingProfile, SampleRequestedChange } from "./sample-feedback";
 import type { CoveragePlan, ResearchBrief } from "./types";
+
+const log = createLogger("refinement");
 
 export {
   refinementMessageSchema,

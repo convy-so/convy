@@ -20,7 +20,7 @@ import {
 import { selectGroundingUnitsForPrompt } from "@/features/tutoring/server/grounding-units";
 import { renderGroundingUnits } from "@/features/tutoring/server/prompt-serializers";
 import { getStudentTutoringAccess } from "@/features/tutoring/server/access";
-import { contentScopeService } from "@/features/tutoring/server/content-scope-service";
+import { buildLessonContentScopeFromPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
 import {
   classifyOutOfSessionQuestion,
   generateOutOfSessionReply,
@@ -215,7 +215,7 @@ export async function askOutOfSessionQuestionAction(
       question: body.message,
     });
 
-    const contentScope = await contentScopeService.buildScopeFromPack({
+    const contentScope = await buildLessonContentScopeFromPack({
       lessonId: body.lessonId,
       sourceBoundary: access.lesson.sourceBoundary ?? {
         teacherSummary: "",

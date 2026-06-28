@@ -20,19 +20,23 @@ import { users } from "./auth";
 import type {
   ExpertFramework,
   ExpertHeuristic,
+} from "@/features/tutoring/server/expert-framework-schemas";
+import type {
+  LearningOutcomeDefinition,
+  LessonSourceBoundary,
   MaterialCoverageReview,
   MaterialGroundingMap,
   MaterialSourceDocument,
-  LearningOutcomeDefinition,
-  StudentSessionState,
-  StudentInteractionType,
   SessionOpeningPlan,
   StudentInterestProfile,
-  TeacherProgressReport,
-  LessonGroundingPack,
-  LessonSourceBoundary,
-} from "@/features/tutoring/public-server";
-import { defaultStudentSessionState } from "@/features/tutoring/public-server";
+  StudentInteractionType,
+} from "@/features/tutoring/server/lesson-foundation-schemas";
+import {
+  defaultStudentSessionState,
+  type LessonGroundingPack,
+  type StudentSessionState,
+  type TeacherProgressReport,
+} from "@/features/tutoring/server/student-session-schemas";
 import {
   EXPERT_CONFLICT_STATUS_VALUES,
   EXPERT_CRYSTALLIZATION_STATUS_VALUES,

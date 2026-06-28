@@ -1,4 +1,4 @@
-import type { SearchResult } from "@/shared/retrieval/search";
+import type { SearchResult } from "@/shared/retrieval/types";
 
 export function buildRerankerFallbackSystemPrompt(
   instruction: string,

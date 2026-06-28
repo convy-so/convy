@@ -2,7 +2,7 @@ import {
   createEmptyExpertFrameworkCapabilityGuidance,
   expertFrameworkSchema,
   type ExpertFramework,
-} from "@/features/tutoring/public-server";
+} from "@/features/tutoring/server/expert-framework-schemas";
 
 export const DEFAULT_DEEP_FRAMEWORK_KEY = "deep-default";
 

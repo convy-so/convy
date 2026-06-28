@@ -2,7 +2,7 @@ import { and, desc, eq, ne } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
 import { courses, expertFrameworks } from "@/shared/db/schema";
-import type { ExpertFramework } from "@/features/tutoring/public-server";
+import type { ExpertFramework } from "@/features/tutoring/server/expert-framework-schemas";
 import {
   EXPERT_FRAMEWORK_STATUS_VALUES,
   TUTORING_STATUS,
