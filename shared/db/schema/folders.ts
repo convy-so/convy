@@ -3,7 +3,6 @@ import { relations } from "drizzle-orm";
 
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { surveys } from "./surveys";
 
 export const folders = pgTable(
   "folders",
@@ -24,10 +23,9 @@ export const folders = pgTable(
   ],
 );
 
-export const foldersRelations = relations(folders, ({ one, many }) => ({
+export const foldersRelations = relations(folders, ({ one }) => ({
   user: one(users, {
     fields: [folders.userId],
     references: [users.id],
   }),
-  surveys: many(surveys),
 }));

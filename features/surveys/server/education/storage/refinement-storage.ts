@@ -13,7 +13,7 @@ import type {
   RefinementMessage,
   RefinementProposal,
   ResearchBriefPatch,
-} from "../refinement";
+} from "../refinement-schemas";
 
 export async function getOrCreateRefinementThread(params: {
   surveyId: string;

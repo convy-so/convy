@@ -17,7 +17,7 @@ import {
   buildCreationControllerSystemPrompt,
 } from "./prompts/creation-workflow";
 import { classifyEducationProgramHeuristically, getEducationProgram, listEducationPrograms } from "./catalog";
-import { replaceCoveragePlan, upsertResearchBrief } from "./storage";
+import { replaceCoveragePlan, upsertResearchBrief } from "./storage/brief-storage";
 import {
   EDUCATION_PROGRAM_IDS,
   type CreationControllerState,

@@ -2,10 +2,10 @@ import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 
+import { flashLiteModel } from "@/shared/ai/language-models";
 import { getDb } from "@/shared/db";
 import { documentEmbeddings } from "@/shared/db/schema/vectors";
-import { flashLiteModel } from "@/shared/ai";
-import type { SupportedLanguage } from "@/features/surveys/public-server";
+import type { AppLocale } from "@/shared/i18n/config";
 import { generateEmbedding } from "./embeddings";
 import {
   LANG_TO_PG_CONFIG,
@@ -16,30 +16,9 @@ import {
   vectorSimilaritySql,
 } from "./core";
 import { rerank } from "./reranker";
+import type { SearchFilters, SearchResult } from "./types";
 
-// â”€â”€â”€ Public Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-export interface SearchFilters {
-  surveyId?: string;
-  sourceType?: ("response" | "insight" | "analytics" | "document")[];
-  minDate?: Date;
-  limit?: number;
-  language?: SupportedLanguage;
-  sessionType?: "sample" | "live";
-}
-
-export interface SearchResult {
-  id: string;
-  content: string;
-  retrievalContent?: string;
-  score: number;
-  metadata: Record<string, unknown>;
-  sourceType: string;
-  sourceId?: string;
-  createdAt: Date;
-}
-
-// â”€â”€â”€ Internal Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+type SupportedLanguage = AppLocale;
 
 function normalizeMetadata(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null) return {};
@@ -50,8 +29,6 @@ function getPgLanguage(lang?: string): PgLanguage {
   return LANG_TO_PG_CONFIG[lang ?? "en"] ?? "english";
 }
 
-// â”€â”€â”€ Core Search Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 /**
  * Pure vector (HNSW) search over survey document embeddings.
  * Returns results sorted by cosine similarity, highest first.
@@ -60,8 +37,8 @@ export async function vectorSearch(
   query: string,
   filters: SearchFilters = {},
 ): Promise<SearchResult[]> {
-  const embedding = await generateEmbedding(query, { 
-    surveyId: filters.surveyId
+  const embedding = await generateEmbedding(query, {
+    surveyId: filters.surveyId,
   });
   const limit = filters.limit ?? 20;
   const queryVector = JSON.stringify(embedding);
@@ -92,15 +69,15 @@ export async function vectorSearch(
     .orderBy(sql`${documentEmbeddings.embedding} <=> ${queryVector}::vector ASC`)
     .limit(limit);
 
-  return rows.map((r) => ({
-    id: r.id,
-    content: r.content,
-    retrievalContent: r.retrievalContent,
-    score: r.score,
-    metadata: normalizeMetadata(r.metadata),
-    sourceType: r.sourceType,
-    sourceId: r.sourceId ?? undefined,
-    createdAt: r.createdAt,
+  return rows.map((row) => ({
+    id: row.id,
+    content: row.content,
+    retrievalContent: row.retrievalContent,
+    score: row.score,
+    metadata: normalizeMetadata(row.metadata),
+    sourceType: row.sourceType,
+    sourceId: row.sourceId ?? undefined,
+    createdAt: row.createdAt,
   }));
 }
 
@@ -143,21 +120,21 @@ export async function fullTextSearch(
     .orderBy(desc(rankSql))
     .limit(limit);
 
-  return rows.map((r) => ({
-    id: r.id,
-    content: r.content,
-    retrievalContent: r.retrievalContent,
-    score: r.score,
-    metadata: normalizeMetadata(r.metadata),
-    sourceType: r.sourceType,
-    sourceId: r.sourceId ?? undefined,
-    createdAt: r.createdAt,
+  return rows.map((row) => ({
+    id: row.id,
+    content: row.content,
+    retrievalContent: row.retrievalContent,
+    score: row.score,
+    metadata: normalizeMetadata(row.metadata),
+    sourceType: row.sourceType,
+    sourceId: row.sourceId ?? undefined,
+    createdAt: row.createdAt,
   }));
 }
 
 /**
  * Hybrid search: vector + BM25 fused with RRF.
- * Does NOT rerank â€” use `executeRAGQuery` for the full pipeline with reranking.
+ * Does not rerank; use executeRAGQuery for the full pipeline with reranking.
  */
 export async function hybridSearch(
   query: string,
@@ -175,12 +152,12 @@ export async function hybridSearch(
 
 /**
  * Full RAG query pipeline:
- *   1. HyDE query expansion (generate a hypothetical answer + 3 variants).
+ *   1. HyDE query expansion.
  *   2. Parallel hybrid search across all query variants.
  *   3. Global RRF fusion of all partial results.
- *   4. Voyage rerank-2 (LLM fallback) over the candidate pool.
+ *   4. Reranking over the candidate pool.
  *
- * Requires `surveyId` for safety â€” survey data is tenant-scoped.
+ * Requires surveyId for safety because survey data is tenant-scoped.
  */
 export async function executeRAGQuery(
   rawQuery: string,
@@ -247,33 +224,34 @@ export async function executeRAGQuery(
     // Non-fatal: fall through with just the raw query.
   }
 
-  // Collect partial results from all query variants in parallel.
   const allVector: SearchResult[] = [...initialVectorResults];
   const allText: SearchResult[] = [...initialTextResults];
 
   await Promise.all(
-    queriesToRun.slice(1).map(async (q) => {
-      const [v, t] = await Promise.all([
-        vectorSearch(q, { ...filters, limit: fetchLimit * 2, language }),
-        fullTextSearch(q, { ...filters, limit: fetchLimit * 2 }, language),
+    queriesToRun.slice(1).map(async (queryVariant) => {
+      const [vectorResults, textResults] = await Promise.all([
+        vectorSearch(queryVariant, { ...filters, limit: fetchLimit * 2, language }),
+        fullTextSearch(queryVariant, { ...filters, limit: fetchLimit * 2 }, language),
       ]);
-      allVector.push(...v);
-      allText.push(...t);
+      allVector.push(...vectorResults);
+      allText.push(...textResults);
     }),
   );
 
-  const candidatePool = buildRRFCandidatePool(allVector, allText, fetchLimit * 10).map((r) => ({
-    ...r,
-    content: r.retrievalContent ?? r.content,
-  }));
+  const candidatePool = buildRRFCandidatePool(allVector, allText, fetchLimit * 10).map(
+    (result) => ({
+      ...result,
+      content: result.retrievalContent ?? result.content,
+    }),
+  );
 
   const reranked = await rerank(rawQuery, candidatePool, fetchLimit, {
     surveyId: filters.surveyId,
     feature: "rag-query",
   });
 
-  return reranked.map((r) => {
-    r.content = `[Source ID: ${r.id}] Context chunk:\n${r.content}`;
-    return r;
+  return reranked.map((result) => {
+    result.content = `[Source ID: ${result.id}] Context chunk:\n${result.content}`;
+    return result;
   });
 }

@@ -1,6 +1,6 @@
-import { contentScopeService } from "@/features/tutoring/server/content-scope-service";
 import { buildStudentTeachingPlaybook } from "@/features/tutoring/server/pattern-memory-service";
-import { tutoringPromptService } from "@/features/tutoring/server/tutoring-prompt-service";
+import { buildStudentTurnPromptRuntime } from "@/features/tutoring/server/prompts/student-turn";
+import { buildLessonContentScopeFromPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
 import { getCachedLessonWithMaterials } from "@/features/tutoring/public-server";
 import { getCachedActiveFrameworkBundleForLesson } from "@/features/tutoring/server/framework-runtime-storage";
 import {
@@ -69,7 +69,7 @@ export class TutorRuntimeService {
         packVersion,
       },
       async () =>
-        await contentScopeService.buildScopeFromPack({
+        await buildLessonContentScopeFromPack({
           lessonId: params.lessonId,
           sourceBoundary: params.sourceBoundary,
           contentLocale: params.studyLanguage,
@@ -113,7 +113,7 @@ export class TutorRuntimeService {
           studyLanguage: params.studyLanguage,
         },
         async () =>
-          await contentScopeService.buildScopeFromPack({
+          await buildLessonContentScopeFromPack({
             lessonId: params.lessonId,
             sourceBoundary: params.sourceBoundary,
             contentLocale: params.studyLanguage,
@@ -240,7 +240,7 @@ export class TutorRuntimeService {
       durationMs: timer.elapsedMs(),
     });
 
-    const systemPrompt = tutoringPromptService.buildStudentTurnPrompt({
+    const systemPrompt = buildStudentTurnPromptRuntime({
       contentScope,
       activeFramework,
       interestProfile: params.interestProfile,

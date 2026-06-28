@@ -1,18 +1,18 @@
 import { voyage } from "@ai-sdk/voyage";
 import { generateText, Output, rerank as aiRerank } from "ai";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 
-import { SearchResult } from "./search";
-import { logUsage, type UsageLogInput } from "../billing/logger";
-import { flashLiteModel } from "../ai";
+import { flashLiteModel } from "@/shared/ai/language-models";
 import { env } from "@/shared/config/server-env";
+import { createLogger, serializeError } from "@/shared/infra/logger";
+import { requireValue } from "@/shared/utils/collections";
+import { logUsage, type UsageLogInput } from "../billing/logger";
 import {
   buildRerankerFallbackSystemPrompt,
   buildRerankerFallbackUserPrompt,
 } from "./prompts/reranker";
-import * as Sentry from "@sentry/nextjs";
-import { createLogger, serializeError } from "@/shared/infra/logger";
-import { requireValue } from "@/shared/utils/collections";
+import type { SearchResult } from "./types";
 
 const voyageRerankingModel = voyage.reranking("rerank-2.5-lite");
 

@@ -22,7 +22,7 @@ import {
   isLegacyExpertFrameworkCapabilityGuidance,
   type ActiveExpertFramework,
   type ExpertFramework,
-} from "@/features/tutoring/public-server";
+} from "@/features/tutoring/server/expert-framework-schemas";
 import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
 

@@ -32,7 +32,7 @@ import {
 } from "@/shared/retrieval/core";
 import { generateEmbedding } from "@/shared/retrieval/embeddings";
 import { rerank } from "@/shared/retrieval/reranker";
-import type { SearchResult } from "@/shared/retrieval/search";
+import type { SearchResult } from "@/shared/retrieval/types";
 import { createLogger, serializeError } from "@/shared/infra/logger";
 
 const log = createLogger("few-shot-library");
