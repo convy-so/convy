@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { unstable_cache } from "next/cache";
 
 import { getDb } from "@/shared/db";
+import { cache } from "@/shared/infra/cache";
 import {
   studentSessionMessages,
   studentSessions,
@@ -36,14 +36,12 @@ export async function getLessonWithMaterials(lessonId: string) {
   });
 }
 
-const cachedGetLessonWithMaterials = unstable_cache(
-  async (lessonId: string) => await getLessonWithMaterials(lessonId),
-  ["lesson-with-materials"],
-  { revalidate: 60 },
-);
-
 export async function getCachedLessonWithMaterials(lessonId: string) {
-  return await cachedGetLessonWithMaterials(lessonId);
+  return await cache.wrap(
+    `tutoring:lesson-with-materials:${lessonId}`,
+    async () => await getLessonWithMaterials(lessonId),
+    60,
+  );
 }
 
 export async function createStudentSession(params: {

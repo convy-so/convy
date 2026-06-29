@@ -10,19 +10,12 @@ type BraintrustTraceInput = {
   scores?: Record<string, number>;
 };
 
-let cachedLogger: ReturnType<typeof initLogger> | null = null;
-
 function getBraintrustLogger(): ReturnType<typeof initLogger> | null {
   const projectName = env.BRAINTRUST_PROJECT_NAME;
   if (!projectName) {
     return null;
   }
-
-  if (!cachedLogger) {
-    cachedLogger = initLogger({ projectName });
-  }
-
-  return cachedLogger;
+  return initLogger({ projectName });
 }
 
 export async function logBraintrustTrace(input: BraintrustTraceInput) {

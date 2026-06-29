@@ -1,31 +1,13 @@
-﻿import { unstable_cache } from "next/cache";
-
 import {
   buildTeachingPlaybook,
   deriveSubjectInfo,
 } from "@/features/tutoring/server/patterns";
 import { createTutoringTimer } from "@/features/tutoring/public-server";
+import { cache } from "@/shared/infra/cache";
 
 import type { TeachingPlaybookResult } from "./model";
 import { log } from "./model";
 import { summarizeStudentPatternMemory } from "./summarize";
-
-const cachedBuildStudentTeachingPlaybook = unstable_cache(
-  async (
-    studentUserId: string,
-    subjectKey: string | null,
-    subjectLabel: string | null,
-  ) =>
-    await buildStudentTeachingPlaybookImpl({
-      studentUserId,
-      subjectKey,
-      subjectLabel,
-      lessonLocalGaps: [],
-      lessonLocalUsedExamples: [],
-    }),
-  ["student-teaching-playbook"],
-  { revalidate: 300 },
-);
 
 export async function buildStudentTeachingPlaybook(params: {
   studentUserId: string;
@@ -38,10 +20,22 @@ export async function buildStudentTeachingPlaybook(params: {
     (params.lessonLocalGaps?.length ?? 0) === 0 &&
     (params.lessonLocalUsedExamples?.length ?? 0) === 0
   ) {
-    return await cachedBuildStudentTeachingPlaybook(
-      params.studentUserId,
-      params.subjectKey ?? null,
-      params.subjectLabel ?? null,
+    return await cache.wrap(
+      [
+        "tutoring:teaching-playbook",
+        params.studentUserId,
+        params.subjectKey ?? "global",
+        params.subjectLabel ?? "global",
+      ].join(":"),
+      async () =>
+        await buildStudentTeachingPlaybookImpl({
+          studentUserId: params.studentUserId,
+          subjectKey: params.subjectKey ?? null,
+          subjectLabel: params.subjectLabel ?? null,
+          lessonLocalGaps: [],
+          lessonLocalUsedExamples: [],
+        }),
+      300,
     );
   }
 
@@ -103,4 +97,3 @@ async function buildStudentTeachingPlaybookImpl(params: {
     memoryState: summaries.memoryState,
   };
 }
-

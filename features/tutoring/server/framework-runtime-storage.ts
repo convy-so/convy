@@ -1,8 +1,8 @@
 import { and, asc, eq, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { unstable_cache } from "next/cache";
 
 import { getDb } from "@/shared/db";
+import { cache } from "@/shared/infra/cache";
 import {
   expertConflicts,
   expertCrystallizations,
@@ -10,21 +10,21 @@ import {
   lessons,
 } from "@/shared/db/schema";
 import { getCourseById } from "@/features/tutoring/server/course-service";
-import { createEmptyExpertFramework } from "@/features/tutoring/server/framework-presets";
 import {
   getFrameworkRecord,
   listFrameworkRecords,
   type FrameworkRecord,
 } from "@/features/tutoring/server/framework-records";
 import {
-  activeExpertFrameworkSchema,
+  activeExpertGuidanceBundleSchema,
   expertFrameworkSchema,
-  isLegacyExpertFrameworkCapabilityGuidance,
-  type ActiveExpertFramework,
+  type ActiveExpertGuidanceBundle,
   type ExpertFramework,
 } from "@/features/tutoring/server/expert-framework-schemas";
 import { TUTORING_STATUS } from "@/shared/tutoring/constants";
 import { requireValue } from "@/shared/utils/collections";
+
+export const FRAMEWORK_WRITE_FORBIDDEN_ERROR = "FRAMEWORK_WRITE_FORBIDDEN";
 
 export async function getCourseFrameworks(courseId: string, includeArchived = false) {
   return await listFrameworkRecords({ courseId, includeArchived });
@@ -44,6 +44,7 @@ export async function getActiveFrameworkForCourse(courseId: string) {
 
 export async function createExpertFrameworkForCourse(params: {
   courseId: string;
+  createdByUserId: string;
   name: string;
   description?: string;
 }) {
@@ -52,7 +53,7 @@ export async function createExpertFrameworkForCourse(params: {
     throw new Error("Course not found");
   }
 
-  const artifact = createEmptyExpertFramework({
+  const initialDraftFramework = expertFrameworkSchema.parse({
     name: params.name,
     description: params.description ?? "",
   });
@@ -62,11 +63,9 @@ export async function createExpertFrameworkForCourse(params: {
     .values({
       id: nanoid(),
       courseId: course.id,
-      name: params.name,
-      description: params.description ?? null,
+      createdByUserId: params.createdByUserId,
       status: TUTORING_STATUS.frameworkDraft,
-      seedSource: TUTORING_STATUS.frameworkSeedExpertAuthored,
-      draftFramework: artifact,
+      draftFramework: initialDraftFramework,
       liveFramework: null,
       archivedAt: null,
       createdAt: new Date(),
@@ -78,12 +77,16 @@ export async function createExpertFrameworkForCourse(params: {
 }
 
 export async function updateFrameworkDraft(params: {
+  actorUserId: string;
   frameworkId: string;
   draftFramework: ExpertFramework;
 }) {
   const framework = await getFrameworkById(params.frameworkId);
   if (!framework) {
     throw new Error("Framework not found");
+  }
+  if (framework.createdByUserId !== params.actorUserId) {
+    throw new Error(FRAMEWORK_WRITE_FORBIDDEN_ERROR);
   }
   if (framework.status === TUTORING_STATUS.frameworkArchived) {
     throw new Error("ARCHIVED_FRAMEWORK_READ_ONLY");
@@ -93,8 +96,6 @@ export async function updateFrameworkDraft(params: {
   const [updated] = await getDb()
     .update(expertFrameworks)
     .set({
-      name: draftFramework.name,
-      description: draftFramework.description || null,
       draftFramework,
       updatedAt: new Date(),
     })
@@ -105,18 +106,21 @@ export async function updateFrameworkDraft(params: {
 }
 
 export async function activateFramework(params: {
+  actorUserId: string;
   frameworkId: string;
-  activatedByUserId: string;
 }) {
   const framework = await getFrameworkById(params.frameworkId);
   if (!framework) {
     throw new Error("Framework not found");
   }
+  if (framework.createdByUserId !== params.actorUserId) {
+    throw new Error(FRAMEWORK_WRITE_FORBIDDEN_ERROR);
+  }
   if (framework.status === TUTORING_STATUS.frameworkArchived) {
     throw new Error("ARCHIVED_FRAMEWORK_READ_ONLY");
   }
 
-  const artifact = expertFrameworkSchema.parse(framework.draftFramework);
+  const liveFrameworkSnapshot = expertFrameworkSchema.parse(framework.draftFramework);
 
   return await getDb().transaction(async (tx) => {
     await tx
@@ -135,12 +139,9 @@ export async function activateFramework(params: {
     const [updated] = await tx
       .update(expertFrameworks)
       .set({
-        name: artifact.name,
-        description: artifact.description || null,
         status: TUTORING_STATUS.frameworkActive,
-        liveFramework: artifact,
+        liveFramework: liveFrameworkSnapshot,
         activatedAt: new Date(),
-        activatedByUserId: params.activatedByUserId,
         updatedAt: new Date(),
       })
       .where(eq(expertFrameworks.id, framework.id))
@@ -150,10 +151,13 @@ export async function activateFramework(params: {
   });
 }
 
-export async function archiveFramework(frameworkId: string) {
+export async function archiveFramework(frameworkId: string, actorUserId: string) {
   const framework = await getFrameworkById(frameworkId);
   if (!framework) {
     throw new Error("Framework not found");
+  }
+  if (framework.createdByUserId !== actorUserId) {
+    throw new Error(FRAMEWORK_WRITE_FORBIDDEN_ERROR);
   }
   if (framework.status === TUTORING_STATUS.frameworkActive) {
     throw new Error("ACTIVE_FRAMEWORK_CANNOT_BE_ARCHIVED");
@@ -172,10 +176,13 @@ export async function archiveFramework(frameworkId: string) {
   return requireValue(updated, "Failed to archive framework.");
 }
 
-export async function deleteDraftFramework(frameworkId: string) {
+export async function deleteDraftFramework(frameworkId: string, actorUserId: string) {
   const framework = await getFrameworkById(frameworkId);
   if (!framework) {
     throw new Error("Framework not found");
+  }
+  if (framework.createdByUserId !== actorUserId) {
+    throw new Error(FRAMEWORK_WRITE_FORBIDDEN_ERROR);
   }
   if (
     framework.status !== TUTORING_STATUS.frameworkDraft ||
@@ -222,7 +229,7 @@ export async function listOpenConflicts(params: { lessonId: string }) {
 
 export async function getActiveFrameworkBundleForLesson(
   lessonId: string,
-): Promise<ActiveExpertFramework> {
+): Promise<ActiveExpertGuidanceBundle> {
   const lesson = await getDb().query.lessons.findFirst({
     where: eq(lessons.id, lessonId),
   });
@@ -245,16 +252,6 @@ export async function getActiveFrameworkBundleForLesson(
     framework.liveFramework,
   );
   if (!parsedLiveFramework.success) {
-    const rawCapabilityGuidance =
-      typeof framework.liveFramework === "object" && framework.liveFramework !== null
-        ? (framework.liveFramework as Record<string, unknown>).capabilityGuidance
-        : undefined;
-    if (isLegacyExpertFrameworkCapabilityGuidance(rawCapabilityGuidance)) {
-      throw new Error(
-        "The active expert framework still uses the retired capability format. An expert must re-author its capability settings and reactivate it before tutoring can continue.",
-      );
-    }
-
     throw new Error(
       parsedLiveFramework.error.errors[0]?.message ??
         "The active expert framework is invalid. An expert must reactivate a valid framework before tutoring can continue.",
@@ -275,7 +272,7 @@ export async function getActiveFrameworkBundleForLesson(
       .filter((value): value is string => Boolean(value)),
   );
 
-  return activeExpertFrameworkSchema.parse({
+  return activeExpertGuidanceBundleSchema.parse({
     frameworkId: framework.id,
     framework: parsedLiveFramework.data,
     heuristics: approvedCrystallizations
@@ -286,23 +283,26 @@ export async function getActiveFrameworkBundleForLesson(
       summary: conflict.summary,
       details: conflict.details ?? null,
     })),
-    seedSource:
-      framework.seedSource === "deep_default" ? "deep_default" : "expert_authored",
   });
 }
 
-const cachedGetActiveFrameworkBundleForLesson = unstable_cache(
-  async (lessonId: string) => await getActiveFrameworkBundleForLesson(lessonId),
-  ["learning-active-framework-bundle-for-lesson"],
-  { revalidate: 60 },
-);
-
 export async function getCachedActiveFrameworkBundleForLesson(lessonId: string) {
-  return await cachedGetActiveFrameworkBundleForLesson(lessonId);
+  return await cache.wrap(
+    `tutoring:active-framework-bundle:${lessonId}`,
+    async () => await getActiveFrameworkBundleForLesson(lessonId),
+    60,
+  );
 }
 
 export function isFrameworkEditable(framework: Pick<FrameworkRecord, "status">) {
   return framework.status !== TUTORING_STATUS.frameworkArchived;
+}
+
+export function canUserManageFramework(
+  framework: Pick<FrameworkRecord, "createdByUserId">,
+  userId: string,
+) {
+  return framework.createdByUserId === userId;
 }
 
 

@@ -3,6 +3,7 @@ import { safeJsonParse } from "@/shared/ai/json-object-parser";
 import { executeRAGQuery } from "@/shared/retrieval/search";
 import { getAnalyticsSnapshotByVersion } from "./storage";
 import { sanitizeUserInput } from "@/shared/ai/sanitization";
+import { cache } from "@/shared/infra/cache";
 import {
   ANALYTICS_CHAT_ANSWER_SYSTEM_PROMPT,
   ANALYTICS_CHAT_CLASSIFIER_SYSTEM_PROMPT,
@@ -12,14 +13,7 @@ import {
 import { createLogger, serializeError } from "@/shared/infra/logger";
 
 const log = createLogger("analytics-chat");
-const ANALYTICS_CLASSIFIER_CACHE_TTL_MS = 5 * 60 * 1000;
-const analyticsClassifierCache = new Map<
-  string,
-  {
-    expiresAt: number;
-    value: ReturnType<typeof parseClassifierResult>;
-  }
->();
+const ANALYTICS_CLASSIFIER_CACHE_TTL_SECONDS = 5 * 60;
 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -100,26 +94,6 @@ function getClassifierCacheKey(surveyId: string, question: string) {
   return `${surveyId}::${question.trim().toLowerCase().replace(/\s+/g, " ")}`;
 }
 
-function readClassifierCache(cacheKey: string) {
-  const cached = analyticsClassifierCache.get(cacheKey);
-  if (!cached) return null;
-  if (cached.expiresAt <= Date.now()) {
-    analyticsClassifierCache.delete(cacheKey);
-    return null;
-  }
-  return cached.value;
-}
-
-function writeClassifierCache(
-  cacheKey: string,
-  value: ReturnType<typeof parseClassifierResult>,
-) {
-  analyticsClassifierCache.set(cacheKey, {
-    expiresAt: Date.now() + ANALYTICS_CLASSIFIER_CACHE_TTL_MS,
-    value,
-  });
-}
-
 function classifyQuestionHeuristically(question: string) {
   const normalizedQuestion = question.toLowerCase();
   if (/compare(?:\s+version)?\s+\d+\s+(?:and|with|to)\s+\d+/.test(normalizedQuestion)) {
@@ -160,51 +134,44 @@ function classifyQuestionHeuristically(question: string) {
  * Classify the user's question to determine retrieval strategy
  */
 export async function classifyQuestionIntent(surveyId: string, question: string) {
-  const cacheKey = getClassifierCacheKey(surveyId, question);
-  const cached = readClassifierCache(cacheKey);
-  if (cached) {
-    return cached ?? {
-      intent: "mixed" as const,
-      needsChart: false,
-      needsTable: false,
-    };
-  }
+  return await cache.wrap(
+    `analytics:question-intent:${getClassifierCacheKey(surveyId, question)}`,
+    async () => {
+      const heuristic = classifyQuestionHeuristically(question);
+      if (heuristic) {
+        return heuristic;
+      }
 
-  const heuristic = classifyQuestionHeuristically(question);
-  if (heuristic) {
-    writeClassifierCache(cacheKey, heuristic);
-    return heuristic;
-  }
+      let raw = "";
+      try {
+        raw = await generateAIResponse(
+          buildAnalyticsChatClassifierUserPrompt(question),
+          ANALYTICS_CHAT_CLASSIFIER_SYSTEM_PROMPT,
+          {
+            model: defaultModel,
+            temperature: 0,
+            maxTokens: 200,
+            attribution: {
+              surveyId,
+              feature: "survey-analytics-chat-classify",
+            },
+          },
+        );
+      } catch (error) {
+        log.error("classifyQuestionIntent failed; using fallback classifier", {
+          survey_id: surveyId,
+          ...serializeError(error),
+        });
+      }
 
-  let raw = "";
-  try {
-    raw = await generateAIResponse(
-      buildAnalyticsChatClassifierUserPrompt(question),
-      ANALYTICS_CHAT_CLASSIFIER_SYSTEM_PROMPT,
-      {
-        model: defaultModel,
-        temperature: 0,
-        maxTokens: 200,
-        attribution: {
-          surveyId,
-          feature: "survey-analytics-chat-classify",
-        },
-      },
-    );
-  } catch (error) {
-    log.error("classifyQuestionIntent failed; using fallback classifier", {
-      survey_id: surveyId,
-      ...serializeError(error),
-    });
-  }
-
-  const result = parseClassifierResult(safeJsonParse(raw)) ?? {
-    intent: "mixed" as const,
-    needsChart: false,
-    needsTable: false,
-  };
-  writeClassifierCache(cacheKey, result);
-  return result;
+      return parseClassifierResult(safeJsonParse(raw)) ?? {
+        intent: "mixed" as const,
+        needsChart: false,
+        needsTable: false,
+      };
+    },
+    ANALYTICS_CLASSIFIER_CACHE_TTL_SECONDS,
+  );
 }
 
 /**

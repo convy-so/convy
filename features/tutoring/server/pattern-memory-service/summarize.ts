@@ -1,11 +1,10 @@
-import { unstable_cache } from "next/cache";
-
 import {
   defaultLearningPatternProfile,
   getPatternConfidenceLabel,
 } from "@/features/tutoring/server/patterns";
 import type { StudentPatternProfile } from "@/features/tutoring/server/pattern-types";
 import { createTutoringTimer, measureTutoringStep } from "@/features/tutoring/public-server";
+import { cache } from "@/shared/infra/cache";
 import { TUTORING_SUBJECT_DEFAULTS } from "@/shared/tutoring/constants";
 
 import {
@@ -68,17 +67,17 @@ function buildProfileFromMemories(params: {
   };
 }
 
-const cachedSummarizeStudentPatternMemory = unstable_cache(
-  async (studentUserId: string) =>
-    await summarizeStudentPatternMemoryImpl({ studentUserId }),
-  ["student-pattern-memory"],
-  { revalidate: 60 },
-);
-
 export async function summarizeStudentPatternMemory(params: {
   studentUserId: string;
 }): Promise<PatternSummaryResult> {
-  return await cachedSummarizeStudentPatternMemory(params.studentUserId);
+  return await cache.wrap(
+    `tutoring:pattern-memory-summary:${params.studentUserId}`,
+    async () =>
+      await summarizeStudentPatternMemoryImpl({
+        studentUserId: params.studentUserId,
+      }),
+    60,
+  );
 }
 
 async function summarizeStudentPatternMemoryImpl(params: {

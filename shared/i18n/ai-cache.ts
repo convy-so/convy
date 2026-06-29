@@ -1,8 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { env } from "@/shared/config/server-env";
 
-const memoryCache = new Map<string, string>();
-
 const redis =
   env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN
     ? new Redis({
@@ -24,7 +22,7 @@ export async function getCachedTranslation(
   const key = `${CACHE_PREFIX}${targetLanguage}:${Buffer.from(text).toString("base64")}`;
   try {
     if (!redis) {
-      return memoryCache.get(key) ?? null;
+      return null;
     }
 
     return await redis.get<string>(key);
@@ -44,7 +42,6 @@ export async function setCachedTranslation(
   const key = `${CACHE_PREFIX}${targetLanguage}:${Buffer.from(text).toString("base64")}`;
   try {
     if (!redis) {
-      memoryCache.set(key, translation);
       return;
     }
 

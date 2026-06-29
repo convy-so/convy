@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
-import { archiveFramework } from "@/features/tutoring/public-server";
+import {
+  archiveFramework,
+  FRAMEWORK_WRITE_FORBIDDEN_ERROR,
+} from "@/features/tutoring/public-server";
 import { apiError } from "@/shared/http/api-error";
 import { handleTutoringRouteError } from "@/features/tutoring/server/route-errors";
 
@@ -13,7 +16,7 @@ export async function POST(
     const expert = await requireExpertSession();
     if ("error" in expert) return expert.error;
     const { frameworkId } = await params;
-    const updated = await archiveFramework(frameworkId);
+    const updated = await archiveFramework(frameworkId, expert.session.user.id);
 
     return NextResponse.json({
       success: true,
@@ -24,6 +27,12 @@ export async function POST(
       },
     });
   } catch (error) {
+    if (error instanceof Error && error.message === FRAMEWORK_WRITE_FORBIDDEN_ERROR) {
+      return apiError(
+        "UNAUTHORIZED",
+        "Only the expert who created this framework can archive it.",
+      );
+    }
     if (
       error instanceof Error &&
       error.message === "ACTIVE_FRAMEWORK_CANNOT_BE_ARCHIVED"
