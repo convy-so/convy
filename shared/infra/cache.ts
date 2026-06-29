@@ -5,7 +5,6 @@ import { parseJsonValue } from "@/shared/http/json";
 
 const log = createLogger("cache");
 
-
 /**
  * Robust Redis Caching Utility
  *
@@ -14,7 +13,6 @@ const log = createLogger("cache");
  */
 
 const DEFAULT_TTL = CACHE_CONFIG.DEFAULT_TTL_SECONDS;
-const inFlightCacheLoads = new Map<string, Promise<unknown>>();
 
 export type DashboardCacheSection =
   | "stats"
@@ -122,30 +120,9 @@ async function wrapCachedValue<T>(
     return cached;
   }
 
-  const inFlight = inFlightCacheLoads.get(key);
-  if (inFlight) {
-    const resolved = await inFlight;
-    if (validator(resolved)) {
-      return resolved;
-    }
-    throw new Error(`Cached value for ${key} did not match the expected shape.`);
-  }
-
-  const pendingLoad = (async () => {
-    const fresh = await fn();
-    await setCachedValue(key, fresh, ttlSeconds);
-    return fresh;
-  })();
-
-  inFlightCacheLoads.set(key, pendingLoad);
-
-  try {
-    return await pendingLoad;
-  } finally {
-    if (inFlightCacheLoads.get(key) === pendingLoad) {
-      inFlightCacheLoads.delete(key);
-    }
-  }
+  const fresh = await fn();
+  await setCachedValue(key, fresh, ttlSeconds);
+  return fresh;
 }
 
 export const cache = {

@@ -374,9 +374,6 @@ export const EXPERT_FRAMEWORK_STATUS_VALUES = [
   "inactive",
   "archived",
 ] as const;
-export const EXPERT_FRAMEWORK_SEED_SOURCE_VALUES = [
-  "expert_authored",
-] as const;
 export const EXPERT_REVIEW_CASE_STATUS_VALUES = [
   "open",
   "crystallized",
@@ -488,7 +485,6 @@ export const TUTORING_STATUS = {
   frameworkActive: EXPERT_FRAMEWORK_STATUS_VALUES[1],
   frameworkInactive: EXPERT_FRAMEWORK_STATUS_VALUES[2],
   frameworkArchived: EXPERT_FRAMEWORK_STATUS_VALUES[3],
-  frameworkSeedExpertAuthored: EXPERT_FRAMEWORK_SEED_SOURCE_VALUES[0],
   reviewCaseOpen: EXPERT_REVIEW_CASE_STATUS_VALUES[0],
   reviewCaseCrystallized: EXPERT_REVIEW_CASE_STATUS_VALUES[1],
   reviewCaseDismissed: EXPERT_REVIEW_CASE_STATUS_VALUES[2],

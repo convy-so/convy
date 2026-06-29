@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
@@ -186,9 +185,9 @@ export async function getStudentMeDataForSession(
   };
 }
 
-export const getStudentMeData = cache(async (): Promise<StudentMeData> => {
+export async function getStudentMeData(): Promise<StudentMeData> {
   return getStudentMeDataForSession(await getVerifiedSession());
-});
+}
 
 async function getMyPatternSummariesForSession(session: VerifiedSession) {
   const summary = await summarizeStudentPatternMemory({
@@ -203,9 +202,9 @@ async function getMyPatternSummariesForSession(session: VerifiedSession) {
   };
 }
 
-export const getMyPatternSummaries = cache(async () => {
+export async function getMyPatternSummaries() {
   return getMyPatternSummariesForSession(await getVerifiedSession());
-});
+}
 
 export async function getOnboardingStateData(authContext?: QueryAuthContext) {
   const session = await resolveQuerySession(authContext);

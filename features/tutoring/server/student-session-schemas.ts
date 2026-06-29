@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  activeExpertFrameworkSchema,
+  activeExpertGuidanceBundleSchema,
 } from "@/features/tutoring/server/expert-framework-schemas";
 import {
   groundingCitationSchema,
@@ -152,7 +152,7 @@ export const studentSessionStateSchema = z.object({
   lessonId: z.string().nullable().default(null),
   lessonTitle: z.string().default(""),
   frameworkId: z.string().nullable().default(null),
-  activeFrameworkSnapshot: activeExpertFrameworkSchema.nullable().default(null),
+  activeFrameworkSnapshot: activeExpertGuidanceBundleSchema.nullable().default(null),
   groundingPackVersion: z.number().int().nonnegative().default(TUTORING_NUMERIC_DEFAULTS.zero),
   contentScopeSnapshot: contentScopeSnapshotSchema.nullable().default(null),
   recentMessageSummary: z.string().default(""),

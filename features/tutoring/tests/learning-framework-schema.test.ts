@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 
-import {
-  expertFrameworkSchema,
-  getIncompleteExpertFrameworkCapabilityIds,
-  hasCompleteExpertFrameworkCapabilityGuidance,
-} from "@/features/tutoring/public-server";
+import { expertFrameworkSchema } from "@/features/tutoring/server/expert-framework-schemas";
 
 function run() {
   const legacyResult = expertFrameworkSchema.safeParse({
@@ -19,7 +15,6 @@ function run() {
     },
     fewShotExamples: [],
     markdownContent: "Teach carefully.",
-    metadata: {},
   });
   assert.equal(legacyResult.success, false);
 
@@ -38,9 +33,27 @@ function run() {
     },
     fewShotExamples: [],
     markdownContent: "",
-    metadata: {},
   });
   assert.equal(invalidMediaLimitResult.success, false);
+
+  const legacyExampleResult = expertFrameworkSchema.safeParse({
+    name: "Legacy examples",
+    description: "",
+    capabilityGuidance: {
+      finish_session: {
+        policy: "Finish only with evidence and a concrete next step.",
+      },
+    },
+    fewShotExamples: [
+      {
+        title: "Factor check",
+        studentMessage: "I think it is x+2 and x+2.",
+        tutorResponse: "Check the product and the middle term.",
+      },
+    ],
+    markdownContent: "",
+  });
+  assert.equal(legacyExampleResult.success, false);
 
   const finishSessionToggleResult = expertFrameworkSchema.safeParse({
     name: "Invalid finish-session shape",
@@ -53,7 +66,6 @@ function run() {
     },
     fewShotExamples: [],
     markdownContent: "",
-    metadata: {},
   });
   assert.equal(finishSessionToggleResult.success, false);
 
@@ -85,14 +97,7 @@ function run() {
     },
     fewShotExamples: [],
     markdownContent: "Teach carefully.",
-    metadata: {},
   });
-
-  assert.deepEqual(getIncompleteExpertFrameworkCapabilityIds(incomplete), [
-    "search_image",
-    "finish_session",
-  ]);
-  assert.equal(hasCompleteExpertFrameworkCapabilityGuidance(incomplete), false);
 
   const complete = expertFrameworkSchema.parse({
     ...incomplete,
@@ -121,7 +126,6 @@ function run() {
     },
   });
 
-  assert.equal(hasCompleteExpertFrameworkCapabilityGuidance(complete), true);
   assert.equal(complete.capabilityGuidance.search_image.maxUsesPerTurn, 3);
   assert.equal(
     complete.capabilityGuidance.finish_session.policy,

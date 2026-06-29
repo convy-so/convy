@@ -7,6 +7,7 @@ import {
   classroomInvitations,
   classroomStudents,
   courses,
+  expertFrameworks,
   lessons,
   lessonMaterials,
 } from "./tutoring";
@@ -31,6 +32,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   }),
   courses: many(courses, {
     relationName: "created_courses",
+  }),
+  expertFrameworks: many(expertFrameworks, {
+    relationName: "created_expert_frameworks",
   }),
   lessons: many(lessons, {
     relationName: "created_lessons",

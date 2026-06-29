@@ -669,20 +669,15 @@ export const expertFrameworks = pgTable(
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    description: text("description"),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     status: text("status").default(TUTORING_STATUS.frameworkDraft).notNull(),
-    seedSource: text("seed_source")
-      .default(TUTORING_STATUS.frameworkSeedExpertAuthored)
-      .notNull(),
     draftFramework: jsonb("draft_framework").$type<ExpertFramework>().notNull(),
     liveFramework: jsonb("live_framework").$type<ExpertFramework | null>().default(null),
     activatedAt: timestamp("activated_at", {
       withTimezone: true,
       mode: "date",
-    }),
-    activatedByUserId: text("activated_by_user_id").references(() => users.id, {
-      onDelete: "set null",
     }),
     archivedAt: timestamp("archived_at", {
       withTimezone: true,
@@ -691,6 +686,7 @@ export const expertFrameworks = pgTable(
   },
   (table) => [
     index("expert_frameworks_course_id_idx").on(table.courseId),
+    index("expert_frameworks_created_by_user_id_idx").on(table.createdByUserId),
     index("expert_frameworks_status_idx").on(table.status),
     uniqueIndex("expert_frameworks_one_active_per_course")
       .on(table.courseId)
@@ -1244,9 +1240,10 @@ export const expertFrameworksRelations = relations(
       fields: [expertFrameworks.courseId],
       references: [courses.id],
     }),
-    activatedBy: one(users, {
-      fields: [expertFrameworks.activatedByUserId],
+    createdBy: one(users, {
+      fields: [expertFrameworks.createdByUserId],
       references: [users.id],
+      relationName: "created_expert_frameworks",
     }),
     crystallizations: many(expertCrystallizations),
     conflicts: many(expertConflicts),

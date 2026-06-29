@@ -8,11 +8,11 @@ async function main() {
   const frameworks = await db
     .select({
       frameworkId: expertFrameworks.id,
-      name: expertFrameworks.name,
+      draftFramework: expertFrameworks.draftFramework,
       status: expertFrameworks.status,
       courseTitle: courses.title,
       courseId: expertFrameworks.courseId,
-      seedSource: expertFrameworks.seedSource,
+      createdByUserId: expertFrameworks.createdByUserId,
       activatedAt: expertFrameworks.activatedAt,
       createdAt: expertFrameworks.createdAt,
     })
@@ -29,10 +29,10 @@ async function main() {
     console.log("---");
     console.log({
       frameworkId: framework.frameworkId,
-      name: framework.name,
+      name: framework.draftFramework.name,
       courseTitle: framework.courseTitle,
       status: framework.status,
-      seedSource: framework.seedSource,
+      createdByUserId: framework.createdByUserId,
       activatedAt: framework.activatedAt,
       createdAt: framework.createdAt,
     });

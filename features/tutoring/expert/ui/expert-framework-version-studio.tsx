@@ -13,9 +13,7 @@ import toast from "react-hot-toast";
 import { FrameworkEditorWizard } from "@/features/tutoring/expert/ui/framework-editor-wizard";
 import { Link, useRouter } from "@/i18n/routing";
 import {
-  createEmptyExpertFrameworkCapabilityGuidance,
   expertFrameworkSchema,
-  isLegacyExpertFrameworkCapabilityGuidance,
   type ExpertFramework,
 } from "@/features/tutoring/public-server";
 
@@ -23,6 +21,7 @@ type FrameworkDetail = {
   id: string;
   courseId: string;
   courseTitle: string;
+  createdByUserId: string | null;
   name: string;
   description: string | null;
   status: "draft" | "active" | "inactive" | "archived";
@@ -53,31 +52,6 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-function parseFramework(raw: Record<string, unknown>): {
-  framework: ExpertFramework;
-  retiredCapabilityFormatDetected: boolean;
-} {
-  const parsed = expertFrameworkSchema.safeParse(raw);
-  if (parsed.success) {
-    return {
-      framework: parsed.data,
-      retiredCapabilityFormatDetected: false,
-    };
-  }
-
-  if (isLegacyExpertFrameworkCapabilityGuidance(raw.capabilityGuidance)) {
-    return {
-      framework: expertFrameworkSchema.parse({
-        ...raw,
-        capabilityGuidance: createEmptyExpertFrameworkCapabilityGuidance(),
-      }),
-      retiredCapabilityFormatDetected: true,
-    };
-  }
-
-  throw parsed.error;
-}
-
 function normalizeDraftForSave(framework: ExpertFramework): ExpertFramework {
   return expertFrameworkSchema.parse({
     ...framework,
@@ -92,23 +66,22 @@ function normalizeDraftForSave(framework: ExpertFramework): ExpertFramework {
 
 export function ExpertFrameworkVersionStudio({
   framework,
+  canEdit,
 }: {
   framework: FrameworkDetail;
+  canEdit: boolean;
 }) {
-  const initialDraft = parseFramework(framework.draftFramework);
+  const initialDraft = expertFrameworkSchema.parse(framework.draftFramework);
   const initialLiveFramework = framework.liveFramework
-    ? parseFramework(framework.liveFramework)
+    ? expertFrameworkSchema.parse(framework.liveFramework)
     : null;
   const router = useRouter();
   const [status, setStatus] = useState(framework.status);
   const [draftFramework, setDraftFramework] = useState<ExpertFramework>(
-    initialDraft.framework,
+    initialDraft,
   );
   const [liveFramework, setLiveFramework] = useState<ExpertFramework | null>(
-    initialLiveFramework?.framework ?? null,
-  );
-  const [retiredCapabilityFormatDetected] = useState(
-    initialDraft.retiredCapabilityFormatDetected,
+    initialLiveFramework ?? null,
   );
   const [activatedAt, setActivatedAt] = useState(framework.activatedAt);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -117,7 +90,7 @@ export function ExpertFrameworkVersionStudio({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const isArchived = status === "archived";
-  const canDelete = status === "draft" && !activatedAt;
+  const canDelete = canEdit && status === "draft" && !activatedAt;
 
   const handleSaveDraft = async () => {
     try {
@@ -206,11 +179,12 @@ export function ExpertFrameworkVersionStudio({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <h1 className="text-2xl font-bold tracking-tight text-slate-950">
-              Framework editor
+              {canEdit ? "Framework editor" : "Framework viewer"}
             </h1>
             <p className="max-w-2xl text-sm text-slate-500">
-              Edit the draft, then activate it when you want tutoring to use the new live
-              snapshot.
+              {canEdit
+                ? "Edit the draft, then activate it when you want tutoring to use the new live snapshot."
+                : "You can review this framework, but only the expert who created it can edit or publish changes."}
             </p>
           </div>
 
@@ -236,7 +210,7 @@ export function ExpertFrameworkVersionStudio({
             onClick={() => {
               void handleActivate();
             }}
-            disabled={isArchived || isActivating}
+            disabled={!canEdit || isArchived || isActivating}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             {isActivating ? (
@@ -251,7 +225,7 @@ export function ExpertFrameworkVersionStudio({
             onClick={() => {
               void handleArchive();
             }}
-            disabled={isArchived || status === "active" || isArchiving}
+            disabled={!canEdit || isArchived || status === "active" || isArchiving}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
           >
             {isArchiving ? (
@@ -289,13 +263,12 @@ export function ExpertFrameworkVersionStudio({
         </section>
       ) : null}
 
-      {retiredCapabilityFormatDetected ? (
+      {!canEdit ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <p className="font-semibold">Retired capability format detected</p>
+          <p className="font-semibold">Read-only access</p>
           <p className="mt-1">
-            This draft used the retired string-only capability shape. Its old tool guidance was
-            not migrated automatically. Re-author capabilities in the editor before saving or
-            activating this framework.
+            This framework was created by another expert. You can inspect the draft and live
+            snapshot, but editing, activating, archiving, and deleting are disabled.
           </p>
         </section>
       ) : null}
@@ -307,6 +280,7 @@ export function ExpertFrameworkVersionStudio({
           void handleSaveDraft();
         }}
         isSavingDraft={isSavingDraft}
+        isReadOnly={!canEdit}
       />
     </div>
   );

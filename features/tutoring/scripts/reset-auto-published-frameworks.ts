@@ -1,5 +1,5 @@
 /**
- * Resets live framework rows that still contain an auto-seeded placeholder snapshot.
+ * Resets live framework rows that still contain an empty placeholder snapshot.
  *
  *   pnpm exec tsx --env-file=.env features/tutoring/scripts/reset-auto-published-frameworks.ts --dry-run
  *   pnpm exec tsx --env-file=.env features/tutoring/scripts/reset-auto-published-frameworks.ts --apply
@@ -18,15 +18,8 @@ function getFrameworkMarkdownContent(value: unknown): string {
   return typeof markdownContent === "string" ? markdownContent : "";
 }
 
-function isAutoSeededPublishedPlaceholder(version: {
-  seedSource?: string | null;
-  framework?: unknown;
-}): boolean {
-  if (version.seedSource !== "deep_default") {
-    return false;
-  }
-
-  const markdown = getFrameworkMarkdownContent(version.framework).trim();
+function isPublishedPlaceholder(framework: unknown): boolean {
+  const markdown = getFrameworkMarkdownContent(framework).trim();
   return markdown.length === 0;
 }
 
@@ -47,19 +40,14 @@ async function main() {
   let resetCount = 0;
 
   for (const framework of frameworks) {
-    if (
-      !isAutoSeededPublishedPlaceholder({
-        seedSource: framework.seedSource,
-        framework: framework.liveFramework ?? undefined,
-      })
-    ) {
+    if (!isPublishedPlaceholder(framework.liveFramework ?? undefined)) {
       continue;
     }
 
     console.log({
       action: dryRun ? "would-reset" : "reset",
       frameworkId: framework.id,
-      frameworkName: framework.name,
+      frameworkName: framework.draftFramework.name,
     });
 
     if (!dryRun) {
@@ -69,7 +57,6 @@ async function main() {
           status: "draft",
           liveFramework: null,
           activatedAt: null,
-          activatedByUserId: null,
           updatedAt: new Date(),
         })
         .where(eq(expertFrameworks.id, framework.id));

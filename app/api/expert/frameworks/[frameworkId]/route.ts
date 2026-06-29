@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireExpertSession } from "@/features/tutoring/server/expert-route-guard";
 import {
   deleteDraftFramework,
+  FRAMEWORK_WRITE_FORBIDDEN_ERROR,
   getFrameworkById,
   updateFrameworkDraft,
 } from "@/features/tutoring/public-server";
@@ -52,6 +53,7 @@ export async function PATCH(
     const { frameworkId } = await params;
     const body = updateFrameworkSchema.parse(await request.json());
     const updated = await updateFrameworkDraft({
+      actorUserId: expert.session.user.id,
       frameworkId,
       draftFramework: body.draftFramework,
     });
@@ -65,6 +67,12 @@ export async function PATCH(
       return apiError(
         "VALIDATION_ERROR",
         error.errors[0]?.message ?? "Validation error",
+      );
+    }
+    if (error instanceof Error && error.message === FRAMEWORK_WRITE_FORBIDDEN_ERROR) {
+      return apiError(
+        "UNAUTHORIZED",
+        "Only the expert who created this framework can edit it.",
       );
     }
     if (error instanceof Error && error.message === "ARCHIVED_FRAMEWORK_READ_ONLY") {
@@ -86,7 +94,7 @@ export async function DELETE(
     const expert = await requireExpertSession();
     if ("error" in expert) return expert.error;
     const { frameworkId } = await params;
-    await deleteDraftFramework(frameworkId);
+    await deleteDraftFramework(frameworkId, expert.session.user.id);
 
     return NextResponse.json({
       success: true,
@@ -100,6 +108,12 @@ export async function DELETE(
       return apiError(
         "VALIDATION_ERROR",
         "Only draft frameworks that have never been activated can be deleted.",
+      );
+    }
+    if (error instanceof Error && error.message === FRAMEWORK_WRITE_FORBIDDEN_ERROR) {
+      return apiError(
+        "UNAUTHORIZED",
+        "Only the expert who created this framework can delete it.",
       );
     }
     return handleTutoringRouteError(

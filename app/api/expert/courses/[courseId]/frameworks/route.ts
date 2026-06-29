@@ -65,6 +65,7 @@ export async function POST(
     const body = createFrameworkSchema.parse(await request.json());
     const created = await createExpertFrameworkForCourse({
       courseId,
+      createdByUserId: expert.session.user.id,
       name: body.name,
       description: body.description,
     });

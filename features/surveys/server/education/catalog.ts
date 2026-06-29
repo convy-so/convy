@@ -11,7 +11,6 @@ import {
 
 const BASE_DIR = path.join(process.cwd(), "programs", "education");
 const SKILLS_DIR = path.join(process.cwd(), "skills");
-const cache = new Map<EducationProgramId, EducationProgramAssets>();
 
 const educationProgramManifestSchema = z.object({
   id: z.enum(EDUCATION_PROGRAM_IDS),
@@ -112,9 +111,6 @@ function buildPhasePrompt(input: {
 }
 
 function loadProgram(programId: EducationProgramId): EducationProgramAssets {
-  const cached = cache.get(programId);
-  if (cached) return cached;
-
   const slug = slugFromProgramId(programId);
   const dir = path.join(BASE_DIR, slug);
   const manifest = educationProgramManifestSchema.parse(JSON.parse(
@@ -126,7 +122,6 @@ function loadProgram(programId: EducationProgramId): EducationProgramAssets {
     conductingPrompt: buildPhasePrompt({ manifest, programDir: dir, phase: "conducting" }),
     analyticsPrompt: buildPhasePrompt({ manifest, programDir: dir, phase: "analytics" }),
   };
-  cache.set(programId, assets);
   return assets;
 }
 

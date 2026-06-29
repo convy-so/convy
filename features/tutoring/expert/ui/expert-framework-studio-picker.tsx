@@ -11,6 +11,7 @@ import { cn } from "@/shared/ui/tailwind-class-utils";
 
 type CourseFrameworkRecord = {
   id: string;
+  createdByUserId: string | null;
   name: string;
   status: "draft" | "active" | "inactive" | "archived";
   updatedAt: string;
@@ -34,8 +35,10 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
 
 export function ExpertFrameworkStudioPicker({
   initialFrameworks,
+  currentUserId,
 }: {
   initialFrameworks: ExpertFrameworkCourseSummary[];
+  currentUserId: string;
 }) {
   const router = useRouter();
   const [courses] = useState(initialFrameworks);
@@ -111,6 +114,7 @@ export function ExpertFrameworkStudioPicker({
       setFrameworks((current) => [
         {
           id: result.data.id,
+          createdByUserId: currentUserId,
           name: result.data.name,
           status: result.data.status,
           updatedAt: new Date().toISOString(),
@@ -225,13 +229,18 @@ export function ExpertFrameworkStudioPicker({
                       <div>
                         <p className="font-medium text-slate-950">{framework.name}</p>
                         <p className="text-sm text-slate-500">
-                          {framework.status} Ã¢â‚¬Â¢{" "}
+                          {framework.status} •{" "}
                           {new Date(framework.updatedAt).toLocaleDateString(undefined, {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
                           })}
                         </p>
+                        {framework.createdByUserId !== currentUserId ? (
+                          <p className="mt-1 text-xs text-amber-700">
+                            Read only. Only the creator can edit or publish this framework.
+                          </p>
+                        ) : null}
                       </div>
                       <button
                         type="button"

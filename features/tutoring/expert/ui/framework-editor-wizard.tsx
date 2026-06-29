@@ -7,7 +7,10 @@ import type {
   ExpertFramework,
   ExpertFrameworkCapabilityGuidance,
 } from "@/features/tutoring/public-server";
-import { TUTOR_CAPABILITIES } from "@/features/tutoring/server/tutor-capabilities";
+import {
+  IMAGE_SEARCH_MAX_CALLS_PER_TURN,
+  VIDEO_SEARCH_MAX_CALLS_PER_TURN,
+} from "@/features/tutoring/server/tutor-capabilities";
 
 const EDITOR_STEPS = [
   {
@@ -39,6 +42,51 @@ const EDITOR_STEPS = [
 
 type EditorStepId = (typeof EDITOR_STEPS)[number]["id"];
 
+const CAPABILITY_EDITOR_FIELDS = [
+  {
+    id: "search_image",
+    label: "Educational images",
+    summary:
+      "Choose whether image search is available, define the policy for using it, and set the per-response limit.",
+    placeholder:
+      "State exactly when image search is allowed, what it should help with, and when the tutor should avoid it.",
+    maxUsesCap: IMAGE_SEARCH_MAX_CALLS_PER_TURN,
+  },
+  {
+    id: "search_video",
+    label: "Educational videos",
+    summary:
+      "Choose whether video search is available, define the policy for using it, and set the per-response limit.",
+    placeholder:
+      "State when video search is allowed, what kind of explainer it should find, and when the tutor should stay with text or images.",
+    maxUsesCap: VIDEO_SEARCH_MAX_CALLS_PER_TURN,
+  },
+  {
+    id: "administer_quiz",
+    label: "Quizzes",
+    summary:
+      "Choose whether the tutor can issue a formal quiz card and define the policy for when to use it.",
+    placeholder:
+      "State when the tutor should use a quiz instead of a conversational check and what a valid quiz moment looks like.",
+  },
+  {
+    id: "grade_student_work",
+    label: "Grading and feedback",
+    summary:
+      "Choose whether the tutor can grade submitted quiz work and define the policy for scoring and feedback.",
+    placeholder:
+      "State when grading is allowed, what evidence it must rely on, and what standard the tutor should apply.",
+  },
+  {
+    id: "finish_session",
+    label: "Finish session",
+    summary:
+      "Define the completion policy for the always-available finish-session tool.",
+    placeholder:
+      "State what completion evidence is required before ending the session and what the closing note must accomplish.",
+  },
+] as const;
+
 function validateStep(stepId: EditorStepId, framework: ExpertFramework): string | null {
   if (stepId === "overview" && !framework.name.trim()) {
     return "Framework name is required before you continue.";
@@ -47,7 +95,7 @@ function validateStep(stepId: EditorStepId, framework: ExpertFramework): string 
 }
 
 function countFilledCapabilities(framework: ExpertFramework) {
-  return TUTOR_CAPABILITIES.filter((capability) => {
+  return CAPABILITY_EDITOR_FIELDS.filter((capability) => {
     if (capability.id === "finish_session") {
       return framework.capabilityGuidance.finish_session.policy.trim().length > 0;
     }
@@ -58,7 +106,7 @@ function countFilledCapabilities(framework: ExpertFramework) {
 }
 
 function countEnabledCapabilities(guidance: ExpertFrameworkCapabilityGuidance) {
-  return TUTOR_CAPABILITIES.filter((capability) => {
+  return CAPABILITY_EDITOR_FIELDS.filter((capability) => {
     if (capability.id === "finish_session") {
       return false;
     }
@@ -136,11 +184,13 @@ export function FrameworkEditorWizard({
   setDraftFramework,
   onSaveDraft,
   isSavingDraft,
+  isReadOnly = false,
 }: {
   draftFramework: ExpertFramework;
   setDraftFramework: Dispatch<SetStateAction<ExpertFramework>>;
   onSaveDraft: () => void;
   isSavingDraft: boolean;
+  isReadOnly?: boolean;
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepError, setStepError] = useState<string | null>(null);
@@ -218,6 +268,7 @@ export function FrameworkEditorWizard({
                 <label className={labelClassName()}>Name</label>
                 <input
                   value={draftFramework.name}
+                  readOnly={isReadOnly}
                   onChange={(event) =>
                     setDraftFramework((current) => ({
                       ...current,
@@ -233,6 +284,7 @@ export function FrameworkEditorWizard({
                 <label className={labelClassName()}>Description</label>
                 <textarea
                   value={draftFramework.description}
+                  readOnly={isReadOnly}
                   onChange={(event) =>
                     setDraftFramework((current) => ({
                       ...current,
@@ -258,6 +310,7 @@ export function FrameworkEditorWizard({
               </p>
               <textarea
                 value={draftFramework.markdownContent}
+                readOnly={isReadOnly}
                 onChange={(event) =>
                   setDraftFramework((current) => ({
                     ...current,
@@ -277,7 +330,7 @@ export function FrameworkEditorWizard({
                 Configure all tutor tool policy here. Capabilities are the authoritative source for
                 tool use, even if the Markdown instructions mention tools differently.
               </p>
-              {TUTOR_CAPABILITIES.map((capability) => {
+              {CAPABILITY_EDITOR_FIELDS.map((capability) => {
                 const capabilityId = capability.id;
                 const policy =
                   capabilityId === "finish_session"
@@ -301,6 +354,7 @@ export function FrameworkEditorWizard({
                         <input
                           type="checkbox"
                           checked={draftFramework.capabilityGuidance[capabilityId].enabled}
+                          disabled={isReadOnly}
                           onChange={(event) =>
                             setDraftFramework((current) => ({
                               ...current,
@@ -330,6 +384,7 @@ export function FrameworkEditorWizard({
                           min={1}
                           max={capability.maxUsesCap}
                           value={mediaMaxUses ?? 1}
+                          readOnly={isReadOnly}
                           onChange={(event) =>
                             setDraftFramework((current) => ({
                               ...current,
@@ -357,6 +412,7 @@ export function FrameworkEditorWizard({
                     ) : null}
                     <textarea
                       value={policy}
+                      readOnly={isReadOnly}
                       onChange={(event) =>
                         setDraftFramework((current) => ({
                           ...current,
@@ -398,6 +454,7 @@ export function FrameworkEditorWizard({
                       fewShotExamples: [...current.fewShotExamples, ""],
                     }))
                   }
+                  disabled={isReadOnly}
                   className="text-sm font-medium text-slate-700 underline-offset-2 hover:underline"
                 >
                   Add example
@@ -413,6 +470,7 @@ export function FrameworkEditorWizard({
                       fewShotExamples: [""],
                     }))
                   }
+                  disabled={isReadOnly}
                   className="py-8 text-left text-sm text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
                 >
                   Add your first example
@@ -435,6 +493,7 @@ export function FrameworkEditorWizard({
                               ),
                             }))
                           }
+                          disabled={isReadOnly}
                           className="text-xs font-medium text-slate-400 hover:text-rose-600"
                           aria-label={`Remove example ${index + 1}`}
                         >
@@ -443,6 +502,7 @@ export function FrameworkEditorWizard({
                       </div>
                       <textarea
                         value={example}
+                        readOnly={isReadOnly}
                         onChange={(event) =>
                           setDraftFramework((current) => ({
                             ...current,
@@ -542,7 +602,7 @@ export function FrameworkEditorWizard({
           <button
             type="button"
             onClick={onSaveDraft}
-            disabled={isSavingDraft}
+            disabled={isSavingDraft || isReadOnly}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-950 disabled:opacity-50"
           >
             {isSavingDraft ? (

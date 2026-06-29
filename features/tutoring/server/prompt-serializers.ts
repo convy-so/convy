@@ -2,7 +2,7 @@ import { renderStrictScopePolicyInstructions } from "@/shared/ai/scope-policy";
 import type { PatternMemoryState } from "@/features/tutoring/server/pattern-memory-service";
 import type { LearningTeachingPlaybook } from "@/features/tutoring/server/pattern-types";
 import type {
-  ActiveExpertFramework,
+  ActiveExpertGuidanceBundle,
   ExpertFrameworkCapabilityGuidance,
   LearningOutcomeDefinition,
   StudentSessionState,
@@ -10,7 +10,10 @@ import type {
   TeacherProgressReport,
 } from "@/features/tutoring/public-server";
 import type { GroundingUnit } from "@/features/tutoring/server/grounding-units";
-import { TUTOR_CAPABILITIES } from "@/features/tutoring/server/tutor-capabilities";
+import {
+  TUTOR_CAPABILITY_IDS,
+  type TutorCapabilityId,
+} from "@/features/tutoring/server/tutor-capabilities";
 import {
   getTutorCapabilityMaxUsesPerTurn,
   getTutorCapabilityPolicy,
@@ -48,6 +51,21 @@ function readOptionalRecordString(
 ) {
   const value = record[key];
   return typeof value === "string" ? value : "";
+}
+
+function getTutorCapabilityLabel(capabilityId: TutorCapabilityId) {
+  switch (capabilityId) {
+    case "search_image":
+      return "Educational images";
+    case "search_video":
+      return "Educational videos";
+    case "administer_quiz":
+      return "Quizzes";
+    case "grade_student_work":
+      return "Grading and feedback";
+    case "finish_session":
+      return "Finish session";
+  }
 }
 
 export function renderBullets(values: Array<string | null | undefined>, empty = "- none") {
@@ -204,7 +222,9 @@ export function renderMemoryNote(input: {
   return input.memoryState.message?.trim() || "No memory note available.";
 }
 
-export function renderFrameworkRuntimeArtifact(activeFramework: ActiveExpertFramework) {
+export function renderFrameworkRuntimeArtifact(
+  activeFramework: ActiveExpertGuidanceBundle,
+) {
   const framework = activeFramework.framework;
   const canonicalExamples = framework.fewShotExamples
     .map((example) => normalizeLine(example))
@@ -220,8 +240,8 @@ export function renderFrameworkRuntimeArtifact(activeFramework: ActiveExpertFram
       : "Instructions: none",
     [
       "Capability policy (authoritative for tool use and overrides any tool references in the framework markdown):",
-      TUTOR_CAPABILITIES.map((capability) =>
-        renderFrameworkCapabilityPolicyLine(capabilityGuidance, capability.id),
+      TUTOR_CAPABILITY_IDS.map((capabilityId) =>
+        renderFrameworkCapabilityPolicyLine(capabilityGuidance, capabilityId),
       ).join("\n"),
     ].join("\n"),
     activeFramework.heuristics.length
@@ -247,10 +267,9 @@ export function renderFrameworkRuntimeArtifact(activeFramework: ActiveExpertFram
 
 function renderFrameworkCapabilityPolicyLine(
   guidance: ExpertFrameworkCapabilityGuidance,
-  capabilityId: (typeof TUTOR_CAPABILITIES)[number]["id"],
+  capabilityId: TutorCapabilityId,
 ) {
-  const capability = TUTOR_CAPABILITIES.find((item) => item.id === capabilityId);
-  const label = capability ? capability.label : capabilityId;
+  const label = getTutorCapabilityLabel(capabilityId);
   const policy = getTutorCapabilityPolicy(guidance, capabilityId);
   const enabled = isTutorCapabilityEnabled(guidance, capabilityId);
 

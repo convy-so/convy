@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { getDb } from "@/shared/db";
@@ -42,10 +41,10 @@ export async function getNotificationsForSession(
   });
 }
 
-export const getNotificationsForCurrentUser = cache(async (): Promise<NotificationRecord[]> => {
+export async function getNotificationsForCurrentUser(): Promise<NotificationRecord[]> {
   const session = await getVerifiedSession();
   return getNotificationsForSession(session);
-});
+}
 
 export async function getFolderListData() {
   const session = await getVerifiedSession();
@@ -162,7 +161,7 @@ export async function getAvailableFolderSurveysData() {
   });
 }
 
-export const getCurrentUiLocaleValue = cache(async () => {
+export async function getCurrentUiLocaleValue() {
   const session = await getCurrentSession();
   return normalizeAppLocale(session?.user.uiLocale ?? session?.user.preferredLanguage);
-});
+}

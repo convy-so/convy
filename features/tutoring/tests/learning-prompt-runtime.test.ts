@@ -5,7 +5,7 @@ import { selectGroundingUnitsForPrompt } from "@/features/tutoring/server/ground
 import { buildTeacherEvidenceAnswerPrompt } from "@/features/tutoring/server/prompts/evidence";
 import { buildStudentTurnPromptRuntime } from "@/features/tutoring/server/prompts/student-turn";
 import type {
-  ActiveExpertFramework,
+  ActiveExpertGuidanceBundle,
   ContentScopeSnapshot,
   StudentSessionState,
   StudentInterestProfile,
@@ -88,10 +88,9 @@ function createContentScope(): ContentScopeSnapshot {
   };
 }
 
-function createFramework(): ActiveExpertFramework {
+function createFramework(): ActiveExpertGuidanceBundle {
   return {
     frameworkId: "framework_1",
-    seedSource: "expert_authored",
     framework: {
       name: "Socratic Math Tutoring",
       description: "Lead with diagnosis, then one precise nudge.",
@@ -124,7 +123,6 @@ function createFramework(): ActiveExpertFramework {
         "Student: Can I use the quadratic formula? Tutor: Not in this lesson. Let's stay with factoring.",
       ],
       markdownContent: "Start with the student's current idea, then ask one sharp question.",
-      metadata: {},
     },
     heuristics: [
       {

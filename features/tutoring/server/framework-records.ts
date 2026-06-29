@@ -19,14 +19,13 @@ export type FrameworkRecord = {
   createdAt: Date;
   updatedAt: Date;
   courseId: string;
+  createdByUserId: string | null;
   name: string;
-  description: string | null;
+  description: string;
   status: (typeof EXPERT_FRAMEWORK_STATUS_VALUES)[number];
-  seedSource: string;
   draftFramework: ExpertFramework;
   liveFramework: ExpertFramework | null;
   activatedAt: Date | null;
-  activatedByUserId: string | null;
   archivedAt: Date | null;
   course: FrameworkCourseLite;
 };
@@ -37,8 +36,12 @@ function mapFrameworkRow(row: {
   courseTitle: string;
   courseDescription: string | null;
 }): FrameworkRecord {
+  const displayFramework = row.framework.draftFramework;
+
   return {
     ...row.framework,
+    name: displayFramework.name,
+    description: displayFramework.description,
     status: row.framework.status as FrameworkRecord["status"],
     draftFramework: row.framework.draftFramework,
     liveFramework: row.framework.liveFramework ?? null,
