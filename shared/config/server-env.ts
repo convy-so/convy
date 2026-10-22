@@ -80,7 +80,7 @@ export const env = {
   // Encryption for tokens
   ENCRYPTION_KEY: optional("ENCRYPTION_KEY"),
   ALLOW_INSECURE_TLS: allowInsecureTls,
-  /** Secure cookies require HTTPS. Set COOKIE_SECURE=false to override on HTTP prod (e.g. EC2 IP). */
+  /** Secure cookies require HTTPS. Override only for local HTTP development. */
   COOKIE_SECURE: useSecureCookies,
 
   // Voice/WebSocket Configuration

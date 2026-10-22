@@ -39,9 +39,6 @@ type LessonMaterialsResponse = Awaited<ReturnType<typeof fetchLessonMaterials>>;
 type LessonMaterialUploadAttemptsResponse = Awaited<
   ReturnType<typeof fetchLessonMaterialUploadAttempts>
 >;
-type LessonMaterialUploadAttemptRecord =
-  LessonMaterialUploadAttemptsResponse["data"][number];
-
 type LessonActivationStateResponse = Awaited<
   ReturnType<typeof fetchLessonActivationState>
 >;
@@ -182,9 +179,7 @@ export function useTeacherTeachingWorkspace(
       initialData.initialLessons &&
       selectedAccessibleClassroomId ===
         (initialData.initialClassrooms.data[0]?.id ?? null)
-        ? (initialData.initialLessons as Awaited<
-            ReturnType<typeof fetchClassroomLessons>
-          >)
+        ? initialData.initialLessons
         : undefined,
     staleTime: 30_000,
     retry: retryTransientTutoringApiFailure,

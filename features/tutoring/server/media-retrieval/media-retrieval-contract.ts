@@ -36,11 +36,13 @@ export type TavilySearchResponse = {
   }>;
 };
 
-export type StructuredOutputGenerator = <TSchema extends z.ZodTypeAny>(input: {
+export type StructuredOutputGenerator = <
+  TSchema extends z.ZodType<unknown, z.ZodTypeDef, unknown>,
+>(input: {
   schema: TSchema;
   prompt: string;
   system: string;
-}) => Promise<z.infer<TSchema>>;
+}) => Promise<TSchema["_output"]>;
 
 export type FetchLike = (
   input: string | URL | Request,

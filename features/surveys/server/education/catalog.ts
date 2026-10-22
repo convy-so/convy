@@ -9,8 +9,9 @@ import {
   type EducationProgramManifest,
 } from "./types";
 
-const BASE_DIR = path.join(process.cwd(), "programs", "education");
-const SKILLS_DIR = path.join(process.cwd(), "skills");
+const SURVEYS_FEATURE_DIR = path.join(process.cwd(), "features", "surveys");
+const BASE_DIR = path.join(SURVEYS_FEATURE_DIR, "programs", "education");
+const SKILLS_DIR = path.join(SURVEYS_FEATURE_DIR, "skills");
 
 const educationProgramManifestSchema = z.object({
   id: z.enum(EDUCATION_PROGRAM_IDS),

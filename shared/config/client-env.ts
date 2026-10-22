@@ -4,7 +4,7 @@ const optional = (key: string): string | undefined => {
   return process.env[key];
 };
 
-/** Prefer the live browser origin so auth works without rebuilding the Docker image. */
+/** Prefer the live browser origin so auth uses the host serving the app. */
 function resolvePublicOrigin(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin;

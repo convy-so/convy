@@ -11,7 +11,7 @@ import { Suspense } from "react";
 import { CookieConsent } from "@/features/privacy/ui/cookie-consent";
 
 // App pages load user/session data from Postgres at request time. Skip static
-// prerender during `next build` so Docker CI does not need a live database.
+// prerender during `next build` so builds do not need a live database.
 export const dynamic = "force-dynamic";
 
 export function generateStaticParams() {
