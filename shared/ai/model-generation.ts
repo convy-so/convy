@@ -18,7 +18,9 @@ import { createLogger, serializeError } from "@/shared/infra/logger";
 
 const log = createLogger("ai-runtime");
 
-type StructuredGenerationParams<TSchema extends z.ZodTypeAny> = {
+type StructuredGenerationParams<
+  TSchema extends z.ZodType<unknown, z.ZodTypeDef, unknown>,
+> = {
   schema: TSchema;
   prompt: string;
   system?: string;
@@ -43,9 +45,11 @@ type StreamUiTextParams = {
   promptCache?: PromptCacheOptions;
 };
 
-export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
+export async function generateStructuredOutput<
+  TSchema extends z.ZodType<unknown, z.ZodTypeDef, unknown>,
+>(
   params: StructuredGenerationParams<TSchema>,
-): Promise<z.infer<TSchema>> {
+): Promise<TSchema["_output"]> {
   const model = params.model ?? tutorAnalysisModel;
   const resolvedPrompt = resolvePromptExecution({
     prompt: params.prompt,
@@ -87,8 +91,7 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
     };
     await logUsage(usageInput);
 
-    const parsedOutput: unknown = result.output;
-    return parsedOutput as z.infer<TSchema>;
+    return params.schema.parse(result.output);
   } catch (err) {
     log.error("Structured output generation failed", serializeError(err));
     Sentry.captureException(err, { tags: { service: "ai-runtime" } });
