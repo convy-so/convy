@@ -152,13 +152,6 @@ export async function POST(
         stage: TUTORING_STATUS.uploadStageUpload,
         processingStartedAt: new Date(),
       });
-      console.info("[lesson-material-upload] attempt create complete", {
-        lessonId,
-        batchId,
-        attemptId,
-        status: attempt?.status ?? null,
-        stage: attempt?.stage ?? null,
-      });
 
       try {
         console.info("[lesson-material-upload] file received", {

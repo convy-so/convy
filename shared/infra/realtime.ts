@@ -19,12 +19,7 @@ export async function publishRealtimeEvent(
       JSON.stringify(payload),
     );
   } catch (error) {
-    console.error("[realtime] failed to publish event", {
-      scope,
-      entityId,
-      eventType: payload.type,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    void error;
   }
 }
 

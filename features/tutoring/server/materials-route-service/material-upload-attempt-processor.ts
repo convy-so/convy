@@ -36,7 +36,6 @@ import { updateLearningMaterialUploadAttempt } from "./material-upload-attempt-s
 export async function processLearningMaterialUploadAttempt(
   data: LessonMaterialProcessingJobData,
 ) {
-  const startedAt = Date.now();
   const attempt = await getDb().query.lessonMaterialUploadAttempts.findFirst({
     where: eq(lessonMaterialUploadAttempts.id, data.attemptId),
   });
@@ -50,39 +49,15 @@ export async function processLearningMaterialUploadAttempt(
     TUTORING_STATUS.uploadStageExtraction;
 
   try {
-    console.info("[lesson-material-worker] processing start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      classroomId: data.classroomId,
-      fileName: data.fileName,
-      mimeType: data.mimeType,
-      sizeBytes: data.sizeBytes,
-    });
-
-    console.info("[lesson-material-worker] lesson access check start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      userId: data.userId,
-    });
     const lesson = await getTeacherLessonAccess(data.userId, data.lessonId);
     if (!lesson) {
       throw new Error("Lesson not found or user is no longer authorized.");
     }
-    console.info("[lesson-material-worker] lesson access check complete", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      classroomId: lesson.classroomId,
-    });
 
     if (!attempt.storagePath) {
       throw new Error("Uploaded file could not be found for processing.");
     }
 
-    console.info("[lesson-material-worker] marking extraction started", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      storagePath: attempt.storagePath,
-    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -102,51 +77,18 @@ export async function processLearningMaterialUploadAttempt(
     });
 
     materialId = nanoid();
-    console.info("[lesson-material-worker] download start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      storagePath: attempt.storagePath,
-      materialId,
-    });
     const buffer = await downloadLessonMaterial(attempt.storagePath);
-    console.info("[lesson-material-worker] download complete", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      storagePath: attempt.storagePath,
-      materialId,
-      sizeBytes: buffer.byteLength,
-    });
 
-    console.info("[lesson-material-worker] extraction start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-      mimeType: data.mimeType,
-    });
     const sourceDocument = await extractLearningMaterialSourceDocument({
       materialId,
       buffer,
       filename: data.fileName,
       mimeType: data.mimeType,
       title: data.title,
-      traceId: data.attemptId,
-      lessonId: data.lessonId,
     });
     const extractedText = sourceDocument.extractedText;
 
-    console.info("[lesson-material-worker] extraction complete", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      extractedTextLength: extractedText.length,
-      segmentCount: sourceDocument.segments.length,
-    });
-
     currentStage = TUTORING_STATUS.uploadStageAnalysis;
-    console.info("[lesson-material-worker] marking analysis started", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -156,33 +98,15 @@ export async function processLearningMaterialUploadAttempt(
       stage: TUTORING_STATUS.uploadStageAnalysis,
     });
 
-    console.info("[lesson-material-worker] grounding map start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-      segmentCount: sourceDocument.segments.length,
-    });
     const groundingMap = await buildMaterialGroundingMap({
       lessonTitle: lesson.title,
       materialId,
       materialTitle: data.title?.trim() || data.fileName,
       sourceDocument,
-      traceId: data.attemptId,
-      lessonId: data.lessonId,
     });
 
     const analysis = buildMaterialAnalysisPreview({
       groundingMap,
-    });
-
-    console.info("[lesson-material-worker] analysis complete", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      analysisKeys: Object.keys(analysis).join(","),
-      summaryLength: typeof analysis.summary === "string" ? analysis.summary.length : 0,
-      clarifyingQuestionCount: Array.isArray(analysis.clarifyingQuestions)
-        ? analysis.clarifyingQuestions.length
-        : 0,
     });
 
     if (isMaterialAnalysisFailed(analysis)) {
@@ -190,11 +114,6 @@ export async function processLearningMaterialUploadAttempt(
     }
 
     currentStage = TUTORING_STATUS.uploadStageIndexing;
-    console.info("[lesson-material-worker] marking indexing started", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -204,11 +123,6 @@ export async function processLearningMaterialUploadAttempt(
       stage: TUTORING_STATUS.uploadStageIndexing,
     });
 
-    console.info("[lesson-material-worker] material insert start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-    });
     const [material] = await getDb()
       .insert(lessonMaterials)
       .values({
@@ -240,18 +154,8 @@ export async function processLearningMaterialUploadAttempt(
       material,
       `Failed to create lesson material ${materialId} for upload attempt ${data.attemptId}`,
     );
-    console.info("[lesson-material-worker] material insert complete", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-    });
 
     currentStage = TUTORING_STATUS.uploadStagePackBuild;
-    console.info("[lesson-material-worker] marking pack build started", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-    });
     await updateLearningMaterialUploadAttempt({
       attemptId: data.attemptId,
       classroomId: data.classroomId,
@@ -262,11 +166,6 @@ export async function processLearningMaterialUploadAttempt(
       materialId,
     });
 
-    console.info("[lesson-material-worker] indexing and boundary sync start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-    });
     await indexMaterialAndSyncBoundary({
       lessonId: data.lessonId,
       materialId,
@@ -277,11 +176,6 @@ export async function processLearningMaterialUploadAttempt(
       sourceDocument,
       groundingMap,
       lesson,
-    });
-    console.info("[lesson-material-worker] indexing and boundary sync complete", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
     });
 
     await updateLearningMaterialUploadAttempt({
@@ -301,44 +195,15 @@ export async function processLearningMaterialUploadAttempt(
       materialId,
     });
 
-    console.info("[lesson-material-worker] batch finalizer enqueue start", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      batchId: attempt.batchId,
-      materialId,
-    });
-    const finalizeJob = await enqueueLessonMaterialBatchFinalize({
+    await enqueueLessonMaterialBatchFinalize({
       batchId: attempt.batchId,
       lessonId: data.lessonId,
       classroomId: data.classroomId,
-    });
-    console.info("[lesson-material-worker] batch finalizer enqueued", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      batchId: attempt.batchId,
-      materialId,
-      jobId: finalizeJob?.id ?? null,
-    });
-
-    console.info("[lesson-material-worker] processing succeeded", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      materialId,
-      durationMs: Date.now() - startedAt,
     });
 
     return { success: true, materialId };
   } catch (error) {
     const failure = buildUploadAttemptFailure(currentStage, error);
-
-    console.error("[lesson-material-worker] processing failed", {
-      attemptId: data.attemptId,
-      lessonId: data.lessonId,
-      stage: currentStage,
-      durationMs: Date.now() - startedAt,
-      error: failure.internalError,
-      retryable: failure.retryable,
-    });
 
     await deleteMaterialProcessingArtifacts({
       materialId,
@@ -371,5 +236,3 @@ export async function processLearningMaterialUploadAttempt(
     };
   }
 }
-
-

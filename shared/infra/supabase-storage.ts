@@ -23,34 +23,6 @@ export const SURVEY_AUDIO_BUCKET = "survey-audio";
 export const SURVEY_VIDEO_BUCKET = "survey-video";
 export const LESSON_MATERIALS_BUCKET = "learning-materials";
 
-function getUploadByteLength(file: Buffer | Blob) {
-  return Buffer.isBuffer(file) ? file.byteLength : file.size;
-}
-
-function getSupabaseStorageErrorDetails(error: unknown) {
-  if (!error || typeof error !== "object") {
-    return {};
-  }
-
-  const candidate = error as {
-    message?: unknown;
-    name?: unknown;
-    statusCode?: unknown;
-    error?: unknown;
-  };
-
-  return {
-    name: typeof candidate.name === "string" ? candidate.name : undefined,
-    message: typeof candidate.message === "string" ? candidate.message : undefined,
-    statusCode:
-      typeof candidate.statusCode === "string" ||
-      typeof candidate.statusCode === "number"
-        ? candidate.statusCode
-        : undefined,
-    error: typeof candidate.error === "string" ? candidate.error : undefined,
-  };
-}
-
 /**
  * Upload an image to Supabase Storage
  * @param file - The file to upload (Buffer or Blob)
@@ -136,15 +108,6 @@ export async function uploadLessonMaterial(
   const safeName = originalFilename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filePath = `${lessonId}/${assetId}-${safeName}`;
 
-  console.info("[lesson-material-storage] upload start", {
-    bucket: LESSON_MATERIALS_BUCKET,
-    path: filePath,
-    lessonId,
-    assetId,
-    contentType,
-    sizeBytes: getUploadByteLength(file),
-  });
-
   const { data, error } = await supabase.storage
     .from(LESSON_MATERIALS_BUCKET)
     .upload(filePath, file, {
@@ -153,26 +116,8 @@ export async function uploadLessonMaterial(
     });
 
   if (error) {
-    console.error("[lesson-material-storage] upload failed", {
-      bucket: LESSON_MATERIALS_BUCKET,
-      path: filePath,
-      lessonId,
-      assetId,
-      contentType,
-      sizeBytes: getUploadByteLength(file),
-      error: getSupabaseStorageErrorDetails(error),
-    });
     throw new Error(`Failed to upload lesson material: ${error.message}`);
   }
-
-  console.info("[lesson-material-storage] upload complete", {
-    bucket: LESSON_MATERIALS_BUCKET,
-    path: data.path,
-    lessonId,
-    assetId,
-    contentType,
-    sizeBytes: getUploadByteLength(file),
-  });
 
   return {
     path: data.path,
@@ -219,30 +164,15 @@ export async function createSignedLessonMaterialUrl(
 }
 
 export async function downloadLessonMaterial(path: string): Promise<Buffer> {
-  console.info("[lesson-material-storage] download start", {
-    bucket: LESSON_MATERIALS_BUCKET,
-    path,
-  });
-
   const { data, error } = await supabase.storage
     .from(LESSON_MATERIALS_BUCKET)
     .download(path);
 
   if (error || !data) {
-    console.error("[lesson-material-storage] download failed", {
-      bucket: LESSON_MATERIALS_BUCKET,
-      path,
-      error: error ? getSupabaseStorageErrorDetails(error) : null,
-    });
     throw new Error(`Failed to download lesson material: ${error?.message ?? "Missing file"}`);
   }
 
   const buffer = Buffer.from(await data.arrayBuffer());
-  console.info("[lesson-material-storage] download complete", {
-    bucket: LESSON_MATERIALS_BUCKET,
-    path,
-    sizeBytes: buffer.byteLength,
-  });
 
   return buffer;
 }

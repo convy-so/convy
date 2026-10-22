@@ -2,7 +2,7 @@ import { buildStudentTeachingPlaybook } from "@/features/tutoring/server/pattern
 import { buildStudentTurnPromptRuntime } from "@/features/tutoring/server/prompts/student-turn";
 import { buildLessonContentScopeFromPack } from "@/features/tutoring/server/lesson-grounding-pack-service";
 import { TUTOR_CAPABILITY_IDS } from "@/features/tutoring/server/tutor-capabilities";
-import { getCachedActiveFrameworkBundleForLesson } from "@/features/tutoring/server/framework-runtime-storage";
+import { getCachedActiveBundleForLesson } from "@/features/tutoring/server/framework-runtime-storage";
 import {
   createDefaultStudentSessionState,
   studentSessionStateSchema,
@@ -47,7 +47,7 @@ export class TutorRuntimeService {
     studyLanguage: string;
   }): Promise<StudentSessionState> {
     const [activeFramework, contentScope] = await Promise.all([
-      getCachedActiveFrameworkBundleForLesson(params.lessonId),
+      getCachedActiveBundleForLesson(params.lessonId),
       buildLessonContentScopeFromPack({
         lessonId: params.lessonId,
         sourceBoundary: params.sourceBoundary,
@@ -97,7 +97,7 @@ export class TutorRuntimeService {
   }) {
     const activeFramework =
       params.state.activeFrameworkSnapshot ??
-      (await getCachedActiveFrameworkBundleForLesson(params.lessonId));
+      (await getCachedActiveBundleForLesson(params.lessonId));
     const missingCapabilityIds = TUTOR_CAPABILITY_IDS.filter(
       (capabilityId) =>
         !activeFramework.framework.capabilityGuidance[capabilityId].policy.trim(),

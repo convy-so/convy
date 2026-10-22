@@ -286,7 +286,7 @@ export async function getActiveFrameworkBundleForLesson(
   });
 }
 
-export async function getCachedActiveFrameworkBundleForLesson(lessonId: string) {
+export async function getCachedActiveBundleForLesson(lessonId: string) {
   return await cache.wrap(
     `tutoring:active-framework-bundle:${lessonId}`,
     async () => await getActiveFrameworkBundleForLesson(lessonId),
